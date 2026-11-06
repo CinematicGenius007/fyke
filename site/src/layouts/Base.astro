@@ -15,7 +15,7 @@ const buildDate = (() => {
 const nav = (key: string) => (current === key ? "page" : undefined);
 ---
 <!doctype html>
-<html lang="en">
+<html lang="en" class="nojs">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -30,6 +30,7 @@ const nav = (key: string) => (current === key ? "page" : undefined);
         try { saved = localStorage.getItem("weir-edition"); } catch (e) {}
         var night = saved ? saved === "night" : matchMedia("(prefers-color-scheme: dark)").matches;
         if (night) document.documentElement.dataset.theme = "night";
+        document.documentElement.classList.remove("nojs");
       })();
     </script>
   </head>
@@ -45,13 +46,15 @@ const nav = (key: string) => (current === key ? "page" : undefined);
 
     <header class="wrap" id="top">
       <div class="edition-line">
-        <span>Local edition · Made for macOS</span>
+        <span><span id="edition-name">Local</span> edition · Made for macOS</span>
         <span class="date" data-date>{buildDate}</span>
         <span class="right">
           <span>Free and open source · MIT</span>
-          <button class="edition-toggle" type="button" id="edition" aria-label="Switch between day and night edition" aria-pressed="false" title="Day or night edition (t)">
-            <span class="d">DAY</span><span class="n">NIGHT</span>
-          </button>
+          <fieldset class="edition-toggle" id="edition" title="Day or night edition (t)">
+            <legend>Edition</legend>
+            <label><input type="radio" name="edition" value="day" /><span>DAY</span></label>
+            <label><input type="radio" name="edition" value="night" /><span>NIGHT</span></label>
+          </fieldset>
         </span>
       </div>
       <div class="masthead">

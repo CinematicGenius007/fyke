@@ -12,9 +12,13 @@ const today = `${parts.weekday}, ${parts.day} ${parts.month} ${parts.year}`;
 document.querySelectorAll("[data-date]").forEach((el) => (el.textContent = today));
 
 // ----- day and night edition
-const toggle = document.getElementById("edition");
+const radios = Array.from(document.querySelectorAll<HTMLInputElement>('#edition input[name="edition"]'));
+const edName = document.getElementById("edition-name");
 const night = () => root.dataset.theme === "night";
-const syncToggle = () => toggle?.setAttribute("aria-pressed", String(night()));
+const syncToggle = () => {
+  radios.forEach((r) => (r.checked = r.value === (night() ? "night" : "day")));
+  if (edName) edName.textContent = night() ? "Night" : "Local";
+};
 function setEdition(next: "day" | "night") {
   if (next === "night") root.dataset.theme = "night"; else delete root.dataset.theme;
   try { localStorage.setItem("weir-edition", next); } catch { /* private mode */ }
@@ -22,7 +26,7 @@ function setEdition(next: "day" | "night") {
   say(next === "night" ? "Night edition" : "Day edition");
 }
 syncToggle();
-toggle?.addEventListener("click", () => setEdition(night() ? "day" : "night"));
+radios.forEach((r) => r.addEventListener("change", () => r.checked && setEdition(r.value as "day" | "night")));
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
   let saved: string | null = null;
   try { saved = localStorage.getItem("weir-edition"); } catch { /* ignore */ }
@@ -47,13 +51,14 @@ const inset = document.getElementById("inset");
 const imgSwitch = document.getElementById("img-switch") as HTMLInputElement | null;
 const ph = document.getElementById("ph");
 const what = document.getElementById("what");
-function setRibbon(open: boolean) {
+function setRibbon(open: boolean, focus = false) {
   if (!ribbon || !inset) return;
   ribbon.setAttribute("aria-expanded", String(open));
   inset.classList.toggle("open", open);
-  if (open) inset.removeAttribute("hidden");
+  if (open) { inset.removeAttribute("hidden"); if (focus) imgSwitch?.focus(); }
+  else if (focus) ribbon.focus();
 }
-ribbon?.addEventListener("click", () => setRibbon(ribbon.getAttribute("aria-expanded") !== "true"));
+ribbon?.addEventListener("click", () => setRibbon(ribbon.getAttribute("aria-expanded") !== "true", true));
 imgSwitch?.addEventListener("change", () => {
   const on = imgSwitch.checked;
   ph?.classList.toggle("loaded", on);
@@ -78,24 +83,33 @@ async function copyCommands() {
     const range = document.createRange();
     range.selectNodeContents(commands);
     const sel = getSelection(); sel?.removeAllRanges(); sel?.addRange(range);
+    if (btn) { btn.textContent = "Press ⌘C"; setTimeout(() => (btn.textContent = "Copy"), 2500); }
     say("Select and copy the commands");
   }
 }
 document.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", copyCommands));
 
-// ----- get started slides the install section into view
+// ----- the install sheet slides in once, when it arrives or is scrolled to
+const installSection = document.getElementById("install");
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let slid = false;
+function slideInstall() {
+  const sheet = installSection?.querySelector<HTMLElement>(".classifieds");
+  if (slid || !sheet || reduce) return;
+  slid = true;
+  sheet.animate?.(
+    [{ transform: "translateX(40px) rotate(-2.5deg)", opacity: 0.4 }, { transform: "none", opacity: 1 }],
+    { duration: 420, easing: "cubic-bezier(.2,.8,.2,1)" },
+  );
+}
+if (installSection && "IntersectionObserver" in window) {
+  new IntersectionObserver((entries) => entries.forEach((e) => e.isIntersecting && (slideInstall(), true)), { threshold: 0.25 }).observe(installSection);
+}
 document.querySelectorAll<HTMLAnchorElement>("a[data-get-started]").forEach((a) =>
   a.addEventListener("click", () => {
-    const target = document.getElementById("install");
-    if (!target) return;
-    target.animate?.(
-      matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? []
-        : [{ transform: "translateX(40px) rotate(-1deg)", opacity: 0.4 }, { transform: "none", opacity: 1 }],
-      { duration: 420, easing: "cubic-bezier(.2,.8,.2,1)" },
-    );
-    target.setAttribute("tabindex", "-1");
-    setTimeout(() => target.focus({ preventScroll: true }), 450);
+    if (!installSection) return;
+    installSection.setAttribute("tabindex", "-1");
+    setTimeout(() => installSection.focus({ preventScroll: true }), 450);
   }),
 );
 
@@ -110,6 +124,7 @@ keys?.addEventListener("click", (e) => { if (e.target === keys) closeKeys(); });
 
 // ----- keyboard: the same keys as the app
 const stories = () => Array.from(document.querySelectorAll<HTMLElement>("[data-story]"));
+stories().forEach((s) => { if (!s.hasAttribute("href")) s.tabIndex = -1; });
 let at = -1;
 function focusStory(i: number) {
   const list = stories();
@@ -138,15 +153,15 @@ addEventListener("keydown", (e) => {
       break;
     }
     case "t": setEdition(night() ? "day" : "night"); break;
-    case "i": if (ribbon) { setRibbon(ribbon.getAttribute("aria-expanded") !== "true"); ribbon.scrollIntoView({ block: "center" }); } break;
+    case "i": if (ribbon) { ribbon.scrollIntoView({ block: "center" }); setRibbon(ribbon.getAttribute("aria-expanded") !== "true", true); } break;
     case "c": if (commands) copyCommands(); break;
     case "?": e.preventDefault(); openKeys(); break;
     case "Escape":
-      if (ribbon?.getAttribute("aria-expanded") === "true") setRibbon(false);
+      if (ribbon?.getAttribute("aria-expanded") === "true") setRibbon(false, true);
       else { stories().forEach((s) => s.classList.remove("story-focus")); at = -1; }
       break;
     case "g":
-      if (Date.now() - lastG < 600) { scrollTo({ top: 0 }); lastG = 0; } else lastG = Date.now();
+      if (Date.now() - lastG < 800) { scrollTo({ top: 0 }); lastG = 0; } else lastG = Date.now();
       break;
   }
 });

@@ -35,9 +35,12 @@ const stories = [
         </figure>
         <div class="ribbon-wrap">
           <div class="inset" id="inset" hidden>
-            <div class="ph" id="ph" role="img" aria-label="An image from a publisher, not loaded">Image from cdn.example-news.com, not loaded</div>
+            <div class="ph" id="ph">
+              <span class="blocked" id="blocked" role="img" aria-label="An image from a publisher, not loaded">Image from cdn.example-news.com, not loaded</span>
+              <img id="photo" class="photo" src={url("img/sample.svg")} width="400" height="180" alt="" />
+            </div>
             <div class="switch-row">
-              <div><b>Load images</b><span class="s" id="switch-state">Off. Try it: flip to see what changes.</span></div>
+              <div><b>Load images</b><span class="s" id="switch-state" aria-live="polite">Off. Try it: flip to see what changes.</span></div>
               <input class="switch" id="img-switch" type="checkbox" role="switch" aria-label="Load images" />
             </div>
             <p class="what" id="what">With images off, reading an article loads nothing from the publisher. <em>Publishers cannot see you read until you turn images on.</em></p>
@@ -64,14 +67,14 @@ const stories = [
         <p class="aside">Three short columns on what runs where, and what stays yours.</p>
       </div>
       <div class="cols">
-        <div class="col">
+        <div class="col" data-story>
           <span class="kicker">Col. 1</span>
           <h3>One folder</h3>
           <p>Everything {site.name} knows sits in one folder on your Mac: a SQLite database with your feeds and articles, and a settings file beside it.</p>
           <p>Back it up by copying the folder. Open the database with any SQLite tool. Move it from Settings and the app follows. There is no account and no server of ours in between, so nobody else keeps a record of what you read.</p>
           <div class="tree"><div>{site.dataFolder}/</div><div>├─ rss.db <span class="dim">&nbsp;feeds, articles, search</span></div><div>└─ config.json <span class="dim">&nbsp;settings, themes</span></div></div>
         </div>
-        <div class="col">
+        <div class="col" data-story>
           <span class="kicker">Col. 2</span>
           <h3>Any surface, one daemon</h3>
           <p>A small background process fetches your feeds and is the only thing that writes to the database. The Mac app, the terminal reader, the <code>{site.cli}</code> command and the MCP server all ask it through the same API, so a feed you add in one appears in all four.</p>
@@ -86,7 +89,7 @@ const stories = [
             <figcaption>Fig. 2 · Four ways to read, one process that writes.</figcaption>
           </figure>
         </div>
-        <div class="col">
+        <div class="col" data-story>
           <span class="kicker">Col. 3</span>
           <h3>Yours to restyle</h3>
           <p>Start from Newsprint, Terminal, Light or Dark, then change any color or font and keep it as your own theme. Your theme stores only what differs from its base, in the same settings file.</p>
@@ -102,13 +105,13 @@ const stories = [
         <p class="aside">Free to all readers. No account, no sign-up, no mailing list.</p>
       </div>
       <div class="classifieds">
-        <div>
+        <div data-story>
           <span class="tag now">Available now</span> <span class="kicker" style="margin-left:8px">For macOS</span>
           <h3>BUILD FROM SOURCE. <em>Wanted: one Mac, Zig {site.zig} and Xcode’s command line tools. Three lines in a terminal.</em></h3>
           <Terminal />
           <p class="small" style="margin:16px 0 0">The last line builds {site.name} and copies it to Applications. Running it again later updates the app and keeps your feeds and settings. Terminal only? <code>zig build -Drelease</code>, then <code>./zig-out/bin/{site.cli} tui</code>. <a class="more" href={url("install/")}>Full install notes →</a></p>
         </div>
-        <div>
+        <div data-story>
           <span class="tag planned">Planned</span> <span class="kicker" style="margin-left:8px">Not available yet</span>
           <h3>SIGNED RELEASES. <em>A prebuilt, signed app you can download and open, with no build step.</em></h3>
           <p class="small">This is on the roadmap and has no date. Until it ships, building from source is the only way to install {site.name}, and this space will not offer a download.</p>
@@ -118,7 +121,7 @@ const stories = [
       </div>
     </section>
 
-    <aside class="coming" aria-label="Coming">
+    <aside class="coming" aria-label="Coming" data-story>
       <div><span class="kicker">Coming</span><br /><span class="tag planned" style="margin-top:10px">Planned</span></div>
       <div>
         <h3>The morning briefing, <em>with its sources in the margin.</em></h3>
