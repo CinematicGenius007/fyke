@@ -392,7 +392,7 @@ pub const Db = struct {
         \\  f.allow_private_network, f.etag, f.last_modified, f.poll_seconds, f.next_fetch_at,
         \\  f.last_success_at, f.error_count, f.last_error,
         \\  (SELECT count(*) FROM entries e LEFT JOIN entry_state s ON s.entry_id = e.id
-        \\     WHERE e.feed_id = f.id AND s.read_at IS NULL),
+        \\     WHERE e.feed_id = f.id AND s.read_at IS NULL AND s.hidden_at IS NULL),
         \\  (SELECT count(*) FROM entries e WHERE e.feed_id = f.id),
         \\  f.folder_id, f.skip_hours, f.skip_days
         \\FROM feeds f
@@ -557,7 +557,7 @@ pub const Db = struct {
         const stmt = try db.prepare(
             \\SELECT (SELECT count(*) FROM feeds),
             \\  (SELECT count(*) FROM entries),
-            \\  (SELECT count(*) FROM entries) - (SELECT count(*) FROM entry_state WHERE read_at IS NOT NULL),
+            \\  (SELECT count(*) FROM entries) - (SELECT count(*) FROM entry_state WHERE read_at IS NOT NULL OR hidden_at IS NOT NULL),
             \\  (SELECT count(*) FROM feeds WHERE status = 'active' AND next_fetch_at <= ?1),
             \\  (SELECT count(*) FROM feeds WHERE error_count > 0),
             \\  (SELECT COALESCE(max(seq), 0) FROM events)
@@ -1300,6 +1300,8 @@ test "a hidden entry leaves lists and search until shown again" {
 
     try testing.expect(try db.mark(id, .{ .hidden = true }, 3000));
     try testing.expectEqual(0, (try db.listEntries(a, .{})).len);
+    try testing.expectEqual(0, (try db.stats(5)).unread);
+    try testing.expectEqual(0, (try db.feeds(a))[0].unread);
     try testing.expectEqual(0, (try db.search(a, "parser", .{})).len);
     try testing.expect(try db.mark(id, .{ .hidden = false }, 3000));
     try testing.expectEqual(1, (try db.listEntries(a, .{})).len);

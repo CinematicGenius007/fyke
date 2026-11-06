@@ -155,7 +155,8 @@ Measured 2026-11-06.
 | Cancelable TCP connect | A black-holed address fails at 30.1 s, which is the deadline |
 | The feed behind `HttpHeadersInvalid` | The server sends `content-encoding: none`, which the standard library rejects. `fetch` masks that header, and the feed now subscribes |
 | Client timeout | `rss` gives up after 120 s of silence from the daemon |
-| Adding a feed in the TUI | Runs on its own thread, so the interface stays live |
+| Adding a feed in the TUI | Runs on its own thread, so the interface stays live. Finding a feed stops trying new pages after 60 s |
+| A host that accepts and then stalls | Ends at the fetch deadline, and `e2e_daemon.py` covers it |
 | Hostile numbers | An enclosure size beyond 2^63 stopped the daemon. Integers bound to SQLite now saturate, and a unit test covers it |
 | Long quotes | Markdown keeps every line of a quote of any length |
 | IPv6 tunnels | 6to4 addresses are judged by the IPv4 address they carry, and Teredo is refused |

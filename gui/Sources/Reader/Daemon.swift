@@ -18,20 +18,14 @@ private final class Connection {
         var address = sockaddr_un()
         address.sun_family = sa_family_t(AF_UNIX)
         let bytes = Array(path.utf8)
-        guard bytes.count < MemoryLayout.size(ofValue: address.sun_path) else {
-            Darwin.close(fd)
-            throw POSIXError(.ENAMETOOLONG)
-        }
+        guard bytes.count < MemoryLayout.size(ofValue: address.sun_path) else { throw POSIXError(.ENAMETOOLONG) }
         withUnsafeMutableBytes(of: &address.sun_path) { $0.copyBytes(from: bytes) }
         let result = withUnsafePointer(to: &address) {
             $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
                 connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
             }
         }
-        guard result == 0 else {
-            Darwin.close(fd)
-            throw POSIXError(.ECONNREFUSED)
-        }
+        guard result == 0 else { throw POSIXError(.ECONNREFUSED) }
         // A hung daemon must surface as an error, not as a frozen app.
         var limit = timeval(tv_sec: timeoutSeconds, tv_usec: 0)
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &limit, socklen_t(MemoryLayout<timeval>.size))
@@ -39,6 +33,7 @@ private final class Connection {
         setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSignal, socklen_t(MemoryLayout<Int32>.size))
     }
 
+    /// The only close. It also runs when `init` throws, since every property is set by then.
     deinit { Darwin.close(fd) }
 
     func send(_ data: Data) throws {
@@ -175,9 +170,12 @@ final class Daemon: @unchecked Sendable {
     }
 
     /// The `rss` binary ships beside this one in the app bundle.
+    var programPath: String {
+        ProcessInfo.processInfo.environment["RSS_BIN"] ?? Bundle.main.executableURL!.deletingLastPathComponent().appending(path: "rss").path
+    }
+
     private func startDaemon() throws {
-        let environment = ProcessInfo.processInfo.environment
-        let path = environment["RSS_BIN"] ?? Bundle.main.executableURL!.deletingLastPathComponent().appending(path: "rss").path
+        let path = programPath
         guard FileManager.default.isExecutableFile(atPath: path) else {
             throw RPCFailure(message: "Cannot find the rss program at \(path)")
         }

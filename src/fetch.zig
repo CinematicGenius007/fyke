@@ -194,7 +194,7 @@ fn fetchHops(client: *http.Client, arena: std.mem.Allocator, request: Request) a
         });
         defer req.deinit();
         try req.sendBodiless();
-        repairHead(req.reader.in);
+        try repairHead(req.reader.in);
         var response = try req.receiveHead(&.{});
         const status = response.head.status;
 
@@ -243,14 +243,19 @@ fn fetchHops(client: *http.Client, arena: std.mem.Allocator, request: Request) a
 }
 
 /// Reads the whole response head into the buffer and repairs it there, ahead of the
-/// standard library's parser. Read errors are left for that parser to report.
-fn repairHead(in: *Io.Reader) void {
+/// standard library's parser. A failed read must end the fetch here: cancelation is
+/// delivered once, so a later read would wait with no deadline. A short head is left
+/// for the parser to report.
+fn repairHead(in: *Io.Reader) error{ReadFailed}!void {
     while (true) {
         const bytes = in.buffered();
         const end = std.mem.indexOf(u8, bytes, "\r\n\r\n") orelse std.mem.indexOf(u8, bytes, "\n\n");
         if (end) |length| return maskFalseEncoding(bytes[0..length]);
         if (bytes.len == in.buffer.len) return;
-        in.fillMore() catch return;
+        in.fillMore() catch |err| switch (err) {
+            error.EndOfStream => return,
+            error.ReadFailed => return error.ReadFailed,
+        };
     }
 }
 

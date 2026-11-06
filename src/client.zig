@@ -6,7 +6,7 @@ const daemon = @import("daemon.zig");
 const Io = std.Io;
 
 /// How long a call waits for the daemon's first byte. The slowest operations wait
-/// on the network and have deadlines of their own, well within this.
+/// on the network, and `pipeline.discovery_budget_ms` keeps them well within this.
 const reply_timeout_ms = 120 * 1000;
 
 /// One connection to the daemon.

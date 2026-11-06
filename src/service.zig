@@ -404,14 +404,18 @@ fn withoutTitle(nodes: []const core.blocks.Node, title: ?[]const u8) []const cor
 fn robotsAllow(s: *Service, arena: std.mem.Allocator, job: store.FullTextJob) !bool {
     const parts = core.url.split(job.url);
     const authority = parts.authority orelse return false;
-    const path = if (parts.path.len == 0) "/" else parts.path;
+    const base_path = if (parts.path.len == 0) "/" else parts.path;
+    // RFC 9309 matches rules against the path and the query together.
+    const path = if (parts.query) |query| try std.fmt.allocPrint(arena, "{s}?{s}", .{ base_path, query }) else base_path;
     const now = s.now();
 
-    s.robots_lock.lockUncancelable(s.io);
-    const cached = s.robots.get(authority);
-    s.robots_lock.unlock(s.io);
-    if (cached) |entry| {
-        if (now - entry.fetched_at < robots_ttl_ms) return core.robots.isAllowed(entry.text, robots_token, path);
+    // Another thread may replace and free the cached text, so it is read under the lock.
+    {
+        s.robots_lock.lockUncancelable(s.io);
+        defer s.robots_lock.unlock(s.io);
+        if (s.robots.get(authority)) |entry| {
+            if (now - entry.fetched_at < robots_ttl_ms) return core.robots.isAllowed(entry.text, robots_token, path);
+        }
     }
 
     const location = try std.fmt.allocPrint(arena, "{s}://{s}/robots.txt", .{ parts.scheme, authority });
