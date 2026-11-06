@@ -171,6 +171,47 @@ Measured 2026-11-06.
 
 The reading default is Newsreader, which ships in the app. Any other installed font can be chosen in Settings.
 
+## Releases (planned)
+
+None of this is built. There are no releases yet: the app is built from source, as the [README](../README.md) describes.
+
+The first releases will be source releases, built by whoever installs them. That needs no Apple Developer account. A local build is never quarantined, and `tools/bundle_app.py` gives it the ad-hoc signature Apple Silicon requires on the machine that built it. Distributing a binary is different: macOS quarantines an unsigned download, and each user would have to approve it in Privacy & Security.
+
+### Before the first release
+
+| Step | Work |
+|---|---|
+| Name | `rss_` is a working name. The final name decides the bundle identifier, the data folder and the repository, and is costly to change once people have data |
+| One version number | `tools/bundle_app.py` hard-codes `0.1`. One source feeds the app, `Info.plist` and a new `rss --version` |
+| Changelog | `CHANGELOG.md`, one section per release, drawn from Conventional Commits |
+| Continuous integration | A macOS runner on every pull request: `zig fmt --check`, `zig build test`, the end-to-end scripts, `tools/bundle_app.py` and `tools/e2e_gui.py`. Zig is pinned to the version `CONTRIBUTING.md` names |
+| Install script | `tools/install.sh` checks for Zig and Xcode's command line tools, explains what is missing, builds, installs to `/Applications` and restarts the daemon. Updating is pulling and running it again |
+
+### Releasing
+
+A release is a tag, `vMAJOR.MINOR.PATCH`, on `main`. Pushing it runs the full checks, then publishes a GitHub Release with the changelog section and a source archive with its SHA-256.
+
+Version numbers follow what a user would notice. A patch fixes behavior. A minor version adds features and may add schema migrations, which run on their own at the daemon's next start. A major version would change the data folder or the config format, and says so in the changelog. Raising `api_version` in `src/ops.zig` and `Daemon.apiVersion` in the app together is part of any change that clients rely on.
+
+Before a tag, the corpus oracles and `tools/scale.py` run by hand, since neither fits in continuous integration: the corpus is not in the repository.
+
+### Ways to install
+
+| Route | For | Notes |
+|---|---|---|
+| `tools/install.sh` from a clone | Anyone with the tools | First, because it needs nothing new |
+| Homebrew tap | Most people | A formula in a tap of ours builds from the source archive and pulls in Zig. Homebrew builds locally, so nothing is quarantined. A formula cannot place an app in `/Applications`, so it installs `rss`, and the app with one further command it prints |
+| Unsigned download | People who ask | Later, if at all, labeled as unsigned, with the steps to approve it. A built-in update check is out of scope, because the app makes no calls home today |
+| Signed and notarized | Nobody yet | Needs a paid Apple Developer account. It would replace the unsigned download if the project grows that far |
+
+### Order
+
+1. Pick the name.
+2. Add the version number, the changelog and continuous integration.
+3. Add `tools/install.sh`, and tag `v0.1.0` as a source release.
+4. Add the Homebrew tap.
+5. Decide on an unsigned download from what users ask for.
+
 ## Deferred, deliberately
 
 A hand-written HTTP client, podcast playback, Linux and Windows GUIs, Streamable HTTP for MCP, feed backfill with RFC 5005, sync across machines.
