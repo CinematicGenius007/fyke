@@ -21,7 +21,7 @@ The [boundary](../architecture.md#what-from-scratch-means) leaves OS windowing a
 | Risk | Measure |
 |---|---|
 | A feed chooses the address | `http` and `https` only, checked on every navigation, not only the first |
-| A page reaches this Mac or its network | Navigation to a private or local address is refused, and a content rule blocks subresources from those addresses |
+| A page reaches this Mac or its network | Navigation to a private or local address is refused, and content rules block the same addresses for images, scripts and requests. If the rules cannot be compiled, nothing loads |
 | Tracking across visits | Each visit has an in-memory data store, so cookies, caches and logins end with the pane |
 | A page reaches our data | No script message handler is installed, so page script has no route to the app or daemon. WebKit runs pages in its own sandboxed process |
 | A page opens more surface | New windows open in the pane. Downloads, camera and microphone are refused |
@@ -30,7 +30,7 @@ JavaScript stays on, because most sites do not work without it.
 
 ## Limits
 
-- The private address check reads the host name. A public name resolving to a private address passes it. The daemon's fetcher checks the connected socket, and WebKit offers no equivalent.
+- The private address check reads the host name, for navigation and for content rules alike. A public name resolving to a private address passes it. The daemon's fetcher checks the connected socket, and WebKit offers no equivalent.
 - Private sessions mean paywalled sites appear logged out. Those pages open in a browser with one action.
 - The app's scrollbar does not apply inside a page.
 - The app allows plain `http` for web content only, since many blogs still use it.

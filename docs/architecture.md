@@ -78,7 +78,9 @@ A theme holds colors, fonts and radii. Light, Dark, Newsprint and Terminal are b
 
 Keeping raw bodies means a parser bug is fixable after the fact: fix it, reparse history. Retention is the last 20 distinct bodies per feed, counting bodies that failed to parse.
 
-Removing old read articles, by hand or through `remove_read_after_days`, empties their text and keeps the row. The row's identity and `content_hash` are what stop a feed that still lists the article from bringing it back as unread. Starred articles are never trimmed, and neither is anything under 30 days old.
+Removing old read articles, by hand or through `remove_read_after_days`, empties their text and keeps the row. The row's identity and `content_hash` are what stop a feed that still lists the article from bringing it back as unread. Age counts from when an article was read and first seen, never from when it was published, so an old post read today is safe. Starred articles are never trimmed, and neither is anything read or first seen in the last 30 days.
+
+The app compares `api_version` from `stats.get` with its own at launch. A daemon outlives the app that started it, so after an update it can be older, and the app stops it and starts its own.
 
 ## Concurrency
 
@@ -202,7 +204,7 @@ Feeds are untrusted input from the internet, and this app hands that input to AI
 | Resource exhaustion | Limits on body size, nesting depth, entries per feed, decompressed size |
 | SSRF via feed URL or redirect | `http(s)` only. On every redirect hop, the address of the connected socket is checked before any request is sent, so DNS rebinding cannot pass the check. A TLS handshake with a private host can still occur before refusal. `allow_private_network` is a per-feed opt-in |
 | Scripts in content | Impossible by construction: blocks have no script type |
-| Remote pages in the GUI | A feed chooses the address, and the page runs its own script, in WebKit's sandboxed process. `http(s)` only on every navigation, private addresses refused by host name, no script message handler, an in-memory data store per visit, and no downloads, new windows, camera or microphone. Host name checks do not stop DNS rebinding, unlike the fetcher's socket check. Feed HTML is never loaded. See [the decision](decisions/0002-web-viewer.md) |
+| Remote pages in the GUI | A feed chooses the address, and the page runs its own script, in WebKit's sandboxed process. `http(s)` only on every navigation, private addresses refused by host name for navigation and for everything a page loads, no script message handler, an in-memory data store per visit, and no downloads, new windows, camera or microphone. Host name checks do not stop DNS rebinding, unlike the fetcher's socket check. Feed HTML is never loaded. See [the decision](decisions/0002-web-viewer.md) |
 | Tracking | Remote images load on request, known pixels are stripped, click-tracking params removed |
 | Other local users | Socket and data directory are owner-only, set explicitly because a new socket defaults to `0755`. No TCP port by default |
 | Agents causing requests | `entries.fetch_full` is in the annotate tier, so such an agent can make the daemon fetch a URL that a feed chose. It goes through the same address check and asks `robots.txt` first. `feeds.preview` and `feeds.add`, which take any URL, need the manage tier |
