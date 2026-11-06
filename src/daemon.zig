@@ -56,11 +56,13 @@ pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem
     home.deleteFile(io, socket_name) catch {}; // Left behind by a crash.
 
     const db_path = try std.fmt.allocPrintSentinel(arena, "{s}/rss.db", .{home_path}, 0);
+    const config = try readConfig(arena, io, home);
     var s: Service = .{
         .gpa = gpa,
         .io = io,
         .home = home,
-        .config = try readConfig(arena, io, home),
+        .config = config.values,
+        .config_error = config.problem,
         .started_at = Io.Clock.real.now(io).toMilliseconds(),
         .client = .{ .allocator = gpa, .io = fetch.withCancelableConnect(io) },
         .writer = try .open(db_path, .writer),
@@ -78,6 +80,7 @@ pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem
     for (0..s.config.workers) |_| try group.concurrent(io, service.workerLoop, .{&s});
     try group.concurrent(io, service.schedulerLoop, .{&s});
     s.full_text.store(s.config.full_text, .monotonic);
+    s.remove_read_after_days.store(s.config.remove_read_after_days, .monotonic);
     if (s.config.auto_poll) try group.concurrent(io, service.fullTextLoop, .{&s});
     try group.concurrent(io, acceptLoop, .{ &s, &server });
     std.debug.print("rssd: listening on {s}\n", .{socket_path});
@@ -93,12 +96,20 @@ pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem
     std.process.exit(0);
 }
 
-fn readConfig(arena: std.mem.Allocator, io: Io, home: Io.Dir) !service.Config {
+const LoadedConfig = struct { values: service.Config = .{}, problem: ?[]const u8 = null };
+
+/// The file is edited by hand, so a typo must not stop the reader. Defaults apply,
+/// the file stays as it is for the owner to fix, and `config.get` reports the problem.
+fn readConfig(arena: std.mem.Allocator, io: Io, home: Io.Dir) !LoadedConfig {
     const text = home.readFileAlloc(io, "config.json", arena, .limited(1 << 20)) catch |err| switch (err) {
         error.FileNotFound => return .{},
         else => return err,
     };
-    return std.json.parseFromSliceLeaky(service.Config, arena, text, .{ .ignore_unknown_fields = true }) catch error.InvalidConfig;
+    const values = std.json.parseFromSliceLeaky(service.Config, arena, text, .{ .ignore_unknown_fields = true }) catch |err| {
+        std.debug.print("config.json: {s}, using defaults\n", .{@errorName(err)});
+        return .{ .problem = @errorName(err) };
+    };
+    return .{ .values = values };
 }
 
 fn acceptLoop(s: *Service, server: *Io.net.Server) Io.Cancelable!void {

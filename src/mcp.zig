@@ -54,6 +54,7 @@ fn toolName(comptime name: []const u8) []const u8 {
 }
 
 fn jsonType(comptime T: type) []const u8 {
+    if (T == std.json.Value) return "object";
     return switch (@typeInfo(T)) {
         .optional => |o| jsonType(o.child),
         .bool => "boolean",

@@ -418,5 +418,130 @@ check("and costs at most the two tries before it was noticed", sum(tries for _, 
 
 rss("daemon", "stop")
 
+# Folders, feeds and storage
+ops_home = tempfile.mkdtemp(prefix="rss-o-", dir="/tmp")
+env_ops = dict(os.environ, RSS_HOME=ops_home)
+open(ops_home + "/config.json", "w").write('{"auto_poll": false, "owner_key": 7}')
+subprocess.run([RSS, "status"], env=env_ops, capture_output=True, timeout=30)
+def op(method, **params):
+    with socket.socket(socket.AF_UNIX) as s:
+        s.settimeout(30)
+        s.connect(ops_home + "/rssd.sock")
+        s.sendall(json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode() + b"\n")
+        return json.loads(s.makefile().readline())
+def rows(sql):
+    return json.loads(subprocess.run([RSS, "query", sql], env=env_ops, capture_output=True, text=True, timeout=30).stdout)["rows"]
+top = op("folders.add", name="Top")["result"]["id"]
+mid = op("folders.add", name="Mid", parent_id=top)["result"]["id"]
+low = op("folders.add", name="Low", parent_id=mid)["result"]["id"]
+check("folders.add finds an existing name", op("folders.add", name="Mid", parent_id=top)["result"]["id"] == mid)
+check("folders.add refuses an empty name", "error" in op("folders.add", name="  "))
+check("folders.add needs a real parent", "error" in op("folders.add", name="X", parent_id=9999))
+check("folders.rename works", "result" in op("folders.rename", id=low, name="Deep"))
+other = op("folders.add", name="Other", parent_id=mid)["result"]["id"]
+check("folders.rename refuses a sibling's name", "error" in op("folders.rename", id=other, name="Deep"))
+check("a folder cannot move inside itself", "error" in op("folders.move", id=top, parent_id=low))
+check("nor onto itself", "error" in op("folders.move", id=top, parent_id=top))
+check("folders.move refuses a name clash at the top level", op("folders.add", name="Deep")["result"]["id"] and "error" in op("folders.move", id=low))
+now = int(time.time() * 1000)
+old = now - 200 * 24 * 3600 * 1000
+db = sqlite3.connect(ops_home + "/rss.db", timeout=10)
+for feed_id, folder in ((1, low), (2, mid), (3, None)):
+    db.execute("INSERT INTO feeds (id, url, title, folder_id, created_at) VALUES (?, ?, ?, ?, 0)", (feed_id, f"http://x/{feed_id}", f"F{feed_id}", folder))
+    for n, age in enumerate((old, old, now)):
+        db.execute("INSERT INTO entries (feed_id, identity, title, first_seen_at, sort_at, content_text, content_blocks_json, content_hash) VALUES (?, ?, ?, ?, ?, ?, '[]', ?)", (feed_id, f"i{n}", f"E{feed_id}-{n}", age, age, "body text " * 40, f"h{n}"))
+db.commit(); db.close()
+listed = op("entries.list", folder_id=mid)["result"]["items"]
+check("entries.list by folder includes folders inside it", sorted({e["feed_id"] for e in listed}) == [1, 2], listed)
+check("entries.list by folder leaves others out", all(e["feed_id"] != 3 for e in listed))
+check("entries.mark_all covers a folder tree", "result" in op("entries.mark_all", folder_id=low))
+feeds = {f["id"]: f for f in op("feeds.list")["result"]["items"]}
+check("and only that tree", feeds[1]["unread"] == 0 and feeds[2]["unread"] == 3, feeds)
+entry = rows("SELECT id FROM entries WHERE title = 'E1-0'")[0][0]
+op("entries.mark", id=entry, starred=True)
+check("feeds.list counts stars", op("feeds.list")["result"]["items"][0]["starred"] == 1)
+check("feeds.update renames", "result" in op("feeds.update", id=3, title="Mine") and rows("SELECT title_override FROM feeds WHERE id = 3") == [["Mine"]])
+op("feeds.update", id=3, title="")
+check("an empty title restores the feed's own", rows("SELECT title_override FROM feeds WHERE id = 3") == [[None]])
+op("feeds.update", id=3, folder_id=other)
+check("feeds.update moves", rows("SELECT folder_id FROM feeds WHERE id = 3") == [[other]])
+op("feeds.update", id=3, top_level=True)
+check("and moves out", rows("SELECT folder_id FROM feeds WHERE id = 3") == [[None]])
+check("feeds.update needs a real folder", "error" in op("feeds.update", id=3, folder_id=9999))
+
+use = op("storage.get")["result"]
+check("storage.get splits the database", use["articles"]["entries"] == 9 and use["articles"]["text_bytes"] > 0 and use["articles"]["search_bytes"] > 0, use)
+check("and counts what can be trimmed, sparing stars", use["articles"]["removable"] == 1, use)
+r = op("storage.free", trim_older_than_days=1)["result"]
+check("storage.free keeps a 30 day floor and spares stars", r["trimmed"] == 1, r)
+check("the starred body stays", rows("SELECT length(content_text) > 0 FROM entries WHERE id = %d" % entry) == [[1]])
+check("the trimmed row stays, so a feed cannot bring it back unread", rows("SELECT count(*), max(content_hash) FROM entries WHERE title = 'E1-1'") == [[1, "h1"]])
+
+check("config.set keeps the ui object", "result" in op("config.set", ui={"theme": "dark", "tokens": {"light": {"ground": "#000000"}}}))
+saved = json.load(open(ops_home + "/config.json"))
+check("and the owner's own keys", saved["owner_key"] == 7 and saved["ui"]["theme"] == "dark", saved)
+check("config.get returns it", op("config.get")["result"]["ui"]["tokens"]["light"]["ground"] == "#000000")
+text = open(ops_home + "/config.json").read().replace('"dark"', '"terminal"').replace('"full_text"', '"x"')
+open(ops_home + "/config.json", "w").write(text.rstrip()[:-1] + ',"full_text": false,"remove_read_after_days": 60}')
+got = op("config.get")["result"]
+check("a hand edit is seen at once", got["ui"]["theme"] == "terminal" and got["full_text"] is False and got["remove_read_after_days"] == 60, got)
+open(ops_home + "/config.json", "w").write(text[:20])
+got = op("config.get")["result"]
+check("a broken edit is reported", got["config_error"] is not None and got["ui"] is None, got)
+check("and config.set will not overwrite it", "error" in op("config.set", full_text=True) and open(ops_home + "/config.json").read() == text[:20])
+open(ops_home + "/config.json", "w").write('{"auto_poll": false}')
+
+check("deleting a folder hands its contents to the parent", "result" in op("folders.remove", id=mid) and rows("SELECT folder_id FROM feeds WHERE id = 2") == [[top]] and rows("SELECT parent_id FROM folders WHERE id = %d" % low) == [[top]], rows("SELECT id, parent_id, name FROM folders"))
+check("its entries stay", rows("SELECT count(*) FROM entries") == [[9]])
+check("deleting with contents removes feeds and subfolders", "result" in op("folders.remove", id=top, delete_contents=True) and rows("SELECT id FROM feeds") == [[3]], rows("SELECT id FROM feeds"))
+check("and their entries", rows("SELECT count(*) FROM entries") == [[3]])
+check("and the folders inside", rows("SELECT count(*) FROM folders WHERE id IN (%d, %d)" % (top, low)) == [[0]])
+subprocess.run([RSS, "daemon", "stop"], env=env_ops, capture_output=True, timeout=30); shutil.rmtree(ops_home)
+
+# A hand edit that breaks config.json
+broken = tempfile.mkdtemp(prefix="rss-c-", dir="/tmp")
+env_broken = dict(os.environ, RSS_HOME=broken)
+open(broken + "/config.json", "w").write('{"auto_poll": false,')
+p = subprocess.run([RSS, "status"], env=env_broken, capture_output=True, text=True, timeout=30)
+check("a broken config.json does not stop the daemon", p.returncode == 0, p.stdout + p.stderr)
+with socket.socket(socket.AF_UNIX) as s:
+    s.connect(broken + "/rssd.sock")
+    s.sendall(b'{"jsonrpc":"2.0","id":1,"method":"config.get"}\n')
+    reply = json.loads(s.makefile().readline())
+check("config.get reports the problem", reply["result"]["config_error"] is not None, reply)
+check("and the file stays for the owner to fix", open(broken + "/config.json").read() == '{"auto_poll": false,')
+subprocess.run([RSS, "daemon", "stop"], env=env_broken, capture_output=True, timeout=30); shutil.rmtree(broken)
+
+# Moving data out of the legacy location, with its daemon still running
+user = tempfile.mkdtemp(prefix="rss-m-", dir="/tmp")
+legacy = user + "/.local/share/rss_"
+os.makedirs(legacy)
+open(legacy + "/config.json", "w").write('{"auto_poll": false}')
+env_old = dict(os.environ, RSS_HOME=legacy)
+subprocess.run([RSS, "status"], env=env_old, capture_output=True, timeout=30)
+env_new = {k: v for k, v in os.environ.items() if k != "RSS_HOME"}
+env_new["HOME"] = user
+p = subprocess.run([RSS, "status"], env=env_new, capture_output=True, text=True, timeout=30)
+check("a client reaches the running daemon after the move", p.returncode == 0, p.stdout + p.stderr)
+check("the data moved", os.path.isfile(user + "/.rss_/rss.db") and not os.path.islink(user + "/.rss_"))
+check("a link stays at the old path", os.path.islink(legacy) and os.path.realpath(legacy) == os.path.realpath(user + "/.rss_"))
+subprocess.run([RSS, "status"], env=env_old, capture_output=True, timeout=30)
+check("the old path still works", os.path.isfile(legacy + "/rss.db"))
+subprocess.run([RSS, "daemon", "stop"], env=env_new, capture_output=True, timeout=30)
+p = subprocess.run([RSS, "status"], env=env_new, capture_output=True, text=True, timeout=30)
+check("a new daemon starts at the new path", p.returncode == 0 and os.path.exists(user + "/.rss_/rssd.sock"), p.stdout + p.stderr)
+subprocess.run([RSS, "daemon", "stop"], env=env_new, capture_output=True, timeout=30)
+
+# Both locations already hold data
+user2 = tempfile.mkdtemp(prefix="rss-m-", dir="/tmp")
+os.makedirs(user2 + "/.local/share/rss_"); os.makedirs(user2 + "/.rss_")
+open(user2 + "/.local/share/rss_/keep", "w").write("old")
+open(user2 + "/.rss_/config.json", "w").write('{"auto_poll": false}')
+env_both = dict(env_new, HOME=user2)
+p = subprocess.run([RSS, "status"], env=env_both, capture_output=True, text=True, timeout=30)
+check("with data in both, the old folder is left alone", p.returncode == 0 and os.path.isfile(user2 + "/.local/share/rss_/keep") and not os.path.islink(user2 + "/.local/share/rss_"), p.stdout + p.stderr)
+subprocess.run([RSS, "daemon", "stop"], env=env_both, capture_output=True, timeout=30)
+shutil.rmtree(user); shutil.rmtree(user2)
+
 server.shutdown(); shutil.rmtree(home)
 print(f"\n{passed} checks passed")

@@ -23,6 +23,8 @@ pub const Config = struct {
     /// Fetch articles from their pages when a feed gives only a summary.
     full_text: bool = true,
     min_poll_seconds: i64 = 15 * 60,
+    /// Bodies of read entries older than this are trimmed. Zero keeps them.
+    remove_read_after_days: i64 = 0,
 };
 
 const housekeeping_interval_ms = 3600 * 1000;
@@ -127,6 +129,8 @@ pub const Service = struct {
     io: Io,
     home: Io.Dir,
     config: Config,
+    /// Why config.json could not be used at startup, when it could not.
+    config_error: ?[]const u8 = null,
     started_at: i64,
     client: std.http.Client,
 
@@ -149,6 +153,8 @@ pub const Service = struct {
     stop_requested: std.atomic.Value(bool) = .init(false),
     /// Starts from `config.full_text`, and `config.set` changes it while running.
     full_text: std.atomic.Value(bool) = .init(true),
+    /// Starts from `config.remove_read_after_days`, and follows config.json.
+    remove_read_after_days: std.atomic.Value(i64) = .init(0),
     /// The main thread waits on this.
     stop: Io.Event = .unset,
 
@@ -373,6 +379,8 @@ pub fn housekeep(s: *Service) !void {
     const stale = stale: {
         defer s.unlockWriter();
         try writer.prune(s.now());
+        const days = s.remove_read_after_days.load(.monotonic);
+        if (days > 0) _ = try writer.trimEntries(s.now() - days * 24 * 3600 * 1000);
         break :stale try writer.takeStaleRaw(arena, raw_bodies_kept);
     };
     for (stale) |hash| deleteRaw(s, arena, hash);

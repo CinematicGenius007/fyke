@@ -34,7 +34,7 @@ Pagination is keyset-based: list results return `next_cursor`.
 |---|---|
 | `feeds.list` | Subscriptions, health, last error |
 | `folders.list` | Folders |
-| `entries.list` | Timeline, filtered by feed, read and starred state, and age |
+| `entries.list` | Timeline, filtered by feed, folder tree, read and starred state, and age |
 | `entries.get` | One entry. `format`: `blocks`, `markdown` or `text` |
 | `entries.search` | Words, with snippets, newest first, filtered by `unread_only` and `since_days`. Also matches entries of feeds whose name or host fits every word. Considers the 2,000 most recently stored entries that match and pass the filters. Relevance order is not built: ranking every match of a common term takes around a second at 1,000,000 entries |
 | `stats.get` | Counts and storage |
@@ -42,7 +42,8 @@ Pagination is keyset-based: list results return `next_cursor`.
 | `db.query` | Read-only SQL on a `query_only` connection. Limited to 10,000 rows, 4 MiB of values, 16 MiB for any one value, and a budget of VM steps |
 | `events.since` | Poll the change feed by sequence number |
 | `opml.export` | Subscriptions as OPML |
-| `config.get` | Settings a client can change. Hidden from MCP |
+| `config.get` | Settings a client can change, read from `config.json`, including the GUI's under `ui`. Reports a file that does not parse. Hidden from MCP |
+| `storage.get` | Disk use by kind, and how much could be trimmed. Reads every database page. Hidden from MCP |
 | `ops.list` | Every operation. Hidden from MCP |
 
 Planned: `feeds.get`, `entries.similar`, `stories.list`, `stories.get`, `artifacts.list`, `artifacts.get`, `lenses.list`, `jobs.list`.
@@ -56,15 +57,18 @@ Registered operations cover the common paths, and SQL covers every question nobo
 | Operation | Purpose |
 |---|---|
 | `entries.mark` | Read, starred, hidden. Hidden entries leave lists and search |
+| `entries.mark_all` | Mark read everything in a feed, a folder tree, or all feeds |
 | `entries.fetch_full` | Fetch an entry's article from its page, ignoring any wait. Status is `done`, `skipped`, `failed`, or `later` when the site could not be reached |
 
 Planned: `entries.tag`, to add or remove tags recorded with their source. `notes.add`, to attach a note. `artifacts.put`, to store agent output with citations, so that an external agent run on your own schedule can publish into the Briefing view with no runner configured.
 
 ### Manage tier
 
-Built: `feeds.add`, `feeds.preview`, `feeds.remove`, `feeds.refresh`, `feeds.refresh_all`, `feeds.queue`, `config.set`, `opml.import`, `daemon.stop`, `daemon.housekeep`.
+Built: `feeds.add`, `feeds.preview`, `feeds.update`, `feeds.remove`, `feeds.refresh`, `feeds.refresh_all`, `feeds.queue`, `folders.add`, `folders.rename`, `folders.move`, `folders.remove`, `config.set`, `storage.free`, `opml.import`, `daemon.stop`, `daemon.housekeep`.
 
-Planned: `feeds.update`, folder management, `lenses.put`, `lenses.run`, `runners.put`, `jobs.cancel`.
+`folders.remove` hands a folder's subfolders and feeds to its parent. With `delete_contents` it deletes them, with their entries. `storage.free` trims old read articles, drops all but the newest copy of each feed, and compacts the database.
+
+Planned: `lenses.put`, `lenses.run`, `runners.put`, `jobs.cancel`.
 
 ### Socket only
 
