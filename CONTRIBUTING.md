@@ -38,7 +38,7 @@ Some areas need more:
 | A parser | The oracles in [AGENTS.md](AGENTS.md#commands), which must report no mismatches |
 | `src/fetch.zig` | A real HTTPS feed, since `e2e.py` uses plain HTTP |
 | A hot path | `tools/scale.py`, against the [budgets](docs/architecture.md#performance-budgets) |
-| `gui/` | `python3 tools/bundle_app.py`, then look at it in Light and Dark |
+| `gui/` | `python3 tools/bundle_app.py`, `python3 tools/e2e_gui.py`, then look at it in Light and Dark |
 
 ## How the code is organized
 

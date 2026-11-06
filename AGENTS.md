@@ -61,11 +61,12 @@ node tools/sdk_mcp.mjs ./zig-out/bin/rss modern  # official client; see the file
 python3 tools/eval_extract.py ./zig-out/bin/feedcheck html.jsonl dump.jsonl  # sends real requests
 python3 tools/load_corpus.py ./zig-out/bin/rss corpus dump.jsonl
 python3 tools/scale.py ./zig-out/bin/rss local corpus 1000
+python3 tools/e2e_gui.py                    # key presses in the app, after bundle_app.py
 python3 tools/bundle_app.py                 # builds zig-out/rss_.app; --install copies it to /Applications
 python3 tools/gen_tokens.py                 # gui/tokens.css to Tokens.swift
 ```
 
-Colors, fonts and radii are designed in the Paper file. Export them to `gui/tokens.css`, regenerate, and never edit `Tokens.swift`. The reading default must be a font in `gui/Fonts`, which `gen_tokens.py` checks. Anything else is chosen in Settings, on the machine that has it. `RSS_SNAPSHOT=out.png` makes the app save its window and quit, with `RSS_SCREEN` choosing a screen and `-theme dark -followSystem NO` a theme. Use `RSS_HOME` so that checks never touch real data.
+Colors, fonts and radii are designed in the Paper file. Export them to `gui/tokens.css`, regenerate, and never edit `Tokens.swift`. The reading default must be a font in `gui/Fonts`, which `gen_tokens.py` checks. Anything else is chosen in Settings, on the machine that has it. `RSS_KEYS` plays key presses and quits, as `tools/e2e_gui.py` shows. `RSS_SNAPSHOT=out.png` makes the app save its window and quit, with `RSS_SCREEN` choosing a screen and `-theme dark -followSystem NO` a theme. Use `RSS_HOME` so that checks never touch real data.
 
 A new capability is a struct in `src/ops.zig`. Add it to `all`, and the socket and MCP serve it. Give it `docs` for its parameters, or `agent_visible = false`.
 

@@ -140,7 +140,7 @@ Built from the approved Paper designs. Measured 2026-11-06 against real feeds in
 
 New operations: `feeds.preview`, `folders.list`, `config.get`, `config.set`. `feeds.add` takes `title` and `folder`, and `entries.list` takes `with_summary`.
 
-Limits: the Briefing screen is a placeholder until milestone 7. Shortcuts cannot be rebound. The sidebar lists feeds without their folders. Newsprint and Terminal derive most colors, because Paper defines only three for each. The default reading font is not bundled: other Macs fall back to Newsreader. Finding feeds on a site took 5 to 14 seconds in one test, because each advertised feed is fetched. There is no automated GUI test suite yet, and the preference test is a judgment no check can make.
+Limits: the Briefing screen is a placeholder until milestone 7. Shortcuts cannot be rebound. The sidebar lists feeds without their folders. Newsprint and Terminal derive most colors, because Paper defines only three for each. The default reading font is not bundled: other Macs fall back to Newsreader. Finding feeds on a site took 5 to 14 seconds in one test, because each advertised feed is fetched. `tools/e2e_gui.py` covers search keys only, and the preference test is a judgment no check can make.
 
 ## After milestone 6
 
@@ -148,7 +148,7 @@ Measured 2026-11-06.
 
 | Change | Check |
 |---|---|
-| Search in the GUI: a popup on `⌘F` or `/`, and a sidebar row | Empty, results and nothing-found states compared with Paper, in Light and Dark |
+| Search in the GUI: a popup on `⌘F` or `/`, and a sidebar row | Empty, results and nothing-found states compared with Paper, in Light and Dark. `tools/e2e_gui.py` plays the keys through AppKit: 8 checks |
 | Standalone app | `tools/bundle_app.py` builds the app with its fonts, icon and `rss`. Run alone, it started its own daemon and rendered Newsreader with no font errors |
 | `skipHours` and `skipDays` | Stored with the feed by schema 0003, so that polls ending in `304` obey them. Unit tests cover the masks and the move to the next free hour |
 | `rss service` | Installed, reported, ran the daemon and uninstalled, against a throwaway home |
