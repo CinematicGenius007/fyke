@@ -89,7 +89,7 @@ Dependencies only point downward. The bottom layer does no I/O, which keeps it t
 - **Skip unchanged bodies.** About 10% of servers ignored validators in the spike. If a `200` body matches the last hash, stop here.
 - **Parser.** Sniffs the format from content, not from `Content-Type`. Pure function: bytes in, entries out, with an arena freed once per fetch.
 - **Content cleaner.** Resolves relative URLs, strips tracking pixels and params, converts HTML to blocks, and extracts `content_text`.
-- **Full text.** A separate loop fetches the article for short entries, one page at a time, after asking `robots.txt`. See [src/extract.zig](../src/extract.zig). Page text is as untrusted as feed text, and reaches agents the same way.
+- **Full text.** A separate loop fetches the article for short entries, one page at a time, after asking `robots.txt`. A timeout, a `429` or a `5xx` is retried after 1, 6 and 24 hours, then given up on, and the host is left alone for 10 minutes meanwhile. Connection failures on three different hosts in a row mean our network is down, so the loop pauses for 1 to 5 minutes and counts no more tries against the pages. See [src/extract.zig](../src/extract.zig). Page text is as untrusted as feed text, and reaches agents the same way.
 - **Identity.** Applies the [identity rule](rss-primer.md#entry-identity), and stores `canonical_url` for the cross-feed dedupe the [aggregator](aggregator.md) will add.
 - **Commit.** Workers hand results to a single writer that batches them into one transaction and appends `events`.
 

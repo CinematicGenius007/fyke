@@ -419,6 +419,8 @@ const App = struct {
         if (std.mem.eql(u8, result.status, "done")) {
             app.openEntry();
             app.say("Full article loaded", .{});
+        } else if (std.mem.eql(u8, result.status, "later")) {
+            app.say("Could not reach the page. It will be tried again", .{});
         } else {
             app.say("No fuller article found ({s})", .{result.status});
         }

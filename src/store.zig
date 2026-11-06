@@ -48,7 +48,7 @@ const SQLITE_DETACH = 25;
 
 pub const Error = error{ OutOfMemory, Sqlite };
 
-const migrations = [_][*:0]const u8{ @embedFile("schema"), @embedFile("schema2"), @embedFile("schema3"), @embedFile("schema4") };
+const migrations = [_][*:0]const u8{ @embedFile("schema"), @embedFile("schema2"), @embedFile("schema3"), @embedFile("schema4"), @embedFile("schema5") };
 
 pub const Feed = struct {
     id: i64,
@@ -188,6 +188,8 @@ pub const FullTextJob = struct {
     title: ?[]const u8,
     text_length: i64,
     allow_private_network: bool,
+    /// Tries so far that ended in a temporary failure.
+    attempts: i64,
 };
 
 pub const DueFeed = struct { id: i64, url: []const u8 };
@@ -444,18 +446,19 @@ pub const Db = struct {
             .title = try columnOptionalText(stmt, 2, arena),
             .text_length = sqlite3_column_int64(stmt, 3),
             .allow_private_network = sqlite3_column_int64(stmt, 4) != 0,
+            .attempts = sqlite3_column_int64(stmt, 5),
         };
     }
 
-    /// Recent entries with little text that have not been tried yet, newest first.
-    pub fn dueFullText(db: *Db, arena: std.mem.Allocator, since: i64, short_text: i64, limit: i64) Error![]const FullTextJob {
+    /// Recent entries with little text that are waiting for a try, newest first.
+    pub fn dueFullText(db: *Db, arena: std.mem.Allocator, since: i64, short_text: i64, limit: i64, now: i64) Error![]const FullTextJob {
         const stmt = try db.prepare(
-            \\SELECT e.id, e.url, e.title, length(e.content_text), f.allow_private_network
+            \\SELECT e.id, e.url, e.title, length(e.content_text), f.allow_private_network, e.full_attempts
             \\FROM entries e JOIN feeds f ON f.id = e.feed_id
             \\WHERE e.full_status IS NULL AND e.url IS NOT NULL AND e.sort_at >= ?1
-            \\  AND length(e.content_text) < ?2
+            \\  AND length(e.content_text) < ?2 AND (e.full_retry_at IS NULL OR e.full_retry_at <= ?4)
             \\ORDER BY e.sort_at DESC LIMIT ?3
-        , .{ since, short_text, limit });
+        , .{ since, short_text, limit, now });
         defer _ = sqlite3_finalize(stmt);
         var rows: std.ArrayList(FullTextJob) = .empty;
         while (sqlite3_step(stmt) == SQLITE_ROW) try rows.append(arena, try readFullTextJob(stmt, arena));
@@ -464,7 +467,7 @@ pub const Db = struct {
 
     pub fn fullTextJob(db: *Db, arena: std.mem.Allocator, id: i64) Error!?FullTextJob {
         const stmt = try db.prepare(
-            \\SELECT e.id, e.url, e.title, length(e.content_text), f.allow_private_network
+            \\SELECT e.id, e.url, e.title, length(e.content_text), f.allow_private_network, e.full_attempts
             \\FROM entries e JOIN feeds f ON f.id = e.feed_id WHERE e.id = ?1 AND e.url IS NOT NULL
         , .{id});
         defer _ = sqlite3_finalize(stmt);
@@ -494,7 +497,17 @@ pub const Db = struct {
     }
 
     pub fn markFullText(db: *Db, id: i64, status: []const u8, now: i64) Error!void {
-        try db.run("UPDATE entries SET full_status = ?2, full_attempted_at = ?3 WHERE id = ?1", .{ id, status, now });
+        try db.run("UPDATE entries SET full_status = ?2, full_attempted_at = ?3, full_retry_at = NULL WHERE id = ?1", .{ id, status, now });
+    }
+
+    /// Records a temporary failure, and when to try again.
+    pub fn retryFullText(db: *Db, id: i64, attempts: i64, retry_at: i64, now: i64) Error!void {
+        try db.run("UPDATE entries SET full_attempts = ?2, full_retry_at = ?3, full_attempted_at = ?4 WHERE id = ?1", .{ id, attempts, retry_at, now });
+    }
+
+    /// Moves an entry back in the queue without counting a try.
+    pub fn postponeFullText(db: *Db, id: i64, retry_at: i64) Error!void {
+        try db.run("UPDATE entries SET full_retry_at = ?2 WHERE id = ?1", .{ id, retry_at });
     }
 
     /// Feeds whose poll is due, oldest first.
@@ -863,7 +876,8 @@ pub const Db = struct {
                 try db.run(
                     \\UPDATE entries SET url = ?2, canonical_url = ?3, title = ?4, author = ?5,
                     \\  published_at = ?6, updated_at = ?7, content_blocks_json = ?8, content_text = ?9,
-                    \\  content_hash = ?10, revision = revision + 1, full_status = NULL WHERE id = ?1
+                    \\  content_hash = ?10, revision = revision + 1, full_status = NULL,
+                    \\  full_attempts = 0, full_retry_at = NULL WHERE id = ?1
                 , .{ id, entry.url, entry.canonical_url, entry.title, entry.author, entry.published_at, entry.updated_at, entry.content_blocks_json, entry.content_text, entry.content_hash });
                 try db.run("INSERT INTO events (at, type, subject_id) VALUES (?1, 'entry.updated', ?2)", .{ now, id });
                 result.updated += 1;
@@ -1214,10 +1228,10 @@ test "full text replaces content, and a publisher's edit asks for it again" {
     const feed_id = try db.addFeed("https://example.com/feed", false, 1);
     _ = try db.ingest(feed_id, &.{sample("1", "One", "h1")}, 2000);
 
-    const due = try db.dueFullText(a, 0, 1000, 10);
+    const due = try db.dueFullText(a, 0, 1000, 10, 5000);
     try testing.expectEqual(1, due.len);
     try db.saveFullText(due[0].id, "[]", "the whole article about gardens", 3000);
-    try testing.expectEqual(0, (try db.dueFullText(a, 0, 1000, 10)).len);
+    try testing.expectEqual(0, (try db.dueFullText(a, 0, 1000, 10, 5000)).len);
     try testing.expectEqual(1, (try db.search(a, "gardens", .{})).len);
 
     // The same feed text again must not undo the article.
@@ -1225,9 +1239,9 @@ test "full text replaces content, and a publisher's edit asks for it again" {
     try testing.expectEqual(1, (try db.search(a, "gardens", .{})).len);
 
     _ = try db.ingest(feed_id, &.{sample("1", "One", "h2")}, 5000);
-    try testing.expectEqual(1, (try db.dueFullText(a, 0, 1000, 10)).len);
-    try testing.expectEqual(0, (try db.dueFullText(a, 0, 5, 10)).len);
-    try testing.expectEqual(0, (try db.dueFullText(a, 999999, 1000, 10)).len);
+    try testing.expectEqual(1, (try db.dueFullText(a, 0, 1000, 10, 5000)).len);
+    try testing.expectEqual(0, (try db.dueFullText(a, 0, 5, 10, 5000)).len);
+    try testing.expectEqual(0, (try db.dueFullText(a, 999999, 1000, 10, 5000)).len);
 }
 
 test "an enclosure size beyond SQLite's range is stored, not fatal" {
@@ -1352,9 +1366,27 @@ test "long entries are settled, and short ones keep waiting" {
     _ = try db.ingest(feed_id, &.{ long, short }, 2000);
 
     try db.skipLongEntries(0, 10, 3000);
-    const due = try db.dueFullText(a, 0, 1000, 10);
+    const due = try db.dueFullText(a, 0, 1000, 10, 3000);
     try testing.expectEqual(1, due.len);
     try testing.expectEqualStrings("Short", due[0].title.?);
+}
+
+test "a retry waits for its time, and an edit starts over" {
+    var db: Db = try .open(":memory:", .writer);
+    defer db.close();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const feed_id = try db.addFeed("https://example.com/feed", false, 1);
+    _ = try db.ingest(feed_id, &.{sample("1", "One", "h1")}, 2000);
+    const id = (try db.dueFullText(a, 0, 1000, 10, 3000))[0].id;
+
+    try db.retryFullText(id, 2, 9000, 3000);
+    try testing.expectEqual(0, (try db.dueFullText(a, 0, 1000, 10, 8999)).len);
+    try testing.expectEqual(2, (try db.dueFullText(a, 0, 1000, 10, 9000))[0].attempts);
+
+    _ = try db.ingest(feed_id, &.{sample("1", "One", "h2")}, 3000);
+    try testing.expectEqual(0, (try db.dueFullText(a, 0, 1000, 10, 3000))[0].attempts);
 }
 
 test "an old database is upgraded in place" {
@@ -1375,7 +1407,7 @@ test "an old database is upgraded in place" {
     var db: Db = try .open(path, .writer);
     defer db.close();
     try testing.expectEqual(1, (try db.stats(5)).feeds);
-    try testing.expectEqual(0, (try db.dueFullText(arena.allocator(), 0, 1000, 10)).len);
+    try testing.expectEqual(0, (try db.dueFullText(arena.allocator(), 0, 1000, 10, 5)).len);
 }
 
 test "due feeds and removal" {

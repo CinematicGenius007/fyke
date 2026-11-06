@@ -39,6 +39,16 @@ const full_text_idle_ms = 5 * 60 * 1000;
 const full_text_deadline_seconds = 15;
 /// An extraction must beat the feed's text by this much to replace it.
 const full_text_min_gain = 1.5;
+/// Temporary failures allowed before an entry is given up on.
+const full_text_max_attempts = 4;
+/// A host that failed is left alone for this long, so that one bad site does not use
+/// up the tries of everything else it published.
+const full_text_host_pause_ms = 10 * 60 * 1000;
+/// Connection failures on this many different hosts in a row mean our own network is
+/// down, which says nothing about the pages.
+const outage_host_count = 3;
+const outage_first_pause_ms = 60 * 1000;
+const outage_max_pause_ms = 5 * 60 * 1000;
 const robots_ttl_ms = 24 * 3600 * 1000;
 const robots_token = "rss_";
 const page_accept = "text/html,application/xhtml+xml;q=0.9";
@@ -49,6 +59,68 @@ const max_tick_ms = 60 * 1000;
 
 const Job = struct { id: i64, host: []const u8 };
 const RobotsEntry = struct { text: []const u8, fetched_at: i64 };
+
+const Retry = struct {
+    /// No server answered, as opposed to one answering with a temporary error.
+    network: bool,
+    after_seconds: ?u32 = null,
+};
+
+/// How one try at an article ended. Only `retry` says nothing about the page itself.
+const Attempt = union(enum) { done, skipped, failed, retry: Retry };
+
+/// Watches for failures that point at this machine's network, not at any one site.
+const OutageDetector = struct {
+    streak: usize = 0,
+    last_host: [256]u8 = undefined,
+    last_host_len: usize = 0,
+    pause_ms: i64 = outage_first_pause_ms,
+
+    /// Records a connection failure, and reports whether the network looks down.
+    fn failed(d: *OutageDetector, host: []const u8) bool {
+        const short = host[0..@min(host.len, d.last_host.len)];
+        if (d.streak == 0 or !std.mem.eql(u8, short, d.last_host[0..d.last_host_len])) {
+            @memcpy(d.last_host[0..short.len], short);
+            d.last_host_len = short.len;
+            d.streak += 1;
+        }
+        return d.streak >= outage_host_count;
+    }
+
+    fn recovered(d: *OutageDetector) void {
+        d.streak = 0;
+        d.pause_ms = outage_first_pause_ms;
+    }
+
+    fn nextPause(d: *OutageDetector) i64 {
+        defer d.pause_ms = @min(d.pause_ms * 2, outage_max_pause_ms);
+        return d.pause_ms;
+    }
+};
+
+/// Waits an hour, then six, then a day, or longer if the site asked for that.
+fn retryDelayMs(attempts: i64, after_seconds: ?u32) i64 {
+    const hours: i64 = switch (attempts) {
+        1 => 1,
+        2 => 6,
+        else => 24,
+    };
+    return @max(hours * 3600 * 1000, @as(i64, after_seconds orelse 0) * 1000);
+}
+
+/// Errors that a later try could not change are final. The rest are the network's.
+fn fetchFailure(err: anyerror) !Attempt {
+    return switch (err) {
+        error.OutOfMemory => error.OutOfMemory,
+        error.PrivateAddress, error.NotHttp, error.TooManyRedirects, error.RedirectWithoutLocation => .failed,
+        else => .{ .retry = .{ .network = true } },
+    };
+}
+
+fn statusOutcome(status: u16, after_seconds: ?u32) Attempt {
+    if (status == 408 or status == 429 or status >= 500) return .{ .retry = .{ .network = false, .after_seconds = after_seconds } };
+    return .failed;
+}
 
 pub const Service = struct {
     gpa: std.mem.Allocator,
@@ -314,6 +386,8 @@ pub fn deleteRaw(s: *Service, arena: std.mem.Allocator, hash: []const u8) void {
 /// Works through recent short entries, one page at a time, for as long as the
 /// daemon runs. It has a loop of its own so that it can never delay feed polling.
 pub fn fullTextLoop(s: *Service) Io.Cancelable!void {
+    var outage: OutageDetector = .{};
+    var host_pauses: std.StringHashMapUnmanaged(i64) = .empty;
     while (true) {
         var arena_state: std.heap.ArenaAllocator = .init(s.gpa);
         defer arena_state.deinit();
@@ -323,20 +397,46 @@ pub fn fullTextLoop(s: *Service) Io.Cancelable!void {
         const since = s.now() - full_text_window_ms;
         if (enabled) settleLongEntries(s, since);
         const reader = s.lockReader();
-        const jobs = if (enabled) reader.dueFullText(arena, since, short_text_length, full_text_batch) catch &.{} else &.{};
+        const jobs = if (enabled) reader.dueFullText(arena, since, short_text_length, full_text_batch, s.now()) catch &.{} else &.{};
         s.unlockReader();
 
+        var network_down = false;
         for (jobs) |job| {
+            const host = core.url.split(job.url).authority orelse "";
+            if (host_pauses.get(host)) |until| {
+                if (until > s.now()) {
+                    postponeFullText(s, job.id, until);
+                    continue;
+                }
+            }
+
             var job_arena: std.heap.ArenaAllocator = .init(s.gpa);
             defer job_arena.deinit();
-            _ = fetchFullText(s, job_arena.allocator(), job) catch |err| {
+            const attempt = attemptFullText(s, job_arena.allocator(), job) catch |err| blk: {
                 std.debug.print("full text {d}: {s}\n", .{ job.id, @errorName(err) });
-                setFullStatus(s, job.id, "failed");
+                break :blk Attempt.failed;
             };
+            switch (attempt) {
+                .retry => |retry| {
+                    if (retry.network and outage.failed(host)) {
+                        network_down = true;
+                        break;
+                    }
+                    if (!retry.network) outage.recovered();
+                    recordRetry(s, job, retry);
+                    pauseHost(s, &host_pauses, host);
+                },
+                else => {
+                    outage.recovered();
+                    finishFullText(s, job.id, attempt);
+                },
+            }
             s.eventsChanged();
             try s.io.sleep(.fromMilliseconds(full_text_gap_ms), .awake);
         }
-        if (jobs.len == 0) {
+        if (network_down) {
+            try s.io.sleep(.fromMilliseconds(outage.nextPause()), .awake);
+        } else if (jobs.len == 0) {
             s.full_text_wake.waitTimeout(s.io, .{ .duration = .{ .raw = .fromMilliseconds(full_text_idle_ms), .clock = .awake } }) catch |err| switch (err) {
                 error.Timeout => {},
                 error.Canceled => return error.Canceled,
@@ -359,33 +459,68 @@ fn setFullStatus(s: *Service, id: i64, status: []const u8) void {
     writer.markFullText(id, status, s.now()) catch {};
 }
 
-/// Fetches one article. Returns its new status: `done` when it replaced the
-/// entry's content, otherwise `skipped` or `failed`.
-pub fn fetchFullText(s: *Service, arena: std.mem.Allocator, job: store.FullTextJob) ![]const u8 {
-    const status = attemptFullText(s, arena, job) catch "failed";
-    if (!std.mem.eql(u8, status, "done")) setFullStatus(s, job.id, status);
-    return status;
+/// Stores a final outcome. A successful fetch has stored itself.
+fn finishFullText(s: *Service, id: i64, attempt: Attempt) void {
+    switch (attempt) {
+        .skipped, .failed => setFullStatus(s, id, @tagName(attempt)),
+        .done, .retry => {},
+    }
 }
 
-fn attemptFullText(s: *Service, arena: std.mem.Allocator, job: store.FullTextJob) ![]const u8 {
-    if (!core.url.isHttp(job.url)) return "skipped";
-    if (!try robotsAllow(s, arena, job)) return "skipped";
+fn recordRetry(s: *Service, job: store.FullTextJob, retry: Retry) void {
+    const attempts = job.attempts + 1;
+    if (attempts >= full_text_max_attempts) return setFullStatus(s, job.id, "failed");
+    const now = s.now();
+    const writer = s.lockWriter();
+    defer s.unlockWriter();
+    writer.retryFullText(job.id, attempts, now + retryDelayMs(attempts, retry.after_seconds), now) catch {};
+}
 
-    const response = try fetch.fetch(&s.client, arena, .{
+fn postponeFullText(s: *Service, id: i64, retry_at: i64) void {
+    const writer = s.lockWriter();
+    defer s.unlockWriter();
+    writer.postponeFullText(id, retry_at) catch {};
+}
+
+fn pauseHost(s: *Service, pauses: *std.StringHashMapUnmanaged(i64), host: []const u8) void {
+    const slot = pauses.getOrPut(s.gpa, host) catch return;
+    if (!slot.found_existing) {
+        slot.key_ptr.* = s.gpa.dupe(u8, host) catch {
+            pauses.removeByPtr(slot.key_ptr);
+            return;
+        };
+    }
+    slot.value_ptr.* = s.now() + full_text_host_pause_ms;
+}
+
+/// Fetches one article on request, ignoring any wait. Returns its status: `done` when
+/// it replaced the entry's content, `skipped` or `failed`, or `later` when the site
+/// could not be reached, which leaves the entry as it was.
+pub fn fetchFullText(s: *Service, arena: std.mem.Allocator, job: store.FullTextJob) ![]const u8 {
+    const attempt = attemptFullText(s, arena, job) catch Attempt.failed;
+    finishFullText(s, job.id, attempt);
+    return if (attempt == .retry) "later" else @tagName(attempt);
+}
+
+fn attemptFullText(s: *Service, arena: std.mem.Allocator, job: store.FullTextJob) !Attempt {
+    if (!core.url.isHttp(job.url)) return .skipped;
+    if (try robotsRefusal(s, arena, job)) |refusal| return refusal;
+
+    const response = fetch.fetch(&s.client, arena, .{
         .url = job.url,
         .allow_private_network = job.allow_private_network,
         .deadline_seconds = full_text_deadline_seconds,
         .accept = page_accept,
-    });
-    if (response.status != 200) return "failed";
+    }) catch |err| return fetchFailure(err);
+    if (response.status != 200) return statusOutcome(response.status, response.retry_after_seconds);
     const kind = response.content_type orelse "";
-    if (std.ascii.findIgnoreCase(kind, "html") == null) return "skipped";
+    if (std.ascii.findIgnoreCase(kind, "html") == null) return .skipped;
 
     const page = core.encoding.pageToUtf8(arena, response.body, kind) catch |err| switch (err) {
-        error.UnsupportedEncoding => return "skipped",
+        error.UnsupportedEncoding => return .skipped,
         else => return err,
     };
-    const found = (try core.extract.extract(arena, page, response.final_url)) orelse return "skipped";
+    const found = (try core.extract.extract(arena, page, response.final_url)) orelse return .skipped;
     const nodes = withoutTitle(found, job.title);
 
     var text: Io.Writer.Allocating = .init(arena);
@@ -393,7 +528,7 @@ fn attemptFullText(s: *Service, arena: std.mem.Allocator, job: store.FullTextJob
     // `text_length` counts characters, so bytes would flatter text outside ASCII.
     const characters = std.unicode.utf8CountCodepoints(text.written()) catch text.written().len;
     const gain = @as(f64, @floatFromInt(characters)) / @as(f64, @floatFromInt(@max(job.text_length, 1)));
-    if (gain < full_text_min_gain) return "skipped";
+    if (gain < full_text_min_gain) return .skipped;
 
     var json: Io.Writer.Allocating = .init(arena);
     try core.blocks.writeJson(&json.writer, nodes);
@@ -401,7 +536,7 @@ fn attemptFullText(s: *Service, arena: std.mem.Allocator, job: store.FullTextJob
     const writer = s.lockWriter();
     defer s.unlockWriter();
     try writer.saveFullText(job.id, json.written(), text.written(), s.now());
-    return "done";
+    return .done;
 }
 
 /// Readers show the title themselves, so a page's own copy of it is dropped.
@@ -413,11 +548,12 @@ fn withoutTitle(nodes: []const core.blocks.Node, title: ?[]const u8) []const cor
     return nodes;
 }
 
-/// Asks the site's robots.txt, caching it for a day. A missing file allows
-/// everything. A file that cannot be read means not now, as RFC 9309 advises.
-fn robotsAllow(s: *Service, arena: std.mem.Allocator, job: store.FullTextJob) !bool {
+/// Asks the site's robots.txt, caching it for a day, and returns null when the page
+/// may be fetched. A missing file allows everything. A file that cannot be read means
+/// not now, as RFC 9309 advises.
+fn robotsRefusal(s: *Service, arena: std.mem.Allocator, job: store.FullTextJob) !?Attempt {
     const parts = core.url.split(job.url);
-    const authority = parts.authority orelse return false;
+    const authority = parts.authority orelse return .skipped;
     const base_path = if (parts.path.len == 0) "/" else parts.path;
     // RFC 9309 matches rules against the path and the query together.
     const path = if (parts.query) |query| try std.fmt.allocPrint(arena, "{s}?{s}", .{ base_path, query }) else base_path;
@@ -428,7 +564,7 @@ fn robotsAllow(s: *Service, arena: std.mem.Allocator, job: store.FullTextJob) !b
         s.robots_lock.lockUncancelable(s.io);
         defer s.robots_lock.unlock(s.io);
         if (s.robots.get(authority)) |entry| {
-            if (now - entry.fetched_at < robots_ttl_ms) return core.robots.isAllowed(entry.text, robots_token, path);
+            if (now - entry.fetched_at < robots_ttl_ms) return verdict(entry.text, path);
         }
     }
 
@@ -438,8 +574,8 @@ fn robotsAllow(s: *Service, arena: std.mem.Allocator, job: store.FullTextJob) !b
         .allow_private_network = job.allow_private_network,
         .deadline_seconds = full_text_deadline_seconds,
         .accept = "text/plain",
-    }) catch return false;
-    if (response.status >= 500) return false;
+    }) catch |err| return try fetchFailure(err);
+    if (response.status == 429 or response.status >= 500) return statusOutcome(response.status, response.retry_after_seconds);
     const text = if (response.status == 200) response.body else "";
 
     s.robots_lock.lockUncancelable(s.io);
@@ -451,7 +587,43 @@ fn robotsAllow(s: *Service, arena: std.mem.Allocator, job: store.FullTextJob) !b
         slot.key_ptr.* = try s.gpa.dupe(u8, authority);
     }
     slot.value_ptr.* = .{ .text = try s.gpa.dupe(u8, text), .fetched_at = now };
-    return core.robots.isAllowed(text, robots_token, path);
+    return verdict(text, path);
+}
+
+fn verdict(robots_text: []const u8, path: []const u8) ?Attempt {
+    return if (core.robots.isAllowed(robots_text, robots_token, path)) null else .skipped;
+}
+
+test "retries wait longer each time, and respect the site" {
+    const hour = 3600 * 1000;
+    try std.testing.expectEqual(1 * hour, retryDelayMs(1, null));
+    try std.testing.expectEqual(6 * hour, retryDelayMs(2, null));
+    try std.testing.expectEqual(24 * hour, retryDelayMs(3, null));
+    try std.testing.expectEqual(2 * hour, retryDelayMs(1, 7200));
+}
+
+test "only failures a later try could fix are retried" {
+    try std.testing.expect((try fetchFailure(error.ConnectionRefused)) == .retry);
+    try std.testing.expect((try fetchFailure(error.DeadlineExceeded)) == .retry);
+    try std.testing.expect((try fetchFailure(error.PrivateAddress)) == .failed);
+    try std.testing.expect(statusOutcome(503, null) == .retry);
+    try std.testing.expect(statusOutcome(429, 60) == .retry);
+    try std.testing.expect(statusOutcome(404, null) == .failed);
+    try std.testing.expect(statusOutcome(410, null) == .failed);
+}
+
+test "an outage takes failures on several hosts, not one" {
+    var outage: OutageDetector = .{};
+    for (0..10) |_| try std.testing.expect(!outage.failed("a.example"));
+    try std.testing.expect(!outage.failed("b.example"));
+    try std.testing.expect(outage.failed("c.example"));
+    try std.testing.expectEqual(outage_first_pause_ms, outage.nextPause());
+    try std.testing.expectEqual(2 * outage_first_pause_ms, outage.nextPause());
+    for (0..8) |_| _ = outage.nextPause();
+    try std.testing.expectEqual(outage_max_pause_ms, outage.nextPause());
+    outage.recovered();
+    try std.testing.expect(!outage.failed("a.example"));
+    try std.testing.expectEqual(outage_first_pause_ms, outage.nextPause());
 }
 
 test "the page's own title is dropped" {

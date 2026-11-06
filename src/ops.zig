@@ -426,7 +426,7 @@ pub const EntriesMark = struct {
 pub const EntriesFetchFull = struct {
     pub const name = "entries.fetch_full";
     pub const tier: Tier = .annotate;
-    pub const description = "Fetch an entry's article from its web page, replacing a short feed summary. This happens by itself for recent entries.";
+    pub const description = "Fetch an entry's article from its web page, replacing a short feed summary. This happens by itself for recent entries. Status is done, skipped, failed, or later when the site could not be reached.";
     pub const docs = .{ .id = "Entry id." };
     pub const Params = struct { id: i64 };
     pub const Result = struct { status: []const u8 };
@@ -569,7 +569,7 @@ pub const SchemaDescribe = struct {
     pub const Result = struct { schema: []const u8 };
 
     pub fn run(_: *Service, _: std.mem.Allocator, _: Params) !Result {
-        return .{ .schema = @embedFile("schema") ++ "\n" ++ @embedFile("schema2") ++ "\n" ++ @embedFile("schema3") ++ "\n" ++ @embedFile("schema4") };
+        return .{ .schema = @embedFile("schema") ++ "\n" ++ @embedFile("schema2") ++ "\n" ++ @embedFile("schema3") ++ "\n" ++ @embedFile("schema4") ++ "\n" ++ @embedFile("schema5") };
     }
 };
 
