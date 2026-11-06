@@ -1,0 +1,1095 @@
+//! `rss tui`: a terminal reader, and a client of the socket like any other.
+//!
+//! The drawing model is simple on purpose: each frame draws everything into a
+//! cell grid, and `Screen.render` sends only what changed. Nothing tracks what is
+//! on the terminal, so the display cannot drift out of step with the state.
+//!
+//! The main thread owns all state. Input, resizes and daemon events all arrive as
+//! readable file descriptors, so a single poll() loop serves them with no locks.
+
+const std = @import("std");
+const builtin = @import("builtin");
+const core = @import("core");
+const client_module = @import("client.zig");
+const ops = @import("ops.zig");
+const store = @import("store.zig");
+
+const Io = std.Io;
+const Client = client_module.Client;
+const terminal = core.terminal;
+const Screen = terminal.Screen;
+const Style = terminal.Style;
+const Key = terminal.Key;
+const c = std.c;
+
+const page_size = 100;
+/// A lone ESC byte could be the Escape key or the start of a sequence.
+const escape_wait_ms = 30;
+const live_refresh_ms = 400;
+const fetch_watch_ms = 700;
+const max_reader_columns = 80;
+const min_columns = 20;
+const min_rows = 6;
+
+// Terminal state, global because the panic and signal handlers need it.
+var original_termios: ?std.posix.termios = null;
+var wake_write_fd: c.fd_t = -1;
+
+const enter_sequence = "\x1b[?1049h\x1b[?25l\x1b[?1007h";
+const leave_sequence = "\x1b[?1007l\x1b[?25h\x1b[0m\x1b[?1049l";
+
+/// Puts the terminal back. Safe from a signal handler: it makes only system calls.
+pub fn restoreTerminal() void {
+    const saved = original_termios orelse return;
+    original_termios = null;
+    _ = c.write(1, leave_sequence, leave_sequence.len);
+    // NOW, not FLUSH: FLUSH waits for output to drain, which would hang here if the
+    // terminal had stopped reading, and this code runs inside signal handlers.
+    _ = c.tcsetattr(0, .NOW, &saved);
+}
+
+fn enterRawMode() !void {
+    if (c.isatty(0) == 0 or c.isatty(1) == 0) return error.NotATerminal;
+    var raw: std.posix.termios = undefined;
+    if (c.tcgetattr(0, &raw) != 0) return error.NotATerminal;
+    original_termios = raw;
+    raw.iflag.ICRNL = false;
+    raw.iflag.IXON = false;
+    raw.iflag.BRKINT = false;
+    raw.iflag.ISTRIP = false;
+    raw.lflag.ECHO = false;
+    raw.lflag.ICANON = false;
+    raw.lflag.ISIG = false;
+    raw.lflag.IEXTEN = false;
+    if (c.tcsetattr(0, .FLUSH, &raw) != 0) return error.NotATerminal;
+    _ = c.write(1, enter_sequence, enter_sequence.len);
+}
+
+fn terminalSize() struct { columns: usize, rows: usize } {
+    var size: std.posix.winsize = undefined;
+    if (c.ioctl(1, std.posix.T.IOCGWINSZ, &size) != 0 or size.col == 0) return .{ .columns = 80, .rows = 24 };
+    return .{ .columns = size.col, .rows = size.row };
+}
+
+/// Signal handlers may do almost nothing, so they write one byte to a pipe, which
+/// turns the signal into an ordinary readable event for the main loop.
+fn onWinch(_: std.posix.SIG) callconv(.c) void {
+    wake('w');
+}
+
+fn onTerminate(sig: std.posix.SIG) callconv(.c) void {
+    restoreTerminal();
+    c._exit(128 + @as(c_int, @intCast(@backingInt(sig))));
+}
+
+fn wake(reason: u8) void {
+    const byte = [1]u8{reason};
+    _ = c.write(wake_write_fd, &byte, 1);
+}
+
+fn installSignals() void {
+    const winch: std.posix.Sigaction = .{ .handler = .{ .handler = onWinch }, .mask = std.posix.sigemptyset(), .flags = 0 };
+    std.posix.sigaction(.WINCH, &winch, null);
+    const terminate: std.posix.Sigaction = .{ .handler = .{ .handler = onTerminate }, .mask = std.posix.sigemptyset(), .flags = 0 };
+    std.posix.sigaction(.TERM, &terminate, null);
+    std.posix.sigaction(.HUP, &terminate, null);
+    std.posix.sigaction(.INT, &terminate, null);
+}
+
+const Pane = enum { feeds, entries, reader };
+
+const Source = union(enum) {
+    all,
+    starred,
+    feed: i64,
+};
+
+const Reader = struct {
+    entry: ops.EntriesGet.Result,
+    nodes: []const core.blocks.Node,
+    article: core.layout.Article = .{ .lines = &.{}, .links = &.{} },
+    laid_out_for: usize = 0,
+    scroll: usize = 0,
+};
+
+const PromptKind = enum { search, add };
+
+const App = struct {
+    gpa: std.mem.Allocator,
+    io: Io,
+    connector: client_module.Connector,
+    client: Client = undefined,
+    connected: bool = false,
+
+    screen: Screen,
+    previous: Screen,
+    first_frame: bool = true,
+
+    focus: Pane = .feeds,
+    show_help: bool = false,
+    unread_only: bool = false,
+    message: []const u8 = "",
+    message_buffer: [256]u8 = undefined,
+
+    feeds_arena: std.heap.ArenaAllocator,
+    feeds: []const store.Feed = &.{},
+    side_index: usize = 0,
+    side_top: usize = 0,
+
+    entries_arena: std.heap.ArenaAllocator,
+    entries: std.ArrayList(store.EntrySummary) = .empty,
+    entry_index: usize = 0,
+    entry_top: usize = 0,
+    next_cursor: ?[]const u8 = null,
+    search: ?[]const u8 = null,
+
+    reader_arena: std.heap.ArenaAllocator,
+    layout_arena: std.heap.ArenaAllocator,
+    reader: ?Reader = null,
+
+    scratch: std.heap.ArenaAllocator,
+    prompt: ?PromptKind = null,
+    prompt_text: std.ArrayList(u8) = .empty,
+
+    stats: ?ops.StatsGet.Result = null,
+    watching_fetches: bool = false,
+    live_pending: bool = false,
+    last_seq: std.atomic.Value(i64) = .init(0),
+
+    running: bool = true,
+
+    fn deinit(app: *App) void {
+        app.screen.deinit(app.gpa);
+        app.previous.deinit(app.gpa);
+        app.feeds_arena.deinit();
+        app.entries_arena.deinit();
+        app.reader_arena.deinit();
+        app.layout_arena.deinit();
+        app.scratch.deinit();
+        app.prompt_text.deinit(app.gpa);
+    }
+
+    fn say(app: *App, comptime format: []const u8, args: anytype) void {
+        app.message = std.fmt.bufPrint(&app.message_buffer, format, args) catch "";
+    }
+
+    fn connect(app: *App) !void {
+        try app.connector.connect(&app.client, true);
+        app.connected = true;
+    }
+
+    /// Calls the daemon, reconnecting once if it restarted. Failures become a
+    /// message on the status line, because a reader should not die with its daemon.
+    fn call(app: *App, comptime Op: type, arena: std.mem.Allocator, params: Op.Params) ?Op.Result {
+        for (0..2) |_| {
+            if (!app.connected) app.connect() catch |err| {
+                app.say("Cannot reach the daemon: {s}", .{@errorName(err)});
+                return null;
+            };
+            app.client.arena = arena;
+            return app.client.call(Op, params) catch |err| switch (err) {
+                error.Reported => {
+                    app.say("{s}", .{app.client.last_error});
+                    return null;
+                },
+                else => {
+                    app.client.stream.close(app.io);
+                    app.connected = false;
+                    continue;
+                },
+            };
+        }
+        app.say("The daemon is not responding", .{});
+        return null;
+    }
+
+    fn sideCount(app: *const App) usize {
+        return 2 + app.feeds.len;
+    }
+
+    fn source(app: *const App) Source {
+        return switch (app.side_index) {
+            0 => .all,
+            1 => .starred,
+            else => .{ .feed = app.feeds[app.side_index - 2].id },
+        };
+    }
+
+    fn loadFeeds(app: *App) void {
+        var fresh: std.heap.ArenaAllocator = .init(app.gpa);
+        const result = app.call(ops.FeedsList, fresh.allocator(), .{}) orelse {
+            fresh.deinit();
+            return;
+        };
+        app.feeds_arena.deinit();
+        app.feeds_arena = fresh;
+        app.feeds = result.items;
+        app.side_index = @min(app.side_index, app.sideCount() - 1);
+    }
+
+    fn loadStats(app: *App) void {
+        app.stats = app.call(ops.StatsGet, app.scratch.allocator(), .{});
+    }
+
+    /// Reloads the list, keeping the selection on the same entry if it still exists.
+    fn loadEntries(app: *App) void {
+        const selected: ?i64 = if (app.entry_index < app.entries.items.len) app.entries.items[app.entry_index].id else null;
+        const wanted: i64 = @intCast(@max(page_size, app.entries.items.len));
+
+        var fresh: std.heap.ArenaAllocator = .init(app.gpa);
+        const arena = fresh.allocator();
+        var rows: []const store.EntrySummary = undefined;
+        var cursor: ?[]const u8 = null;
+        if (app.search) |query| {
+            const result = app.call(ops.EntriesSearch, arena, .{ .query = query, .limit = 200, .unread_only = app.unread_only }) orelse {
+                fresh.deinit();
+                return;
+            };
+            rows = result.items;
+        } else {
+            const result = app.call(ops.EntriesList, arena, app.listParams(wanted, null)) orelse {
+                fresh.deinit();
+                return;
+            };
+            rows = result.items;
+            cursor = result.next_cursor;
+        }
+
+        var list: std.ArrayList(store.EntrySummary) = .empty;
+        list.appendSlice(arena, rows) catch {
+            fresh.deinit();
+            return;
+        };
+        const query_copy = if (app.search) |query| arena.dupe(u8, query) catch query else null;
+        app.entries_arena.deinit();
+        app.entries_arena = fresh;
+        app.entries = list;
+        app.next_cursor = cursor;
+        app.search = query_copy;
+
+        app.entry_index = 0;
+        if (selected) |id| {
+            for (app.entries.items, 0..) |row, i| {
+                if (row.id == id) app.entry_index = i;
+            }
+        }
+    }
+
+    fn listParams(app: *const App, limit: i64, before: ?[]const u8) ops.EntriesList.Params {
+        const current = app.source();
+        return .{
+            .feed_id = if (current == .feed) current.feed else null,
+            .starred_only = current == .starred,
+            .unread_only = app.unread_only,
+            .limit = limit,
+            .before = before,
+        };
+    }
+
+    /// Fetches the next page when the selection nears the end of what is loaded.
+    fn loadMore(app: *App) void {
+        const cursor = app.next_cursor orelse return;
+        if (app.search != null or app.entry_index + 20 < app.entries.items.len) return;
+        const arena = app.entries_arena.allocator();
+        const result = app.call(ops.EntriesList, arena, app.listParams(page_size, cursor)) orelse return;
+        app.entries.appendSlice(arena, result.items) catch return;
+        app.next_cursor = result.next_cursor;
+    }
+
+    fn resetList(app: *App) void {
+        app.entries.clearRetainingCapacity();
+        app.entry_index = 0;
+        app.entry_top = 0;
+        app.loadEntries();
+    }
+
+    fn selectedEntry(app: *App) ?*store.EntrySummary {
+        if (app.entry_index >= app.entries.items.len) return null;
+        return &app.entries.items[app.entry_index];
+    }
+
+    fn openEntry(app: *App) void {
+        const row = app.selectedEntry() orelse return;
+        const id = row.id;
+        var fresh: std.heap.ArenaAllocator = .init(app.gpa);
+        const arena = fresh.allocator();
+        const entry = app.call(ops.EntriesGet, arena, .{ .id = id, .format = "blocks" }) orelse {
+            fresh.deinit();
+            return;
+        };
+        const nodes = core.blocks.parseJson(arena, entry.body) catch &.{};
+
+        app.reader_arena.deinit();
+        app.reader_arena = fresh;
+        app.reader = .{ .entry = entry, .nodes = nodes };
+        app.focus = .reader;
+
+        if (!row.read) {
+            row.read = true;
+            _ = app.call(ops.EntriesMark, app.scratch.allocator(), .{ .id = id, .read = true });
+            app.loadFeeds();
+        }
+    }
+
+    fn toggleRead(app: *App) void {
+        const row = app.selectedEntry() orelse return;
+        row.read = !row.read;
+        _ = app.call(ops.EntriesMark, app.scratch.allocator(), .{ .id = row.id, .read = row.read });
+        app.loadFeeds();
+    }
+
+    fn toggleStar(app: *App) void {
+        const row = app.selectedEntry() orelse return;
+        row.starred = !row.starred;
+        _ = app.call(ops.EntriesMark, app.scratch.allocator(), .{ .id = row.id, .starred = row.starred });
+    }
+
+    fn nextUnread(app: *App) void {
+        var i = app.entry_index + 1;
+        while (i < app.entries.items.len) : (i += 1) {
+            if (!app.entries.items[i].read) {
+                app.entry_index = i;
+                app.loadMore();
+                app.openEntry();
+                return;
+            }
+        }
+        app.say("No more unread entries here", .{});
+    }
+
+    /// Hands a link to the system. The URL is one argument to a fixed program, with
+    /// no shell involved, and only web links qualify.
+    fn openUrl(app: *App, url: []const u8) void {
+        if (!core.url.isHttp(url)) {
+            app.say("Not a web link", .{});
+            return;
+        }
+        const opener = if (builtin.os.tag == .macos) "open" else "xdg-open";
+        _ = std.process.spawn(app.io, .{ .argv = &.{ opener, url }, .stdin = .ignore, .stdout = .ignore, .stderr = .ignore }) catch {
+            app.say("Could not open a browser", .{});
+            return;
+        };
+        app.say("Opened in browser", .{});
+    }
+
+    fn refreshSelected(app: *App) void {
+        const current = app.source();
+        if (current != .feed) return app.refreshAll();
+        if (app.call(ops.FeedsQueue, app.scratch.allocator(), .{ .id = current.feed }) == null) return;
+        app.watching_fetches = true;
+        app.say("Refreshing", .{});
+    }
+
+    fn refreshAll(app: *App) void {
+        const result = app.call(ops.FeedsRefreshAll, app.scratch.allocator(), .{}) orelse return;
+        app.watching_fetches = true;
+        app.say("Refreshing {d} feeds", .{result.queued});
+    }
+
+    fn handleKey(app: *App, key: Key) void {
+        app.message = "";
+        if (key == .ctrl and key.ctrl == 'c') {
+            app.running = false;
+            return;
+        }
+        if (key == .ctrl and key.ctrl == 'l') {
+            app.first_frame = true;
+            return;
+        }
+        if (app.prompt != null) return app.promptKey(key);
+        if (app.show_help) {
+            app.show_help = false;
+            return;
+        }
+
+        switch (key) {
+            .char => |ch| switch (ch) {
+                '?' => return {
+                    app.show_help = true;
+                },
+                '/' => return app.startPrompt(.search),
+                'a' => return app.startPrompt(.add),
+                'R' => return app.refreshAll(),
+                'r' => return app.refreshSelected(),
+                'u' => {
+                    app.unread_only = !app.unread_only;
+                    app.say("{s}", .{if (app.unread_only) "Showing unread only" else "Showing everything"});
+                    return app.resetList();
+                },
+                else => {},
+            },
+            else => {},
+        }
+        switch (app.focus) {
+            .feeds => app.feedsKey(key),
+            .entries => app.entriesKey(key),
+            .reader => app.readerKey(key),
+        }
+    }
+
+    fn moveBy(index: *usize, count: usize, delta: isize) void {
+        if (count == 0) return;
+        const moved = @as(isize, @intCast(index.*)) + delta;
+        index.* = @intCast(std.math.clamp(moved, 0, @as(isize, @intCast(count - 1))));
+    }
+
+    /// Reads movement keys common to every list. Returns a row delta, if any.
+    fn listDelta(app: *const App, key: Key) ?isize {
+        const page: isize = @intCast(@max(app.screen.height / 2, 1));
+        return switch (key) {
+            .down => 1,
+            .up => -1,
+            .page_down => page,
+            .page_up => -page,
+            .home => -std.math.maxInt(i32),
+            .end => std.math.maxInt(i32),
+            .ctrl => |ch| switch (ch) {
+                'd' => page,
+                'u' => -page,
+                else => null,
+            },
+            .char => |ch| switch (ch) {
+                'j' => 1,
+                'k' => -1,
+                'g' => -std.math.maxInt(i32),
+                'G' => std.math.maxInt(i32),
+                else => null,
+            },
+            else => null,
+        };
+    }
+
+    fn feedsKey(app: *App, key: Key) void {
+        if (app.listDelta(key)) |delta| {
+            const before = app.side_index;
+            moveBy(&app.side_index, app.sideCount(), delta);
+            if (app.side_index != before) {
+                app.search = null;
+                app.resetList();
+            }
+            return;
+        }
+        switch (key) {
+            .enter, .right, .tab => app.focus = .entries,
+            .char => |ch| switch (ch) {
+                'l' => app.focus = .entries,
+                'q' => app.running = false,
+                else => {},
+            },
+            else => {},
+        }
+    }
+
+    fn entriesKey(app: *App, key: Key) void {
+        if (app.listDelta(key)) |delta| {
+            moveBy(&app.entry_index, app.entries.items.len, delta);
+            app.loadMore();
+            return;
+        }
+        switch (key) {
+            .enter, .right => app.openEntry(),
+            .left, .backtab, .tab => app.focus = .feeds,
+            .escape => if (app.search != null) app.clearSearch(),
+            .char => |ch| switch (ch) {
+                'l' => app.openEntry(),
+                'h' => app.focus = .feeds,
+                'm' => app.toggleRead(),
+                's' => app.toggleStar(),
+                'n' => app.nextUnread(),
+                'o' => if (app.selectedEntry()) |row| {
+                    if (row.url) |link| app.openUrl(link);
+                },
+                'q' => if (app.search != null) app.clearSearch() else {
+                    app.running = false;
+                },
+                else => {},
+            },
+            else => {},
+        }
+    }
+
+    fn clearSearch(app: *App) void {
+        app.search = null;
+        app.resetList();
+    }
+
+    fn readerKey(app: *App, key: Key) void {
+        const reader = &(app.reader orelse {
+            app.focus = .entries;
+            return;
+        });
+        const page = @max(app.screen.height -| 3, 1);
+        switch (key) {
+            .left, .escape, .backtab, .tab => app.focus = .entries,
+            .down => reader.scroll += 1,
+            .up => reader.scroll -|= 1,
+            .page_down => reader.scroll += page,
+            .page_up => reader.scroll -|= page,
+            .home => reader.scroll = 0,
+            .end => reader.scroll = reader.article.lines.len,
+            .ctrl => |ch| switch (ch) {
+                'd' => reader.scroll += page / 2,
+                'u' => reader.scroll -|= page / 2,
+                else => {},
+            },
+            .char => |ch| switch (ch) {
+                'j' => reader.scroll += 1,
+                'k' => reader.scroll -|= 1,
+                ' ' => reader.scroll += page,
+                'b' => reader.scroll -|= page,
+                'g' => reader.scroll = 0,
+                'G' => reader.scroll = reader.article.lines.len,
+                'h', 'q' => app.focus = .entries,
+                'n' => app.nextUnread(),
+                's' => app.toggleStar(),
+                'm' => app.toggleRead(),
+                'o' => if (reader.entry.url) |link| app.openUrl(link),
+                '1'...'9' => {
+                    const number: usize = ch - '0';
+                    if (number <= reader.article.links.len) {
+                        app.openUrl(reader.article.links[number - 1]);
+                    } else app.say("No link {d}", .{number});
+                },
+                else => {},
+            },
+            else => {},
+        }
+    }
+
+    fn startPrompt(app: *App, kind: PromptKind) void {
+        app.prompt = kind;
+        app.prompt_text.clearRetainingCapacity();
+    }
+
+    fn promptKey(app: *App, key: Key) void {
+        switch (key) {
+            .escape => app.prompt = null,
+            .enter => app.submitPrompt(),
+            .backspace => {
+                const text = app.prompt_text.items;
+                var end = text.len;
+                while (end > 0) {
+                    end -= 1;
+                    if (text[end] & 0xC0 != 0x80) break;
+                }
+                app.prompt_text.shrinkRetainingCapacity(end);
+            },
+            .char => |ch| {
+                var buffer: [4]u8 = undefined;
+                const length = std.unicode.utf8Encode(ch, &buffer) catch return;
+                if (app.prompt_text.items.len + length <= 1024) app.prompt_text.appendSlice(app.gpa, buffer[0..length]) catch {};
+            },
+            else => {},
+        }
+    }
+
+    fn submitPrompt(app: *App) void {
+        const kind = app.prompt.?;
+        app.prompt = null;
+        const text = std.mem.trim(u8, app.prompt_text.items, " ");
+        if (text.len == 0) return;
+        switch (kind) {
+            .search => {
+                app.search = text;
+                app.entry_index = 0;
+                app.entry_top = 0;
+                app.entries.clearRetainingCapacity();
+                app.loadEntries();
+                app.focus = .entries;
+                app.say("{d} results", .{app.entries.items.len});
+            },
+            .add => {
+                app.say("Adding...", .{});
+                app.draw() catch {};
+                const result = app.call(ops.FeedsAdd, app.scratch.allocator(), .{ .url = text }) orelse return;
+                app.say("Feed {d}: {d} new entries", .{ result.id, result.new });
+                app.loadFeeds();
+                app.loadEntries();
+            },
+        }
+    }
+
+    /// Applies what the daemon reported. Search results stay put, since a list that
+    /// changes under a query would be confusing.
+    fn liveRefresh(app: *App) void {
+        app.live_pending = false;
+        app.loadFeeds();
+        if (app.search == null) app.loadEntries();
+        app.loadStats();
+    }
+
+    fn draw(app: *App) !void {
+        const size = terminalSize();
+        if (size.columns != app.screen.width or size.rows != app.screen.height) {
+            app.screen.deinit(app.gpa);
+            app.previous.deinit(app.gpa);
+            app.screen = try .init(app.gpa, size.columns, size.rows);
+            app.previous = try .init(app.gpa, size.columns, size.rows);
+            app.first_frame = true;
+        }
+        app.screen.clear();
+
+        if (size.columns < min_columns or size.rows < min_rows) {
+            _ = app.screen.put(0, 0, size.columns, "Window too small", .{});
+        } else {
+            app.drawPanes();
+            app.drawStatus();
+            if (app.show_help) app.drawHelp();
+        }
+
+        var out: Io.Writer.Allocating = .init(app.scratch.allocator());
+        try app.screen.render(if (app.first_frame) null else &app.previous, &out.writer);
+        writeAll(out.written());
+        app.first_frame = false;
+        @memcpy(app.previous.cells, app.screen.cells);
+    }
+
+    fn drawPanes(app: *App) void {
+        const width = app.screen.width;
+        const height = app.screen.height - 1;
+        const separator: Style = .{ .fg = .gray };
+
+        // Show as many panes as fit, always including the focused one.
+        const side_width: usize = @min(28, width / 4);
+        if (width >= 110) {
+            const list_width = (width - side_width) * 2 / 5;
+            app.drawSide(0, side_width, height);
+            drawLine(&app.screen, side_width, height, separator);
+            app.drawList(side_width + 1, side_width + 1 + list_width, height);
+            drawLine(&app.screen, side_width + 1 + list_width, height, separator);
+            app.drawReader(side_width + 2 + list_width + 1, width, height);
+        } else if (width >= 70) {
+            if (app.focus == .reader) {
+                const list_width = width * 2 / 5;
+                app.drawList(0, list_width, height);
+                drawLine(&app.screen, list_width, height, separator);
+                app.drawReader(list_width + 2, width, height);
+            } else {
+                app.drawSide(0, side_width, height);
+                drawLine(&app.screen, side_width, height, separator);
+                app.drawList(side_width + 1, width, height);
+            }
+        } else switch (app.focus) {
+            .feeds => app.drawSide(0, width, height),
+            .entries => app.drawList(0, width, height),
+            .reader => app.drawReader(0, width, height),
+        }
+    }
+
+    fn drawHeader(app: *App, x: usize, limit: usize, text: []const u8, focused: bool) void {
+        const style: Style = .{ .bold = true, .fg = if (focused) .cyan else .gray };
+        _ = app.screen.put(x, 0, limit, text, style);
+    }
+
+    fn drawSide(app: *App, x: usize, limit: usize, height: usize) void {
+        app.drawHeader(x, limit, "Feeds", app.focus == .feeds);
+        const rows = height -| 1;
+        scrollInto(&app.side_top, app.side_index, rows);
+
+        var y: usize = 1;
+        var index = app.side_top;
+        while (index < app.sideCount() and y <= rows) : ({
+            index += 1;
+            y += 1;
+        }) {
+            var unread: i64 = 0;
+            var failing = false;
+            const name: []const u8 = switch (index) {
+                0 => blk: {
+                    for (app.feeds) |feed| unread += feed.unread;
+                    break :blk "All";
+                },
+                1 => "Starred",
+                else => blk: {
+                    const feed = app.feeds[index - 2];
+                    unread = feed.unread;
+                    failing = feed.last_error != null;
+                    break :blk feed.title orelse feed.url;
+                },
+            };
+            const selected = index == app.side_index;
+            var style: Style = .{ .bold = unread > 0, .fg = if (failing) .red else .default };
+            if (selected) style.reverse = app.focus == .feeds;
+            if (selected and app.focus != .feeds) style.underline = true;
+            if (selected) app.screen.fill(x, y, limit, style);
+
+            var count_buffer: [16]u8 = undefined;
+            const count = if (unread > 0) std.fmt.bufPrint(&count_buffer, " {d}", .{unread}) catch "" else "";
+            const count_width = count.len;
+            putClipped(&app.screen, x, y, limit -| count_width, name, style);
+            if (count_width != 0) _ = app.screen.put(limit - count_width, y, limit, count, style);
+        }
+    }
+
+    fn drawList(app: *App, x: usize, limit: usize, height: usize) void {
+        var title_buffer: [160]u8 = undefined;
+        const name: []const u8 = if (app.search) |query|
+            std.fmt.bufPrint(&title_buffer, "Search: {s}", .{query}) catch "Search"
+        else switch (app.source()) {
+            .all => "All",
+            .starred => "Starred",
+            .feed => app.feeds[app.side_index - 2].title orelse "Feed",
+        };
+        app.drawHeader(x, limit, name, app.focus == .entries);
+
+        const rows = height -| 1;
+        scrollInto(&app.entry_top, app.entry_index, rows);
+        if (app.entries.items.len == 0) {
+            _ = app.screen.put(x, 1, limit, if (app.search != null) "Nothing found" else "Nothing here yet", .{ .fg = .gray });
+            return;
+        }
+
+        const show_feed = app.search != null or app.source() != .feed;
+        var y: usize = 1;
+        var index = app.entry_top;
+        while (index < app.entries.items.len and y <= rows) : ({
+            index += 1;
+            y += 1;
+        }) {
+            const row = app.entries.items[index];
+            const selected = index == app.entry_index;
+            var style: Style = .{ .bold = !row.read, .dim = row.read };
+            if (selected) {
+                style.reverse = app.focus == .entries;
+                style.underline = app.focus != .entries;
+                app.screen.fill(x, y, limit, style);
+            }
+            var marker_style = style;
+            marker_style.fg = if (row.starred) .yellow else .cyan;
+            _ = app.screen.put(x, y, limit, if (row.starred) "★ " else if (row.read) "  " else "• ", marker_style);
+
+            var column = x + 2;
+            if (limit -| x >= 40) {
+                var date_style = style;
+                date_style.bold = false;
+                date_style.fg = .gray;
+                column = app.screen.put(column, y, limit, row.date[5..10], date_style) + 1;
+            }
+            var title_limit = limit;
+            if (show_feed and row.feed_title != null and limit -| x >= 60) {
+                const feed_width = @min(terminal.displayWidth(row.feed_title.?), 16);
+                title_limit = limit -| (feed_width + 1);
+                var feed_style = style;
+                feed_style.bold = false;
+                feed_style.fg = .gray;
+                putClipped(&app.screen, title_limit + 1, y, limit, row.feed_title.?, feed_style);
+            }
+            putClipped(&app.screen, column, y, title_limit, row.title orelse "(untitled)", style);
+        }
+    }
+
+    fn drawReader(app: *App, x: usize, limit: usize, height: usize) void {
+        const reader = &(app.reader orelse {
+            _ = app.screen.put(x, 1, limit, "Press Enter to read", .{ .fg = .gray });
+            return;
+        });
+        const columns = @min(limit -| x, max_reader_columns);
+        if (reader.laid_out_for != columns) {
+            app.layoutReader(reader, columns);
+        }
+
+        const lines = reader.article.lines;
+        const visible = height;
+        reader.scroll = @min(reader.scroll, lines.len -| visible);
+        var y: usize = 0;
+        while (y < visible and reader.scroll + y < lines.len) : (y += 1) {
+            var column = x;
+            for (lines[reader.scroll + y].spans) |span| {
+                column = app.screen.put(column, y, limit, span.text, span.style);
+            }
+        }
+    }
+
+    /// The title and details are laid out as part of the article, so they wrap and
+    /// scroll with it.
+    fn layoutReader(app: *App, reader: *Reader, columns: usize) void {
+        _ = app.layout_arena.reset(.retain_capacity);
+        const arena = app.layout_arena.allocator();
+        const Node = core.blocks.Node;
+        const entry = reader.entry;
+
+        var details: std.Io.Writer.Allocating = .init(arena);
+        details.writer.writeAll(entry.feed_title orelse "") catch {};
+        if (entry.author) |author| details.writer.print(" · {s}", .{author}) catch {};
+        if (entry.published_at) |at| {
+            var buffer: [20]u8 = undefined;
+            details.writer.print(" · {s}", .{core.dates.formatIso(&buffer, at)[0..10]}) catch {};
+        }
+
+        const nodes = arena.alloc(Node, reader.nodes.len + 2) catch return;
+        const title_text = arena.dupe(Node, &.{.{ .kind = .text, .value = entry.title orelse "(untitled)" }}) catch return;
+        const detail_text = arena.dupe(Node, &.{.{ .kind = .text, .value = details.written() }}) catch return;
+        nodes[0] = .{ .kind = .h, .level = 1, .children = title_text };
+        nodes[1] = .{ .kind = .p, .children = detail_text };
+        @memcpy(nodes[2..], reader.nodes);
+
+        reader.article = core.layout.lay(arena, nodes, columns) catch return;
+        reader.laid_out_for = columns;
+    }
+
+    fn drawStatus(app: *App) void {
+        const y = app.screen.height - 1;
+        const width = app.screen.width;
+        const bar: Style = .{ .reverse = true };
+        app.screen.fill(0, y, width, bar);
+
+        if (app.prompt) |kind| {
+            const label = if (kind == .search) "Search: " else "Add feed: ";
+            const after_label = app.screen.put(0, y, width, label, bar);
+            const end = app.screen.put(after_label, y, width -| 1, app.prompt_text.items, bar);
+            app.screen.cursor = .{ .x = end, .y = y };
+            return;
+        }
+
+        var left: []const u8 = app.message;
+        var buffer: [128]u8 = undefined;
+        if (left.len == 0) left = std.fmt.bufPrint(&buffer, "{s}? help", .{if (app.unread_only) "unread only  " else ""}) catch "";
+        _ = app.screen.put(1, y, width, left, bar);
+
+        var right_buffer: [64]u8 = undefined;
+        var right: []const u8 = "";
+        if (app.focus == .reader and app.reader != null) {
+            const reader = app.reader.?;
+            const total = @max(reader.article.lines.len, 1);
+            const shown = @min(reader.scroll + app.screen.height - 1, total);
+            right = std.fmt.bufPrint(&right_buffer, "{d}% ", .{shown * 100 / total}) catch "";
+        } else if (app.stats) |stats| {
+            if (stats.in_flight != 0 or stats.due != 0) {
+                right = std.fmt.bufPrint(&right_buffer, "fetching {d} ", .{stats.in_flight + @as(usize, @intCast(stats.due))}) catch "";
+            } else {
+                right = std.fmt.bufPrint(&right_buffer, "{d} unread ", .{stats.unread}) catch "";
+            }
+        }
+        const right_width = terminal.displayWidth(right);
+        if (right_width < width) _ = app.screen.put(width - right_width, y, width, right, bar);
+    }
+
+    fn drawHelp(app: *App) void {
+        const lines = [_][]const u8{
+            "j k  arrows      move",
+            "Enter l          open",
+            "h q  Esc         back",
+            "Tab              switch pane",
+            "n                next unread",
+            "m                read or unread",
+            "s                star",
+            "u                unread only",
+            "/                search",
+            "o                open in browser",
+            "1-9              open a numbered link",
+            "r R              refresh one, or all",
+            "a                add a feed",
+            "Ctrl-C           quit",
+        };
+        const box_width: usize = 42;
+        const box_height = lines.len + 2;
+        const width = app.screen.width;
+        const height = app.screen.height;
+        if (box_width > width or box_height > height) return;
+        const x = (width - box_width) / 2;
+        const top = (height - box_height) / 2;
+        const style: Style = .{ .reverse = true };
+        for (0..box_height) |row| app.screen.fill(x, top + row, x + box_width, style);
+        for (lines, 0..) |line, i| _ = app.screen.put(x + 2, top + 1 + i, x + box_width, line, style);
+    }
+};
+
+fn drawLine(screen: *Screen, x: usize, height: usize, style: Style) void {
+    for (0..height) |y| _ = screen.put(x, y, x + 1, "│", style);
+}
+
+/// Writes text, ending in an ellipsis if it does not fit.
+fn putClipped(screen: *Screen, x: usize, y: usize, limit: usize, text: []const u8, style: Style) void {
+    if (limit <= x) return;
+    if (x + terminal.displayWidth(text) <= limit) {
+        _ = screen.put(x, y, limit, text, style);
+        return;
+    }
+    const end = screen.put(x, y, limit -| 1, text, style);
+    _ = screen.put(end, y, limit, "…", style);
+}
+
+/// Adjusts a scroll position so that `index` is visible.
+fn scrollInto(top: *usize, index: usize, rows: usize) void {
+    if (rows == 0) return;
+    if (index < top.*) top.* = index;
+    if (index >= top.* + rows) top.* = index + 1 - rows;
+}
+
+fn writeAll(bytes: []const u8) void {
+    var rest = bytes;
+    while (rest.len != 0) {
+        const written = c.write(1, rest.ptr, rest.len);
+        if (written <= 0) return;
+        rest = rest[@intCast(written)..];
+    }
+}
+
+/// Holds a subscription open, and wakes the main loop when an event arrives. It
+/// shares nothing with the main thread except the sequence number.
+fn eventThread(app: *App) void {
+    var scratch: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
+    defer scratch.deinit();
+    while (true) {
+        _ = scratch.reset(.retain_capacity);
+        var connector = app.connector;
+        connector.arena = scratch.allocator();
+        const client = scratch.allocator().create(Client) catch return;
+        connector.connect(client, false) catch {
+            app.io.sleep(.fromSeconds(1), .awake) catch return;
+            continue;
+        };
+        defer client.stream.close(app.io);
+        _ = client.send("events.subscribe", .{ .since_seq = app.last_seq.load(.monotonic) }) catch continue;
+
+        const in = &client.reader.interface;
+        while (true) {
+            const line = in.takeDelimiterExclusive('\n') catch break;
+            const seq_key = "\"seq\":";
+            if (std.mem.indexOf(u8, line, seq_key)) |at| {
+                const rest = line[at + seq_key.len ..];
+                const end = std.mem.indexOfNone(u8, rest, "0123456789") orelse rest.len;
+                const seq = std.fmt.parseInt(i64, rest[0..end], 10) catch 0;
+                if (seq != 0) app.last_seq.store(seq, .monotonic);
+            }
+            in.toss(1);
+            wake('e');
+        }
+    }
+}
+
+pub fn run(gpa: std.mem.Allocator, connector: client_module.Connector) !void {
+    var pipe_fds: [2]c.fd_t = undefined;
+    if (c.pipe(&pipe_fds) != 0) return error.NoPipe;
+    wake_write_fd = pipe_fds[1];
+    // A full pipe must drop wake-ups rather than block a signal handler.
+    _ = c.fcntl(pipe_fds[1], c.F.SETFL, @as(c_int, @bitCast(c.O{ .NONBLOCK = true })));
+
+    const size = terminalSize();
+    var app: App = .{
+        .gpa = gpa,
+        .io = connector.io,
+        .connector = connector,
+        .screen = try .init(gpa, size.columns, size.rows),
+        .previous = try .init(gpa, size.columns, size.rows),
+        .feeds_arena = .init(gpa),
+        .entries_arena = .init(gpa),
+        .reader_arena = .init(gpa),
+        .layout_arena = .init(gpa),
+        .scratch = .init(gpa),
+    };
+
+    defer app.deinit();
+
+    try app.connect();
+    try enterRawMode();
+    defer restoreTerminal();
+    installSignals();
+
+    app.loadFeeds();
+    app.loadEntries();
+    app.loadStats();
+    if (app.stats) |stats| app.last_seq.store(stats.last_event_seq, .monotonic);
+    const events = try std.Thread.spawn(.{}, eventThread, .{&app});
+    events.detach();
+    try app.draw();
+
+    var input: [4096]u8 = undefined;
+    var pending: usize = 0;
+    var last_live: i64 = 0;
+    var last_watch: i64 = 0;
+
+    while (app.running) {
+        const now = Io.Clock.awake.now(app.io).toMilliseconds();
+        var timeout: c_int = -1;
+        if (app.live_pending) timeout = @intCast(@max(live_refresh_ms - (now - last_live), 0));
+        if (app.watching_fetches) {
+            const wait: c_int = @intCast(@max(fetch_watch_ms - (now - last_watch), 0));
+            timeout = if (timeout < 0) wait else @min(timeout, wait);
+        }
+        if (pending != 0) timeout = escape_wait_ms;
+
+        var fds = [_]c.pollfd{
+            .{ .fd = 0, .events = c.POLL.IN, .revents = 0 },
+            .{ .fd = pipe_fds[0], .events = c.POLL.IN, .revents = 0 },
+        };
+        const ready = c.poll(&fds, fds.len, timeout);
+        var dirty = false;
+
+        if (ready > 0 and fds[1].revents != 0) {
+            var reasons: [256]u8 = undefined;
+            const count = c.read(pipe_fds[0], &reasons, reasons.len);
+            for (reasons[0..@intCast(@max(count, 0))]) |reason| {
+                if (reason == 'e') app.live_pending = true;
+                if (reason == 'w') dirty = true;
+            }
+        }
+
+        if (ready > 0 and fds[0].revents != 0) {
+            const count = c.read(0, input[pending..].ptr, input.len - pending);
+            if (count <= 0) break; // The terminal went away.
+            pending += @intCast(count);
+            var used: usize = 0;
+            while (used < pending) {
+                const decoded = terminal.decodeKey(input[used..pending]) orelse break;
+                app.handleKey(decoded.key);
+                used += decoded.consumed;
+                dirty = true;
+                if (!app.running) break;
+            }
+            std.mem.copyForwards(u8, input[0 .. pending - used], input[used..pending]);
+            pending -= used;
+        } else if (ready == 0 and pending != 0) {
+            // Nothing followed, so this really was the Escape key.
+            for (input[0..pending]) |byte| {
+                if (byte == 0x1B) app.handleKey(.escape);
+            }
+            pending = 0;
+            dirty = true;
+        }
+
+        const after = Io.Clock.awake.now(app.io).toMilliseconds();
+        if (app.live_pending and after - last_live >= live_refresh_ms) {
+            app.liveRefresh();
+            last_live = after;
+            dirty = true;
+        }
+        if (app.watching_fetches and after - last_watch >= fetch_watch_ms) {
+            last_watch = after;
+            app.loadStats();
+            if (app.stats) |stats| {
+                if (stats.due == 0 and stats.in_flight == 0) {
+                    app.watching_fetches = false;
+                    app.loadFeeds();
+                    app.say("Refresh finished", .{});
+                }
+            }
+            dirty = true;
+        }
+
+        if (dirty) {
+            try app.draw();
+            _ = app.scratch.reset(.retain_capacity);
+        }
+    }
+}
+
+test "scrolling keeps the selection visible" {
+    var top: usize = 0;
+    scrollInto(&top, 5, 3);
+    try std.testing.expectEqual(3, top);
+    scrollInto(&top, 4, 3);
+    try std.testing.expectEqual(3, top);
+    scrollInto(&top, 1, 3);
+    try std.testing.expectEqual(1, top);
+}
+
+test "moving stops at both ends" {
+    var index: usize = 2;
+    App.moveBy(&index, 5, 100);
+    try std.testing.expectEqual(4, index);
+    App.moveBy(&index, 5, -100);
+    try std.testing.expectEqual(0, index);
+    App.moveBy(&index, 0, 1);
+    try std.testing.expectEqual(0, index);
+}
