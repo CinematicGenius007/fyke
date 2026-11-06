@@ -81,6 +81,10 @@ struct Themed<Content: View>: View {
             .onChange(of: systemScheme, initial: true) { _, scheme in
                 if prefs.ui.followSystem { prefs.systemIsDark = scheme == .dark }
             }
+            // While a theme is forced, colorScheme reports that theme, not the system.
+            .onChange(of: prefs.ui.followSystem) { _, following in
+                if following { prefs.systemIsDark = UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark" }
+            }
     }
 }
 

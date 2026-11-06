@@ -242,6 +242,24 @@ struct MenuRow: View {
     }
 }
 
+/// Rows of a menu. A long list scrolls, because a panel must fit inside its window.
+struct MenuList<Content: View>: View {
+    let rows: Int
+    @ViewBuilder var content: Content
+
+    private static var limit: Int { 8 }
+
+    var body: some View {
+        if rows > Self.limit {
+            ScrollView { VStack(alignment: .leading, spacing: 0) { content } }
+                .themedScrollbar()
+                .frame(height: CGFloat(Self.limit) * 30)
+        } else {
+            VStack(alignment: .leading, spacing: 0) { content }
+        }
+    }
+}
+
 // MARK: Select
 
 struct SelectOption<Value: Hashable>: Identifiable {
@@ -281,10 +299,12 @@ struct SelectBox<Value: Hashable>: View {
     private func show() {
         layer.show(at: frame) {
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(options) { option in
-                    MenuRow(title: option.label, checked: option.value == selection, indent: option.indent) {
-                        selection = option.value
-                        layer.close()
+                MenuList(rows: options.count) {
+                    ForEach(options) { option in
+                        MenuRow(title: option.label, checked: option.value == selection, indent: option.indent) {
+                            selection = option.value
+                            layer.close()
+                        }
                     }
                 }
                 if let action {
@@ -295,7 +315,7 @@ struct SelectBox<Value: Hashable>: View {
                     }
                 }
             }
-            .frame(minWidth: max(frame.width - 12, 150), alignment: .leading)
+            .frame(width: max(frame.width - 12, 150), alignment: .leading)
             .floatPanel()
         }
     }

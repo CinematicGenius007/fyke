@@ -85,7 +85,7 @@ struct StoragePane: View {
     private func articles(_ use: StorageUse) -> some View {
         let a = use.articles
         let detail = "\(a.entries.formatted()) articles in \(a.feeds.formatted()) feeds."
-            + (a.removable > 0 ? " \(a.removable.formatted()) are read and older than 90 days (\(size(a.removableBytes)))." : "")
+            + (a.removable > 0 ? " \(a.removable.formatted()) were read over 90 days ago (\(size(a.removableBytes)))." : "")
         return section("articles", title: "Articles and search", bytes: use.databaseBytes, detail: detail) {
             AnyView(VStack(alignment: .leading, spacing: 8) {
                 bar([
@@ -105,7 +105,7 @@ struct StoragePane: View {
                     ])
                 }
                 if confirming == "articles" {
-                    confirm("Removes the text of \(a.removable.formatted()) read articles older than 90 days. Titles, links and starred articles stay.") {
+                    confirm("Removes the text of \(a.removable.formatted()) articles read over 90 days ago. Titles, links and starred articles stay.") {
                         await free(FreeParams(trimOlderThanDays: 90))
                     }
                 }

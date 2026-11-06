@@ -102,7 +102,23 @@ final class AppModel {
         childFolders(of: parent).flatMap { [($0, depth)] + folderOutline(parent: $0.id, depth: depth + 1) }
     }
 
+    /// The daemon outlives the app, so after an update it can be an older one, and
+    /// nothing else would replace it. Stopping it is safe: the next call starts ours.
+    private func replaceOutdatedDaemon() async {
+        func current() async -> Bool {
+            let stats: Stats? = try? await Daemon.shared.call("stats.get")
+            return stats?.apiVersion == Daemon.apiVersion
+        }
+        guard await !current() else { return }
+        let _: Ok? = try? await Daemon.shared.call("daemon.stop")
+        for _ in 0..<50 {
+            try? await Task.sleep(for: .milliseconds(100))
+            if await current() { return }
+        }
+    }
+
     func start() async {
+        await replaceOutdatedDaemon()
         await Prefs.shared.start()
         do {
             let stats: Stats = try await Daemon.shared.call("stats.get")
@@ -447,6 +463,18 @@ final class AppModel {
             } catch {
                 problem = error.localizedDescription
             }
+        }
+    }
+
+    /// Makes a folder with a name already chosen.
+    func addFolder(_ name: String) async -> Int64? {
+        do {
+            let made: IdResult = try await Daemon.shared.call("folders.add", FolderAddParams(name: name))
+            await reload()
+            return made.id
+        } catch {
+            problem = error.localizedDescription
+            return nil
         }
     }
 

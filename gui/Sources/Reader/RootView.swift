@@ -26,6 +26,8 @@ struct RootView: View {
         }
         .onChange(of: model.showingShortcuts) { _, showing in if !showing { focused = true } }
         .onChange(of: model.renaming) { _, renaming in if renaming == nil { focused = true } }
+        .onChange(of: model.web == nil) { _, closed in if closed { focused = true } }
+        .onChange(of: model.confirmation == nil) { _, closed in if closed { focused = true } }
         .onChange(of: model.search.isShowing) { _, showing in if !showing { focused = true } }
         .onChange(of: model.showingAddFeed) { _, showing in if !showing { focused = true } }
         .sheet(isPresented: $model.showingAddFeed) { AddFeedSheet() }
@@ -49,7 +51,7 @@ struct RootView: View {
     @ViewBuilder private var content: some View {
         if model.isEmpty {
             FirstRunView()
-        } else if model.place == .briefing {
+        } else if model.place == .briefing && model.web == nil {
             BriefingView()
         } else if model.usesPanes {
             EntryList().frame(width: 375)
@@ -65,6 +67,8 @@ struct RootView: View {
     /// The same keys as the terminal app, where it has them.
     private func handle(_ press: KeyPress) -> KeyPress.Result {
         if press.modifiers.contains(.command) { return .ignored }
+        // A dialog is modal: its own buttons act, and keys must not reach the app behind.
+        if model.confirmation != nil { return .handled }
         if model.showingShortcuts {
             if press.key == .escape || press.characters == "?" { model.showingShortcuts = false }
             return .handled

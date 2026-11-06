@@ -160,7 +160,7 @@ struct FontChangeStrip: View {
 
     private func askName() {
         layer.show(at: frame) {
-            ThemeNamePanel(title: "Save as new theme", name: "", action: "Save") { name in
+            NamePanel(title: "Save as new theme", name: "", action: "Save") { name in
                 Prefs.shared.saveAsNewTheme(name: name)
             }
         }
@@ -184,8 +184,8 @@ private struct PanelField: View {
     }
 }
 
-/// Asks for a theme's name, for saving or renaming.
-struct ThemeNamePanel: View {
+/// Asks for a name, for a theme or a folder.
+struct NamePanel: View {
     let title: String
     @State var name: String
     let action: String
@@ -485,7 +485,7 @@ struct TokensPane: View {
                 }
                 Button("Rename") {
                     layer.show(at: renameFrame) {
-                        ThemeNamePanel(title: "Rename theme", name: theme.name, action: "Rename") { name in
+                        NamePanel(title: "Rename theme", name: theme.name, action: "Rename") { name in
                             Prefs.shared.edit(id) { $0.name = name }
                         }
                     }

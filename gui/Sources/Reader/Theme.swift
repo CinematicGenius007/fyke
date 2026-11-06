@@ -155,9 +155,12 @@ enum Fonts {
         CTFontManagerRegisterFontURLs(urls as CFArray, .process, true, nil)
     }
 
+    /// Asked for on every text style, and the system list is slow, so it is read once.
+    @MainActor private static let installed = Set(NSFontManager.shared.availableFontFamilies)
+
     /// A saved choice may have been uninstalled since.
-    static func resolve(_ family: String) -> String {
-        NSFontManager.shared.availableFontFamilies.contains(family) ? family : Tokens.fontReading
+    @MainActor static func resolve(_ family: String) -> String {
+        installed.contains(family) ? family : Tokens.fontReading
     }
 
     static let choices = [Tokens.fontReading, "Source Serif 4", "Inter", Tokens.fontCode]

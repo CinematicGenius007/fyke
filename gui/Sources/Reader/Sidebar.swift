@@ -145,10 +145,10 @@ enum Drag {
         guard let item = items.first else { return false }
         let parts = item.split(separator: ":")
         guard parts.count == 2, let id = Int64(parts[1]) else { return false }
-        if parts[0] == "feed" {
-            model.moveFeed(id, to: folder)
-        } else if id != folder {
-            model.moveFolder(id, to: folder)
+        switch parts[0] {
+        case "feed": model.moveFeed(id, to: folder)
+        case "folder": if id != folder { model.moveFolder(id, to: folder) }
+        default: return false
         }
         return true
     }
@@ -320,10 +320,12 @@ private struct FeedMenu: View {
         let anchor = CGRect(x: moveFrame.maxX + 8, y: moveFrame.minY - 10, width: 0, height: 0)
         layer.showSide(at: anchor) {
             VStack(alignment: .leading, spacing: 0) {
-                MenuRow(title: "Top level", checked: feed.folderId == nil) { act { model.moveFeed(feed.id, to: nil) } }
-                ForEach(model.folderOutline(), id: \.folder.id) { row in
-                    MenuRow(title: row.folder.name, checked: feed.folderId == row.folder.id, indent: CGFloat(row.depth) * 16) {
-                        act { model.moveFeed(feed.id, to: row.folder.id) }
+                MenuList(rows: model.folders.count + 1) {
+                    MenuRow(title: "Top level", checked: feed.folderId == nil) { act { model.moveFeed(feed.id, to: nil) } }
+                    ForEach(model.folderOutline(), id: \.folder.id) { row in
+                        MenuRow(title: row.folder.name, checked: feed.folderId == row.folder.id, indent: CGFloat(row.depth) * 16) {
+                            act { model.moveFeed(feed.id, to: row.folder.id) }
+                        }
                     }
                 }
                 Rule().padding(.vertical, 3)

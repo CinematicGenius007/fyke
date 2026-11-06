@@ -138,13 +138,30 @@ final class Prefs {
         var ui = UISettings()
         if let value = saved.string(forKey: "theme") { ui.theme = value }
         if saved.object(forKey: "followSystem") != nil { ui.followSystem = saved.bool(forKey: "followSystem") }
-        if let value = saved.string(forKey: "readingFont") { ui.fonts.reading = value }
         if saved.object(forKey: "textSize") != nil { ui.textSize = saved.double(forKey: "textSize") }
         if saved.object(forKey: "lineSpacing") != nil { ui.lineSpacing = saved.double(forKey: "lineSpacing") }
         if saved.object(forKey: "columnWidth") != nil { ui.columnWidth = saved.double(forKey: "columnWidth") }
         if saved.object(forKey: "loadImages") != nil { ui.loadImages = saved.bool(forKey: "loadImages") }
         if let value = saved.string(forKey: "agentTier") { ui.agentTier = value }
+        if let family = saved.string(forKey: "readingFont"), family != Tokens.fontReading { keepFont(family, in: &ui) }
         return ui
+    }
+
+    /// A chosen font was a lasting choice, so it becomes a theme, which lasts, and not
+    /// a temporary font, which the next theme change would clear.
+    private static func keepFont(_ family: String, in ui: inout UISettings) {
+        func theme(on base: String) -> String {
+            var theme = CustomTheme(id: "\(base)-font", name: "\(base.capitalized) with \(family)", base: base)
+            theme.fonts.reading = family
+            ui.themes.append(theme)
+            return theme.id
+        }
+        if ui.followSystem {
+            ui.dayTheme = theme(on: "light")
+            ui.nightTheme = theme(on: "dark")
+        } else {
+            ui.theme = theme(on: ui.theme)
+        }
     }
 
     /// `-theme dark -followSystem NO` on the command line applies to this run only,
@@ -169,6 +186,8 @@ final class Prefs {
             removeReadAfterDays = reply.removeReadAfterDays
             fileProblem = reply.configError
             guard reply.configError == nil else { return }
+            // A change waiting to be saved is newer than what the file held.
+            guard pendingSave == nil else { return }
             if let settings = reply.ui {
                 apply(withLaunchArguments(settings))
             } else {
@@ -317,6 +336,7 @@ final class Prefs {
             } catch {
                 fileProblem = error.localizedDescription
             }
+            if ui == settings { pendingSave = nil }
         }
     }
 

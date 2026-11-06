@@ -86,6 +86,8 @@ struct Event: Decodable, Sendable {
 /// Calls that touch the network get their own, so they cannot delay the rest.
 final class Daemon: @unchecked Sendable {
     static let shared = Daemon()
+    /// `api_version` in src/ops.zig.
+    static let apiVersion: Int64 = 2
 
     let home: URL
     private var socketPath: String { home.appending(path: "rssd.sock").path }

@@ -43,6 +43,7 @@ struct AddFeedSheet: View {
             address: $address, phase: phase, chosen: $chosen, name: $name, folder: $folder, adding: adding,
             folders: model.folderOutline(),
             onLookup: look, onCancel: { dismiss() }, onSubscribe: subscribe,
+            onNewFolder: { name in Task { folder = await model.addFolder(name) ?? folder } },
             onImport: { dismiss(); OPML.importFile(model) }
         )
         .frame(width: 560)
@@ -124,9 +125,12 @@ private struct SheetBody: View {
     @Binding var folder: Int64?
     let adding: Bool
     let folders: [(folder: Folder, depth: Int)]
+    @Environment(FloatLayer.self) private var layer
+    @State private var folderFrame = CGRect.zero
     let onLookup: () -> Void
     let onCancel: () -> Void
     let onSubscribe: () -> Void
+    let onNewFolder: (String) -> Void
     let onImport: () -> Void
 
     @Environment(\.palette) private var p
@@ -224,7 +228,15 @@ private struct SheetBody: View {
                 selection: $folder,
                 options: [SelectOption(value: nil, label: "None")]
                     + folders.map { SelectOption(value: $0.folder.id, label: $0.folder.name, indent: CGFloat($0.depth) * 16) },
-                width: 448, height: 32)
+                width: 448, height: 32,
+                action: ("New folder", newFolder))
+            .floatFrame($folderFrame)
+        }
+    }
+
+    private func newFolder() {
+        layer.show(at: folderFrame) {
+            NamePanel(title: "New folder", name: "", action: "Create", done: onNewFolder)
         }
     }
 

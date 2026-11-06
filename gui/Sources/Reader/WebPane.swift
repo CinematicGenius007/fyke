@@ -11,20 +11,35 @@ enum WebGuard {
     static func isPrivateHost(_ host: String) -> Bool {
         let name = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
         if name == "localhost" || name.hasSuffix(".localhost") || name.hasSuffix(".local") { return true }
-        if name == "::1" || name.hasPrefix("fe80:") || name.hasPrefix("fc") || name.hasPrefix("fd") { return name.contains(":") }
+        if name.contains(":") {
+            return name == "::" || name == "::1" || name.hasPrefix("::ffff:")
+                || ["fc", "fd", "fe8", "fe9", "fea", "feb"].contains { name.hasPrefix($0) }
+        }
         let parts = name.split(separator: ".").compactMap { Int($0) }
         guard parts.count == 4 else { return false }
         return parts[0] == 127 || parts[0] == 10 || parts[0] == 0 || (parts[0] == 192 && parts[1] == 168)
             || (parts[0] == 169 && parts[1] == 254) || (parts[0] == 172 && (16...31).contains(parts[1]))
+            || (parts[0] == 100 && (64...127).contains(parts[1]))
     }
 
-    /// Stops pages from loading anything from private addresses, images and scripts
-    /// included. Navigation is checked in `WebCoordinator`, which reads the same rule.
-    static let blockRules = """
-    [\(["localhost", "127\\\\.", "10\\\\.", "192\\\\.168\\\\.", "169\\\\.254\\\\.", "172\\\\.1[6-9]\\\\.", "172\\\\.2[0-9]\\\\.", "172\\\\.3[01]\\\\.", "0\\\\.", "\\\\[::1\\\\]"]
-        .map { #"{"trigger":{"url-filter":"^https?://\#($0)"},"action":{"type":"block"}}"# }
-        .joined(separator: ","))]
-    """
+    /// The same rule as `isPrivateHost`, for what a page loads: images, scripts and
+    /// requests. Content rule patterns have no alternation, so each range is a pattern.
+    /// Each ends where the host ends, so `0.example.com` is not mistaken for `0.0.0.0`.
+    private static let privateHosts = [
+        #"localhost"#, #"[^/]*\.localhost"#, #"[^/]*\.local"#,
+        #"127\.[0-9.]*"#, #"10\.[0-9.]*"#, #"0\.[0-9.]*"#, #"192\.168\.[0-9.]*"#, #"169\.254\.[0-9.]*"#,
+        #"172\.1[6-9]\.[0-9.]*"#, #"172\.2[0-9]\.[0-9.]*"#, #"172\.3[01]\.[0-9.]*"#,
+        #"100\.6[4-9]\.[0-9.]*"#, #"100\.[7-9][0-9]\.[0-9.]*"#, #"100\.1[01][0-9]\.[0-9.]*"#, #"100\.12[0-7]\.[0-9.]*"#,
+        #"\[::1?\]"#, #"\[::ffff:[^/]*"#, #"\[f[cd][^/]*"#, #"\[fe[89ab][^/]*"#,
+    ]
+
+    static var blockRules: String {
+        let rules = privateHosts.map { host in
+            let pattern = (#"^https?://([^/]*@)?"# + host + "[:/?#]").replacingOccurrences(of: #"\"#, with: #"\\"#)
+            return #"{"trigger":{"url-filter":"\#(pattern)"},"action":{"type":"block"}}"#
+        }
+        return "[" + rules.joined(separator: ",") + "]"
+    }
 }
 
 @MainActor @Observable
@@ -35,6 +50,8 @@ final class WebState {
     var canGoBack = false
     var canGoForward = false
     var failure: String?
+    /// The address that failed, which is not where the page still sits.
+    var failedAddress: URL?
     fileprivate(set) weak var view: WKWebView?
 
     init(address: URL) { self.address = address }
@@ -42,9 +59,29 @@ final class WebState {
     func back() { view?.goBack() }
     func forward() { view?.goForward() }
     func reload() {
-        failure = nil
-        if view?.url == nil { view?.load(URLRequest(url: address)) } else { view?.reload() }
+        let target = failedAddress
+        clearFailure()
+        if let target {
+            view?.load(URLRequest(url: target))
+        } else if view?.url == nil {
+            view?.load(URLRequest(url: address))
+        } else {
+            view?.reload()
+        }
     }
+
+    func fail(_ text: String, at url: URL?) {
+        failure = text
+        failedAddress = url
+    }
+
+    func clearFailure() {
+        failure = nil
+        failedAddress = nil
+    }
+
+    /// What a browser should open: the page that would not load, if one did not.
+    var browserAddress: URL { failedAddress ?? address }
 }
 
 final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
@@ -75,7 +112,7 @@ final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         guard Links.isSafe(url) else { return .cancel }
         if WebGuard.isPrivateHost(url.host() ?? "") {
             if action.targetFrame?.isMainFrame == true {
-                await MainActor.run { state.failure = "This page is on a private address, so it stays out of the app." }
+                await MainActor.run { state.fail("This page is on a private address, so it stays out of the app.", at: url) }
             }
             return .cancel
         }
@@ -85,8 +122,16 @@ final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// Downloads and file types WebKit cannot show are refused here.
     func webView(_ view: WKWebView, decidePolicyFor response: WKNavigationResponse) async -> WKNavigationResponsePolicy {
         if response.canShowMIMEType { return .allow }
-        await MainActor.run { state.failure = "This address is a download, not a page." }
+        // One frame of a working page is no reason to cover the page.
+        if response.isForMainFrame {
+            let url = response.response.url
+            await MainActor.run { state.fail("This address is a download, not a page.", at: url) }
+        }
         return .cancel
+    }
+
+    func webView(_ view: WKWebView, didStartProvisionalNavigation navigation: WKNavigation?) {
+        MainActor.assumeIsolated { state.clearFailure() }
     }
 
     func webView(_ view: WKWebView, didFailProvisionalNavigation navigation: WKNavigation?, withError error: Error) {
@@ -99,9 +144,11 @@ final class WebCoordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     private func fail(_ error: Error) {
         let failure = error as NSError
-        guard failure.code != NSURLErrorCancelled, failure.domain != WKError.errorDomain else { return }
+        // Code 102 is a load this class refused, which has already said why.
+        guard failure.code != NSURLErrorCancelled, !(failure.domain == "WebKitErrorDomain" && failure.code == 102) else { return }
         let message = failure.localizedDescription
-        MainActor.assumeIsolated { state.failure = message }
+        let url = failure.userInfo[NSURLErrorFailingURLErrorKey] as? URL
+        MainActor.assumeIsolated { state.fail(message, at: url) }
     }
 
     /// A new window would escape the pane, so a link asking for one opens here.
@@ -136,8 +183,14 @@ struct WebSurface: NSViewRepresentable {
         state.view = view
         context.coordinator.watch(view)
         let address = state.address
+        let state = state
         WKContentRuleListStore.default().compileContentRuleList(forIdentifier: "private-addresses", encodedContentRuleList: WebGuard.blockRules) { list, _ in
-            if let list { view.configuration.userContentController.add(list) }
+            // Without the rules, a page could reach private addresses, so nothing loads.
+            guard let list else {
+                state.fail("The app could not set up its page protections.", at: address)
+                return
+            }
+            view.configuration.userContentController.add(list)
             view.load(URLRequest(url: address))
         }
         return view
@@ -190,7 +243,7 @@ struct WebPane: View {
             IconButton(glyph: .arrowRight, help: "Next page", enabled: state.canGoForward) { state.forward() }
             address
             IconButton(glyph: .reload, help: "Reload") { state.reload() }
-            IconButton(glyph: .globe, help: "Open in browser") { NSWorkspace.shared.open(state.address) }
+            IconButton(glyph: .globe, help: "Open in browser") { NSWorkspace.shared.open(state.browserAddress) }
         }
         .padding(.leading, 12).padding(.trailing, 16)
         .frame(height: 52)
@@ -216,7 +269,7 @@ struct WebPane: View {
             Text(text).font(.ui(14)).foregroundStyle(p.inkSoft)
             HStack(spacing: 8) {
                 Button("Try again") { state.reload() }.buttonStyle(Plain())
-                Button("Open in browser") { NSWorkspace.shared.open(state.address) }.buttonStyle(Plain())
+                Button("Open in browser") { NSWorkspace.shared.open(state.browserAddress) }.buttonStyle(Plain())
             }
         }
         .padding(48)

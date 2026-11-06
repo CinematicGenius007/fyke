@@ -66,6 +66,8 @@ struct Entry: Decodable, Sendable {
 }
 
 struct Stats: Decodable, Sendable {
+    /// Missing from daemons older than the field.
+    let apiVersion: Int64?
     let feeds: Int64
     let unread: Int64
     let lastEventSeq: Int64
