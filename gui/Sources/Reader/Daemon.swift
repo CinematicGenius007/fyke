@@ -93,6 +93,18 @@ final class Daemon: @unchecked Sendable {
     private var socketPath: String { home.appending(path: "rssd.sock").path }
     private let queue = DispatchQueue(label: "daemon.calls")
     private var shared: Connection?
+    private let pauseLock = NSLock()
+    private var pausedFlag = false
+
+    /// While the data folder moves, nothing here may start a daemon, because one
+    /// started on a folder that is half moved would write to the wrong place.
+    var paused: Bool {
+        get { pauseLock.withLock { pausedFlag } }
+        set {
+            pauseLock.withLock { pausedFlag = newValue }
+            if newValue { queue.async { self.shared = nil } }
+        }
+    }
 
     private static func encoder() -> JSONEncoder {
         let encoder = JSONEncoder()
@@ -163,6 +175,7 @@ final class Daemon: @unchecked Sendable {
 
     private func open(timeoutSeconds: Int) throws -> Connection {
         if let connection = try? Connection(path: socketPath, timeoutSeconds: timeoutSeconds) { return connection }
+        if paused { throw RPCFailure(message: "The data folder is moving") }
         try startDaemon()
         for _ in 0..<300 {
             if let connection = try? Connection(path: socketPath, timeoutSeconds: timeoutSeconds) { return connection }

@@ -41,6 +41,7 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .ignoresSafeArea()
+        .overlay { if let move = model.dataMove { MoveDialog(move: move) } }
     }
 }
 
@@ -142,7 +143,7 @@ private struct GeneralPane: View {
                 SettingRow(title: "Keep updating in the background", detail: "Starts when you log in, even with this window closed") {
                     Switch(on: $background)
                 }
-                SettingRow(title: "Your subscriptions", detail: "Stored in " + tilde(Daemon.shared.home)) {
+                SettingRow(title: "Your subscriptions", detail: "Import or export as OPML") {
                     HStack(spacing: 8) {
                         Button("Import OPML") { OPML.importFile(model) }.buttonStyle(Plain())
                         Button("Export") { OPML.export(model) }.buttonStyle(Plain())
@@ -154,8 +155,19 @@ private struct GeneralPane: View {
                         SelectOption(value: "browser", label: "In your browser"),
                     ])
                 }
-                SettingRow(title: "Settings file", detail: tilde(settingsFile), last: true) {
+                SettingRow(title: "Settings file", detail: tilde(settingsFile)) {
                     Button("Open") { NSWorkspace.shared.open(settingsFile) }.buttonStyle(Plain())
+                }
+                SettingRow(title: "Data folder", detail: tilde(Daemon.shared.home.resolvingSymlinksInPath()), last: true) {
+                    Button { model.chooseDataFolder() } label: {
+                        HStack(spacing: 6) {
+                            Icon(glyph: .folder)
+                            Text("Change…")
+                        }
+                    }
+                    .buttonStyle(Plain())
+                    // RSS_HOME names the folder for this run, so there is no default to repoint.
+                    .disabled(ProcessInfo.processInfo.environment["RSS_HOME"] != nil)
                 }
                 if let problem = prefs.fileProblem {
                     Text("config.json has a mistake, so the last good settings stay in use: \(problem)")

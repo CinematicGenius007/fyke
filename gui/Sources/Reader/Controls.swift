@@ -9,7 +9,7 @@ import SwiftUI
 /// Drawn on a 16 unit grid with a 1.5 stroke, as in the Paper file.
 enum Glyph {
     case search, briefing, inbox, star, circle, globe, reload, left, right, down, up
-    case check, lock, folder, arrowLeft, arrowRight, close, plus
+    case check, lock, folder, arrowLeft, arrowRight, close, plus, warning
 
     func path() -> Path {
         var p = Path()
@@ -55,6 +55,9 @@ enum Glyph {
         case .arrowRight: line((3, 8), (12.5, 8)); line((9, 4.5), (12.5, 8), (9, 11.5))
         case .close: line((4, 4), (12, 12)); line((12, 4), (4, 12))
         case .plus: line((8, 3), (8, 13)); line((3, 8), (13, 8))
+        case .warning:
+            line((8, 2.5), (14, 13), (2, 13)); p.closeSubpath()
+            line((8, 6.5), (8, 9.5)); line((8, 11.25), (8, 11.26))
         }
         return p
     }

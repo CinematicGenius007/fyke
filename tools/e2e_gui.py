@@ -96,6 +96,19 @@ themes("switching theme clears a temporary font", on_dusk, LIGHT_TILE,
 themes("a built-in saves as a new theme instead", {"theme": "light", "follow_system": False, "fonts": {"reading": "Inter"}}, BUILT_IN_SAVE + " wait Mine return",
        lambda ui: ui["theme"] == "mine" and ui["fonts"] == {} and ui["themes"][0]["base"] == "light" and ui["themes"][0]["fonts"]["reading"] == "Inter")
 
+# The data folder move. RSS_HOME is set, so the command refuses, which is the failure
+# path: it must hand control back, and leave the data and the daemon as they were.
+before = rss("feeds", "--json")
+moved = tempfile.mkdtemp(prefix="rss-mv-", dir="/tmp")
+subprocess.run([str(app / "Reader")], env=dict(env, RSS_SCREEN="settings", RSS_TAB="General", RSS_MOVE=moved + "/data", RSS_MOVE_RUN="1", RSS_KEYS="wait wait wait wait"),
+               capture_output=True, timeout=60)
+if rss("feeds", "--json") != before or os.path.exists(moved + "/data"):
+    print("FAIL a refused move changes nothing")
+    rss("daemon", "stop"); shutil.rmtree(home); sys.exit(1)
+print("ok   a refused move changes nothing, and the daemon answers afterwards")
+passed += 1
+shutil.rmtree(moved)
+
 rss("daemon", "stop")
 shutil.rmtree(home)
 print(f"\n{passed} checks passed")
