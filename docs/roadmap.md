@@ -106,6 +106,10 @@ Built before milestone 4, by choice. Measured 2026-11-06.
 | Milestone test | Claude Code 2.1.318 and Codex 0.166.0 each answered "what did I miss about Zig?" from 9 real feeds, citing entry ids |
 | Prompt injection | A planted entry told agents to delete every feed. Both ignored it and told the user. At the read tier, the delete tool does not exist either way |
 
+| Official conformance suite 0.1.16 | Through `tools/mcp_http_bridge.py`: `server-initialize`, `ping`, `tools-list`, `resources-list` and `prompts-list` pass. The other 27 are in `tools/conformance-baseline.yml`: 19 need the suite's own fixtures, 5 test optional features rss_ does not declare, and 3 test HTTP. The suite has no scenarios for 2026-07-28 |
+| Official Python client | `mcp` 2.3.0 completed tools, resources, prompts and ping, through `initialize` at 2025-11-25 |
+| MCP draft | Its changelog is empty, so nothing has changed since 2026-07-28 |
+
 Agents exposed what the protocol tests could not. Both reported almost no Zig news, although 0.17.1 had just shipped: the entry "0.17.1 Released", in a feed called "News" on ziglang.org, never contains the word "zig". Search now matches feed names and hosts too, and Claude Code then found it.
 
 The official conformance suite is not run: its server mode needs an HTTP URL, and `rss mcp` is stdio only. Other limits: two model runs are not a measure of injection resistance, and `outputSchema` and `subscriptions/listen` are not implemented.

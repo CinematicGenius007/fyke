@@ -42,6 +42,9 @@ python3 tools/e2e.py ./zig-out/bin/rss      # full behavior against a recording 
 python3 tools/e2e_daemon.py ./zig-out/bin/rss  # socket, tiers, events, OPML, crash recovery
 python3 tools/e2e_mcp.py ./zig-out/bin/rss     # MCP protocol, both eras
 python3 tools/e2e_tui.py ./zig-out/bin/rss     # real pseudo-terminal, needs pip install pyte
+python3 tools/py_mcp.py ./zig-out/bin/rss      # official Python client, needs pip install mcp
+python3 tools/mcp_http_bridge.py ./zig-out/bin/rss  # then, in another shell:
+npx @modelcontextprotocol/conformance@0.1.16 server --url http://127.0.0.1:8931/mcp --suite all --spec-version 2025-11-25 --expected-failures tools/conformance-baseline.yml
 node tools/sdk_mcp.mjs ./zig-out/bin/rss modern  # official client; see the file for setup
 python3 tools/load_corpus.py ./zig-out/bin/rss corpus dump.jsonl
 python3 tools/scale.py ./zig-out/bin/rss local corpus 1000

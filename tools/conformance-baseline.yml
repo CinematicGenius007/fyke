@@ -1,0 +1,34 @@
+# Scenarios of @modelcontextprotocol/conformance 0.1.16 that do not apply to rss_.
+# A run fails on any failure not listed here, and on any listed scenario that passes.
+server:
+  # Need the suite's own fixtures, such as the tool test_simple_text.
+  - tools-call-simple-text
+  - tools-call-image
+  - tools-call-audio
+  - tools-call-embedded-resource
+  - tools-call-mixed-content
+  - tools-call-error
+  - tools-call-with-progress
+  - tools-call-sampling
+  - tools-call-elicitation
+  - elicitation-sep1034-defaults
+  - elicitation-sep1330-enums
+  - json-schema-2020-12
+  - resources-read-text
+  - resources-read-binary
+  - resources-templates-read
+  - prompts-get-simple
+  - prompts-get-with-args
+  - prompts-get-embedded-resource
+  - prompts-get-with-image
+  # Optional features that rss_ does not declare, so Method not found is correct.
+  - logging-set-level
+  - tools-call-with-logging
+  - completion-complete
+  - resources-subscribe
+  - resources-unsubscribe
+  # Test HTTP behavior: Host checks, sessions and SSE. rss_ opens no port, so these
+  # would only measure the test bridge.
+  - dns-rebinding-protection
+  - server-sse-polling
+  - server-sse-multiple-streams
