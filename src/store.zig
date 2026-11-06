@@ -64,7 +64,8 @@ pub const Feed = struct {
     error_count: i64,
     last_error: ?[]const u8,
     unread: i64,
-    entries: i64,};
+    entries: i64,    folder_id: ?i64,
+};
 
 pub const EntrySummary = struct {
     id: i64,
@@ -79,6 +80,8 @@ pub const EntrySummary = struct {
     starred: bool,
     /// Matching text, from search only.
     snippet: ?[]const u8 = null,
+    /// The start of the entry's text, for lists that show one.
+    summary: ?[]const u8 = null,
 };
 
 pub const SearchOptions = struct {
@@ -373,7 +376,8 @@ pub const Db = struct {
         \\  f.last_success_at, f.error_count, f.last_error,
         \\  (SELECT count(*) FROM entries e LEFT JOIN entry_state s ON s.entry_id = e.id
         \\     WHERE e.feed_id = f.id AND s.read_at IS NULL),
-        \\  (SELECT count(*) FROM entries e WHERE e.feed_id = f.id)
+        \\  (SELECT count(*) FROM entries e WHERE e.feed_id = f.id),
+        \\  f.folder_id
         \\FROM feeds f
     ;
 
@@ -395,6 +399,7 @@ pub const Db = struct {
             .last_error = try columnOptionalText(stmt, 13, arena),
             .unread = sqlite3_column_int64(stmt, 14),
             .entries = sqlite3_column_int64(stmt, 15),
+            .folder_id = columnOptionalInt(stmt, 16),
         };
     }
 
@@ -573,6 +578,12 @@ pub const Db = struct {
         if (sqlite3_step(stmt) == SQLITE_ROW) return sqlite3_column_int64(stmt, 0);
         try db.run("INSERT INTO folders (parent_id, name) VALUES (?1, ?2)", .{ parent_id, name });
         return sqlite3_last_insert_rowid(db.handle);
+    }
+
+    /// Details chosen by the user when subscribing. Null leaves a value as it is.
+    pub fn setFeedDetails(db: *Db, id: i64, title: ?[]const u8, folder_id: ?i64) Error!void {
+        if (title) |text| try db.run("UPDATE feeds SET title_override = ?2 WHERE id = ?1", .{ id, text });
+        if (folder_id) |folder| try db.run("UPDATE feeds SET folder_id = ?2 WHERE id = ?1", .{ id, folder });
     }
 
     /// Adds an imported subscription, due at once. Returns false if it already existed.
@@ -832,7 +843,7 @@ pub const Db = struct {
 
     const summary_columns =
         \\SELECT e.id, e.feed_id, COALESCE(f.title_override, f.title), e.title, e.url, e.sort_at,
-        \\  s.read_at IS NOT NULL, s.starred_at IS NOT NULL
+        \\  s.read_at IS NOT NULL, s.starred_at IS NOT NULL, substr(e.content_text, 1, 200)
         \\FROM entries e JOIN feeds f ON f.id = e.feed_id LEFT JOIN entry_state s ON s.entry_id = e.id
     ;
 
@@ -847,6 +858,7 @@ pub const Db = struct {
             .date = try formatDate(arena, sqlite3_column_int64(stmt, 5)),
             .read = sqlite3_column_int64(stmt, 6) != 0,
             .starred = sqlite3_column_int64(stmt, 7) != 0,
+            .summary = try columnOptionalText(stmt, 8, arena),
         };
     }
 
@@ -995,6 +1007,7 @@ pub const Db = struct {
         while (sqlite3_step(stmt) == SQLITE_ROW) {
             var row = try readSummary(stmt, arena);
             row.snippet = try columnOptionalText(stmt, 8, arena);
+            row.summary = null;
             try rows.append(arena, row);
         }
         return rows.items;

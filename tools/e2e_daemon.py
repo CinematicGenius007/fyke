@@ -170,6 +170,56 @@ page_base = f"http://127.0.0.1:{pages.server_address[1]}"
 out = json.loads(rss("feeds", "--json").stdout)
 add = Raw().call("feeds.add", url=page_base + "/feed", allow_private_network=True)
 check("summary feed added", add["result"]["new"] == 4, add)
+
+# Choosing a feed before subscribing
+class Site(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def do_GET(self):
+        host = f"http://127.0.0.1:{self.server.server_address[1]}"
+        one = lambda name: f'<rss version="2.0"><channel><title>{name}</title><link>{host}/</link><item><title>{name} post</title><guid>{name}</guid></item></channel></rss>'
+        bodies = {
+            "/": f'<html><head><link rel="alternate" type="application/rss+xml" href="/all.xml"><link rel="alternate" type="application/rss+xml" href="/science.xml"><link rel="alternate" type="application/rss+xml" href="/broken.xml"></head></html>',
+            "/all.xml": one("All"), "/science.xml": one("Science"), "/empty": "<html><body>No feed here</body></html>",
+        }
+        body = bodies.get(self.path)
+        if body is None:
+            self.send_response(404); self.send_header("Content-Length", "0"); self.end_headers(); return
+        data = body.encode(); kind = "application/rss+xml" if self.path.endswith(".xml") else "text/html"
+        self.send_response(200); self.send_header("Content-Type", kind); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
+site = Server(("127.0.0.1", 0), Site)
+threading.Thread(target=site.serve_forever, daemon=True).start()
+site_base = f"http://127.0.0.1:{site.server_address[1]}"
+feeds_before = len(json.loads(rss("feeds", "--json").stdout)["items"])
+r = Raw().call("feeds.preview", url=site_base + "/", allow_private_network=True)
+found = r["result"]["items"]
+check("preview lists every working feed on a site", [f["title"] for f in found] == ["All", "Science"], r)
+check("preview shows latest titles", found[0]["latest"] == ["All post"], found)
+check("preview subscribes to nothing", len(json.loads(rss("feeds", "--json").stdout)["items"]) == feeds_before)
+r = Raw().call("feeds.preview", url=site_base + "/all.xml", allow_private_network=True)
+check("preview of a feed address finds that feed", [f["title"] for f in r["result"]["items"]] == ["All"], r)
+r = Raw().call("feeds.preview", url=site_base + "/empty", allow_private_network=True)
+check("preview of a site with no feed is empty", r["result"]["items"] == [], r)
+r = Raw().call("feeds.preview", url=site_base + "/")
+check("preview refuses private addresses by default", "error" in r, r)
+t2 = Raw(); t2.call("connection.restrict", tier="annotate")
+r = t2.call("feeds.preview", url=site_base + "/", allow_private_network=True)
+check("preview needs the manage tier", r["error"]["code"] == -32001, r)
+r = Raw().call("feeds.add", url=site_base + "/science.xml", allow_private_network=True, title="My Science", folder="Reading")
+added = next(f for f in json.loads(rss("feeds", "--json").stdout)["items"] if f["id"] == r["result"]["id"])
+check("add keeps the chosen name", added["title"] == "My Science", added)
+folders = Raw().call("folders.list")["result"]["items"]
+check("add creates the folder", [f["name"] for f in folders if f["id"] == added["folder_id"]] == ["Reading"], folders)
+Raw().call("feeds.remove", id=r["result"]["id"])
+
+# Settings a client can change
+r = Raw().call("config.set", full_text=False)
+check("config.set answers", r["result"]["ok"] is True, r)
+check("config.get reads it back", Raw().call("config.get")["result"]["full_text"] is False)
+saved = json.load(open(os.path.join(home, "config.json")))
+check("setting is saved, other keys kept", saved["full_text"] is False and len(saved) > 1, saved)
+Raw().call("config.set", full_text=True)
+t3 = Raw(); t3.call("connection.restrict", tier="annotate")
+check("config.set needs the manage tier", t3.call("config.set", full_text=False)["error"]["code"] == -32001)
 rows = json.loads(rss("query", "SELECT id, title FROM entries WHERE title IN ('Full Post','Blocked','Not a page','Thin')").stdout)["rows"]
 ids = {title: entry for entry, title in rows}
 c2 = Raw()

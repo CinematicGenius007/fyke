@@ -73,6 +73,8 @@ pub const Service = struct {
     /// Set by `daemon.stop`. The connection that asked sets `stop` once its reply
     /// has been sent, since exiting first would leave the client with no answer.
     stop_requested: std.atomic.Value(bool) = .init(false),
+    /// Starts from `config.full_text`, and `config.set` changes it while running.
+    full_text: std.atomic.Value(bool) = .init(true),
     /// The main thread waits on this.
     stop: Io.Event = .unset,
 
@@ -311,7 +313,8 @@ pub fn fullTextLoop(s: *Service) Io.Cancelable!void {
         const arena = arena_state.allocator();
 
         const reader = s.lockReader();
-        const jobs = reader.dueFullText(arena, s.now() - full_text_window_ms, short_text_length, full_text_batch) catch &.{};
+        const enabled = s.full_text.load(.monotonic);
+        const jobs = if (enabled) reader.dueFullText(arena, s.now() - full_text_window_ms, short_text_length, full_text_batch) catch &.{} else &.{};
         s.unlockReader();
 
         for (jobs) |job| {

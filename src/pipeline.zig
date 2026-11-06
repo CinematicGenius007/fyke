@@ -46,13 +46,19 @@ pub const Outcome = struct {
     message: ?[]const u8 = null,
 };
 
+/// What the user chose while subscribing. Null keeps the feed's own values.
+pub const Details = struct {
+    title: ?[]const u8 = null,
+    folder: ?[]const u8 = null,
+};
+
 /// Finds the feed behind `input`, subscribes to it, and fetches it once.
-pub fn subscribe(c: Context, arena: std.mem.Allocator, input: []const u8, allow_private_network: bool) !struct { id: i64, outcome: Outcome } {
+pub fn subscribe(c: Context, arena: std.mem.Allocator, input: []const u8, allow_private_network: bool, details: Details) !struct { id: i64, outcome: Outcome } {
     const start = try normalizeInput(arena, input);
     const found = try discover(c, arena, start, allow_private_network);
 
     c.lock();
-    const id = c.db.addFeed(found.url, allow_private_network, c.now()) catch |err| {
+    const id = addWithDetails(c, found.url, allow_private_network, details) catch |err| {
         c.unlock();
         return err;
     };
@@ -63,6 +69,75 @@ pub fn subscribe(c: Context, arena: std.mem.Allocator, input: []const u8, allow_
     c.unlock();
     const row = maybe_row orelse return error.FeedMissing;
     return .{ .id = id, .outcome = try apply(c, arena, row, found.response, 0) };
+}
+
+fn addWithDetails(c: Context, feed_url: []const u8, allow_private_network: bool, details: Details) !i64 {
+    const id = try c.db.addFeed(feed_url, allow_private_network, c.now());
+    const folder_id = if (details.folder) |name| try c.db.ensureFolder(null, name) else null;
+    try c.db.setFeedDetails(id, details.title, folder_id);
+    return id;
+}
+
+/// One feed that a site offers, described well enough to choose it.
+pub const Candidate = struct {
+    url: []const u8,
+    title: ?[]const u8,
+    site_url: ?[]const u8,
+    format: []const u8,
+    /// Titles of its first few entries.
+    latest: []const []const u8,
+};
+
+const max_candidates = 8;
+const preview_entries = 3;
+
+/// Finds every feed behind `input` without subscribing. Each advertised feed
+/// costs one request, so the list is capped. Well-known paths are only tried
+/// when a page advertises nothing, as in `discover`.
+pub fn preview(c: Context, arena: std.mem.Allocator, input: []const u8, allow_private_network: bool) ![]const Candidate {
+    const start = try normalizeInput(arena, input);
+    const first = try fetch.fetch(c.client, arena, .{ .url = start, .allow_private_network = allow_private_network });
+    if (first.status != 200) return error.HttpError;
+
+    var list: std.ArrayList(Candidate) = .empty;
+    if (try describe(arena, first.final_url, first.body)) |one| {
+        try list.append(arena, one);
+        return list.items;
+    }
+    for (try core.html.discoverFeeds(arena, first.body, first.final_url)) |link| {
+        if (list.items.len == max_candidates) break;
+        try appendCandidate(c, arena, &list, link, allow_private_network);
+    }
+    if (list.items.len != 0) return list.items;
+
+    const paths = [_][]const u8{ "/feed", "/feed.xml", "/rss", "/rss.xml", "/atom.xml", "/index.xml", "/feed.json" };
+    for (paths) |path| {
+        try appendCandidate(c, arena, &list, try url.resolve(arena, first.final_url, path), allow_private_network);
+        if (list.items.len != 0) break;
+    }
+    return list.items;
+}
+
+fn appendCandidate(c: Context, arena: std.mem.Allocator, list: *std.ArrayList(Candidate), link: []const u8, allow_private_network: bool) !void {
+    const found = try tryFeed(c, arena, link, allow_private_network) orelse return;
+    for (list.items) |known| if (std.mem.eql(u8, known.url, found.url)) return;
+    if (try describe(arena, found.url, found.response.body)) |one| try list.append(arena, one);
+}
+
+fn describe(arena: std.mem.Allocator, feed_url: []const u8, body: []const u8) !?Candidate {
+    const parsed = feed.parse(arena, body) catch return null;
+    var latest: std.ArrayList([]const u8) = .empty;
+    for (parsed.entries) |entry| {
+        if (latest.items.len == preview_entries) break;
+        if (entry.title) |title| try latest.append(arena, title);
+    }
+    return .{
+        .url = feed_url,
+        .title = parsed.title,
+        .site_url = parsed.site_url,
+        .format = @tagName(parsed.format),
+        .latest = latest.items,
+    };
 }
 
 fn normalizeInput(arena: std.mem.Allocator, input: []const u8) ![]const u8 {

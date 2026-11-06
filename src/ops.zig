@@ -60,15 +60,97 @@ pub const FeedsAdd = struct {
     pub const docs = .{
         .url = "Feed URL, or a site URL to search for a feed.",
         .allow_private_network = "Permit private addresses. Leave false unless the user asked.",
+        .title = "Name to show instead of the feed's own title.",
+        .folder = "Name of a top-level folder, created if missing.",
     };
-    pub const Params = struct { url: []const u8, allow_private_network: bool = false };
+    pub const Params = struct {
+        url: []const u8,
+        allow_private_network: bool = false,
+        title: ?[]const u8 = null,
+        folder: ?[]const u8 = null,
+    };
     pub const Result = RefreshResult;
 
     pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
-        const added = try pipeline.subscribe(s.context(), arena, p.url, p.allow_private_network);
+        const added = try pipeline.subscribe(s.context(), arena, p.url, p.allow_private_network, .{ .title = p.title, .folder = p.folder });
         s.eventsChanged();
         s.wake.set(s.io);
         return .from(added.id, added.outcome);
+    }
+};
+
+pub const FeedsPreview = struct {
+    pub const name = "feeds.preview";
+    // It subscribes to nothing, but it does fetch any address it is given.
+    pub const tier: Tier = .manage;
+    pub const description = "Find the feeds behind a site or feed URL, with their latest titles, without subscribing.";
+    pub const docs = .{
+        .url = "Feed URL, or a site URL to search for feeds.",
+        .allow_private_network = "Permit private addresses. Leave false unless the user asked.",
+    };
+    pub const Params = struct { url: []const u8, allow_private_network: bool = false };
+    pub const Result = struct { items: []const pipeline.Candidate };
+
+    pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
+        return .{ .items = try pipeline.preview(s.context(), arena, p.url, p.allow_private_network) };
+    }
+};
+
+pub const ConfigGet = struct {
+    pub const name = "config.get";
+    pub const tier: Tier = .read;
+    pub const description = "Read the settings a client can change.";
+    pub const agent_visible = false;
+    pub const Params = struct {};
+    pub const Result = struct { full_text: bool };
+
+    pub fn run(s: *Service, _: std.mem.Allocator, _: Params) !Result {
+        return .{ .full_text = s.full_text.load(.monotonic) };
+    }
+};
+
+pub const ConfigSet = struct {
+    pub const name = "config.set";
+    pub const tier: Tier = .manage;
+    pub const description = "Change a setting, now and for later runs.";
+    pub const agent_visible = false;
+    pub const Params = struct { full_text: ?bool = null };
+    pub const Result = Ok;
+
+    pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
+        const enabled = p.full_text orelse return .{};
+        try saveSetting(s, arena, "full_text", .{ .bool = enabled });
+        s.full_text.store(enabled, .monotonic);
+        s.full_text_wake.set(s.io);
+        return .{};
+    }
+
+    /// Other keys in the file are the owner's, so they survive untouched.
+    fn saveSetting(s: *Service, arena: std.mem.Allocator, key: []const u8, value: std.json.Value) !void {
+        const text = s.home.readFileAlloc(s.io, "config.json", arena, .limited(1 << 20)) catch |err| switch (err) {
+            error.FileNotFound => "{}",
+            else => return err,
+        };
+        var root = try std.json.parseFromSliceLeaky(std.json.Value, arena, text, .{});
+        if (root != .object) return error.InvalidConfig;
+        try root.object.put(arena, key, value);
+        const out = try std.fmt.allocPrint(arena, "{f}\n", .{std.json.fmt(root, .{ .whitespace = .indent_2 })});
+        try s.home.writeFile(s.io, .{ .sub_path = "config.json.tmp", .data = out });
+        try s.home.rename("config.json.tmp", s.home, "config.json", s.io);
+    }
+};
+
+pub const FoldersList = struct {
+    pub const name = "folders.list";
+    pub const tier: Tier = .read;
+    pub const description = "List folders.";
+    pub const Params = struct {};
+    pub const Result = struct { items: []const store.FolderRow };
+
+    pub fn run(s: *Service, arena: std.mem.Allocator, _: Params) !Result {
+        const reader = s.lockReader();
+        defer s.unlockReader();
+        return .{ .items = try reader.folders(arena) };
     }
 };
 
@@ -181,6 +263,7 @@ pub const EntriesList = struct {
         .since_days = "Only entries from the last N days.",
         .limit = "Page size, up to 1000.",
         .before = "The next_cursor from a previous page.",
+        .with_summary = "Include the start of each entry's text.",
     };
     pub const Params = struct {
         feed_id: ?i64 = null,
@@ -189,6 +272,7 @@ pub const EntriesList = struct {
         since_days: ?i64 = null,
         limit: i64 = 50,
         before: ?[]const u8 = null,
+        with_summary: bool = false,
     };
     pub const Result = struct { items: []const store.EntrySummary, next_cursor: ?[]const u8 };
 
@@ -208,6 +292,12 @@ pub const EntriesList = struct {
         if (rows.len == limit) {
             const last = rows[rows.len - 1];
             cursor = try std.fmt.allocPrint(arena, "{d}:{d}", .{ last.sort_at, last.id });
+        }
+        // Agents pay for every token, so they ask for summaries only when they want them.
+        if (!p.with_summary) {
+            const trimmed = try arena.dupe(store.EntrySummary, rows);
+            for (trimmed) |*row| row.summary = null;
+            return .{ .items = trimmed, .next_cursor = cursor };
         }
         return .{ .items = rows, .next_cursor = cursor };
     }
@@ -300,11 +390,15 @@ pub const EntriesSearch = struct {
     pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
         const reader = s.lockReader();
         defer s.unlockReader();
-        return .{ .items = try reader.search(arena, p.query, .{
+        const rows = try reader.search(arena, p.query, .{
             .limit = std.math.clamp(p.limit, 1, 1000),
             .unread_only = p.unread_only,
             .since = sinceMillis(s, p.since_days),
-        }) };
+        });
+        // Matches on a feed's name carry no snippet, and text matches already have one.
+        const trimmed = try arena.dupe(store.EntrySummary, rows);
+        for (trimmed) |*row| row.summary = null;
+        return .{ .items = trimmed };
     }
 };
 
@@ -561,6 +655,7 @@ pub const DaemonHousekeep = struct {
 };
 
 pub const all = .{
+    FeedsPreview, FoldersList, ConfigGet, ConfigSet,
     FeedsList,   FeedsAdd,        FeedsRefresh,   FeedsRefreshAll, FeedsQueue,       FeedsRemove,
     EntriesList, EntriesGet,      EntriesSearch,  EntriesMark,     EntriesFetchFull, OpmlImport,
     OpmlExport,  StatsGet,        SchemaDescribe, DbQuery,         EventsSince,      OpsList,
