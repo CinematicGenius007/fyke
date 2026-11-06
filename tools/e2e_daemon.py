@@ -140,6 +140,60 @@ sub.s.settimeout(5)
 event = json.loads(sub.f.readline())
 check("new entries arrive live", event["params"]["type"] == "entry.new" and event["params"]["seq"] > seq, event)
 
+# Full text
+state_page = {"robots": "", "article": True}
+long_page = "<html><body><nav>NAV-TEXT</nav><article><h1>Full Post</h1>" + "".join(f"<p>Extracted paragraph {i} with plenty of words in it to look like an article.</p>" for i in range(30)) + "</article><footer>FOOT-TEXT</footer></body></html>"
+class Pages(http.server.BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.0"
+    def log_message(self, *args): pass
+    def do_GET(self):
+        requests.append(self.path)
+        if self.path == "/feed":
+            body = f"""<rss version="2.0"><channel><title>Summaries</title>
+<item><title>Full Post</title><guid>f1</guid><link>{page_base}/posts/1</link><pubDate>Fri, 06 Nov 2026 09:30:00 GMT</pubDate><description>Only a summary.</description></item>
+<item><title>Blocked</title><guid>f2</guid><link>{page_base}/private/2</link><description>Only a summary.</description></item>
+<item><title>Not a page</title><guid>f3</guid><link>{page_base}/file.pdf</link><description>Only a summary.</description></item>
+<item><title>Thin</title><guid>f4</guid><link>{page_base}/thin</link><description>Only a summary.</description></item>
+</channel></rss>""".encode(); kind = "application/rss+xml"
+        elif self.path == "/robots.txt":
+            body = b"User-agent: *\nDisallow: /private\n"; kind = "text/plain"
+        elif self.path == "/file.pdf":
+            body = b"%PDF"; kind = "application/pdf"
+        elif self.path == "/thin":
+            body = b"<html><body><p>Nothing much.</p></body></html>"; kind = "text/html"
+        else:
+            body = long_page.encode(); kind = "text/html; charset=utf-8"
+        self.send_response(200); self.send_header("Content-Type", kind); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+pages = Server(("127.0.0.1", 0), Pages)
+threading.Thread(target=pages.serve_forever, daemon=True).start()
+page_base = f"http://127.0.0.1:{pages.server_address[1]}"
+out = json.loads(rss("feeds", "--json").stdout)
+add = Raw().call("feeds.add", url=page_base + "/feed", allow_private_network=True)
+check("summary feed added", add["result"]["new"] == 4, add)
+rows = json.loads(rss("query", "SELECT id, title FROM entries WHERE title IN ('Full Post','Blocked','Not a page','Thin')").stdout)["rows"]
+ids = {title: entry for entry, title in rows}
+c2 = Raw()
+requests.clear()
+r = c2.call("entries.fetch_full", id=ids["Full Post"])
+check("article is fetched", r["result"]["status"] == "done", r)
+check("robots.txt is asked first", requests[:2] == ["/robots.txt", "/posts/1"], requests)
+body = c2.call("entries.get", id=ids["Full Post"], format="text")["result"]["body"]
+check("the article replaced the summary", "Extracted paragraph 29" in body and "Only a summary" not in body, body[:200])
+check("page furniture is gone", "NAV-TEXT" not in body and "FOOT-TEXT" not in body)
+check("the repeated title is gone", not body.startswith("Full Post"), body[:60])
+check("search finds the article", any(i["id"] == ids["Full Post"] for i in json.loads(rss("search", "Extracted", "--json").stdout)["items"]))
+requests.clear()
+r = c2.call("entries.fetch_full", id=ids["Blocked"])
+check("robots.txt is obeyed", r["result"]["status"] == "skipped" and "/private/2" not in requests, (r, requests))
+check("robots.txt is cached", "/robots.txt" not in requests, requests)
+check("a PDF is skipped", c2.call("entries.fetch_full", id=ids["Not a page"])["result"]["status"] == "skipped")
+check("a page with no article is skipped", c2.call("entries.fetch_full", id=ids["Thin"])["result"]["status"] == "skipped")
+body = c2.call("entries.get", id=ids["Thin"], format="text")["result"]["body"]
+check("and the summary stays", body == "Only a summary.", body)
+for feed_row in json.loads(rss("feeds", "--json").stdout)["items"]:
+    if feed_row["title"] == "Summaries": rss("remove", str(feed_row["id"]))
+pages.shutdown()
+
 # Clients at once
 errors = []
 def hammer():

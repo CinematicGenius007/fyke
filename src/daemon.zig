@@ -62,6 +62,7 @@ pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem
     var group: Io.Group = .init;
     for (0..s.config.workers) |_| try group.concurrent(io, service.workerLoop, .{&s});
     try group.concurrent(io, service.schedulerLoop, .{&s});
+    if (s.config.auto_poll and s.config.full_text) try group.concurrent(io, service.fullTextLoop, .{&s});
     try group.concurrent(io, acceptLoop, .{ &s, &server });
     std.debug.print("rssd: listening on {s}\n", .{socket_path});
 

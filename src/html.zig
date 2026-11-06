@@ -21,12 +21,12 @@ pub const Options = struct {
     base: []const u8 = "",
 };
 
-const Tag = struct {
+pub const Tag = struct {
     name: []const u8,
     attrs: []const u8,
     self_closing: bool,
 
-    fn attribute(tag: Tag, name: []const u8) ?[]const u8 {
+    pub fn attribute(tag: Tag, name: []const u8) ?[]const u8 {
         var it: xml.AttributeIterator = .{ .bytes = tag.attrs };
         while (it.next()) |attr| {
             if (std.ascii.eqlIgnoreCase(attr.name, name)) return attr.value;
@@ -35,18 +35,18 @@ const Tag = struct {
     }
 };
 
-const Token = union(enum) {
+pub const Token = union(enum) {
     open: Tag,
     close: []const u8,
     text: []const u8,
 };
 
-const Tokenizer = struct {
+pub const Tokenizer = struct {
     input: []const u8,
     pos: usize = 0,
     no_comment_close: bool = false,
 
-    fn next(t: *Tokenizer) ?Token {
+    pub fn next(t: *Tokenizer) ?Token {
         while (t.pos < t.input.len) {
             const rest = t.input[t.pos..];
             if (rest[0] != '<') {
@@ -99,7 +99,7 @@ const Tokenizer = struct {
     }
 
     /// Moves past the end tag of a raw element such as <script>, unread.
-    fn skipRaw(t: *Tokenizer, name: []const u8) void {
+    pub fn skipRaw(t: *Tokenizer, name: []const u8) void {
         var i = t.pos;
         while (std.mem.indexOfPos(u8, t.input, i, "</")) |at| {
             const after = at + 2;
@@ -378,8 +378,11 @@ const Builder = struct {
                 if (b.hasRoom()) b.push(.{ .kind = if (kind == .em) .em else .strong }, tag.name);
             },
             .anchor => {
-                const href = try b.resolveUrl(tag.attribute("href") orelse return);
-                if (!url.isSafeLink(href)) return;
+                const raw = std.mem.trim(u8, tag.attribute("href") orelse return, " ");
+                // A link within the same page, such as a heading's anchor, leads nowhere here.
+                if (raw.len == 0 or raw[0] == '#') return;
+                const href = try b.resolveUrl(raw);
+                if (!url.isSafeLink(href) or isSamePage(href, b.base)) return;
                 try b.ensureInline();
                 if (b.hasRoom()) b.push(.{ .kind = .link, .url = href }, tag.name);
             },
@@ -417,6 +420,12 @@ fn cleanAttribute(arena: std.mem.Allocator, raw: []const u8) error{OutOfMemory}!
         if (c >= 0x20 and c != 0x7F) out.appendAssumeCapacity(c);
     }
     return std.mem.trim(u8, out.items, " ");
+}
+
+fn isSamePage(href: []const u8, base: []const u8) bool {
+    const end = std.mem.indexOfScalar(u8, href, '#') orelse return false;
+    const base_end = std.mem.indexOfScalar(u8, base, '#') orelse base.len;
+    return std.mem.eql(u8, href[0..end], base[0..base_end]);
 }
 
 fn isTrackingPixel(tag: Tag) bool {
@@ -669,6 +678,12 @@ test "images with only a srcset" {
 
 test "an unclosed comment does not swallow the rest" {
     try expectMarkdown("a\n\nb", "<p>a</p><!-- <p>b</p>");
+}
+
+test "links within the page keep their text only" {
+    try expectMarkdown("## Part", "<h2><a href=\"#part\">Part</a></h2>");
+    try expectMarkdown("## Part", "<h2><a href=\"https://example.com/blog/post#part\">Part</a></h2>");
+    try expectMarkdown("[x](https://example.com/other#part)", "<a href=\"/other#part\">x</a>");
 }
 
 test "embeds become links" {

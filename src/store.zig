@@ -46,7 +46,7 @@ const SQLITE_DETACH = 25;
 
 pub const Error = error{ OutOfMemory, Sqlite };
 
-const schema = @embedFile("schema");
+const migrations = [_][*:0]const u8{ @embedFile("schema"), @embedFile("schema2") };
 
 pub const Feed = struct {
     id: i64,
@@ -64,8 +64,7 @@ pub const Feed = struct {
     error_count: i64,
     last_error: ?[]const u8,
     unread: i64,
-    entries: i64,
-};
+    entries: i64,};
 
 pub const EntrySummary = struct {
     id: i64,
@@ -169,6 +168,15 @@ pub const Filter = struct {
 };
 
 pub const Cursor = struct { sort_at: i64, id: i64 };
+
+/// An entry whose article should be fetched from its page.
+pub const FullTextJob = struct {
+    id: i64,
+    url: []const u8,
+    title: ?[]const u8,
+    text_length: i64,
+    allow_private_network: bool,
+};
 
 pub const DueFeed = struct { id: i64, url: []const u8 };
 
@@ -321,10 +329,10 @@ pub const Db = struct {
         defer _ = sqlite3_finalize(stmt);
         _ = sqlite3_step(stmt);
         const version = sqlite3_column_int64(stmt, 0);
-        if (version == 0) {
+        for (migrations[@intCast(@min(version, migrations.len))..]) |sql| {
             try db.exec("BEGIN");
             errdefer db.exec("ROLLBACK") catch {};
-            try db.exec(schema);
+            try db.exec(sql);
             try db.exec("COMMIT");
         }
     }
@@ -405,6 +413,57 @@ pub const Db = struct {
         return try readFeed(stmt, arena);
     }
 
+    fn readFullTextJob(stmt: *Stmt, arena: std.mem.Allocator) error{OutOfMemory}!FullTextJob {
+        return .{
+            .id = sqlite3_column_int64(stmt, 0),
+            .url = try columnText(stmt, 1, arena),
+            .title = try columnOptionalText(stmt, 2, arena),
+            .text_length = sqlite3_column_int64(stmt, 3),
+            .allow_private_network = sqlite3_column_int64(stmt, 4) != 0,
+        };
+    }
+
+    /// Recent entries with little text that have not been tried yet, newest first.
+    pub fn dueFullText(db: *Db, arena: std.mem.Allocator, since: i64, short_text: i64, limit: i64) Error![]const FullTextJob {
+        const stmt = try db.prepare(
+            \\SELECT e.id, e.url, e.title, length(e.content_text), f.allow_private_network
+            \\FROM entries e JOIN feeds f ON f.id = e.feed_id
+            \\WHERE e.full_status IS NULL AND e.url IS NOT NULL AND e.sort_at >= ?1
+            \\  AND length(e.content_text) < ?2
+            \\ORDER BY e.sort_at DESC LIMIT ?3
+        , .{ since, short_text, limit });
+        defer _ = sqlite3_finalize(stmt);
+        var rows: std.ArrayList(FullTextJob) = .empty;
+        while (sqlite3_step(stmt) == SQLITE_ROW) try rows.append(arena, try readFullTextJob(stmt, arena));
+        return rows.items;
+    }
+
+    pub fn fullTextJob(db: *Db, arena: std.mem.Allocator, id: i64) Error!?FullTextJob {
+        const stmt = try db.prepare(
+            \\SELECT e.id, e.url, e.title, length(e.content_text), f.allow_private_network
+            \\FROM entries e JOIN feeds f ON f.id = e.feed_id WHERE e.id = ?1 AND e.url IS NOT NULL
+        , .{id});
+        defer _ = sqlite3_finalize(stmt);
+        if (sqlite3_step(stmt) != SQLITE_ROW) return null;
+        return try readFullTextJob(stmt, arena);
+    }
+
+    /// Replaces an entry's content with its extracted article.
+    pub fn saveFullText(db: *Db, id: i64, blocks_json: []const u8, text: []const u8, now: i64) Error!void {
+        try db.begin();
+        errdefer db.rollback();
+        try db.run(
+            \\UPDATE entries SET content_blocks_json = ?2, content_text = ?3, full_status = 'done',
+            \\  full_attempted_at = ?4 WHERE id = ?1
+        , .{ id, blocks_json, text, now });
+        try db.run("INSERT INTO events (at, type, subject_id) VALUES (?1, 'entry.updated', ?2)", .{ now, id });
+        try db.commit();
+    }
+
+    pub fn markFullText(db: *Db, id: i64, status: []const u8, now: i64) Error!void {
+        try db.run("UPDATE entries SET full_status = ?2, full_attempted_at = ?3 WHERE id = ?1", .{ id, status, now });
+    }
+
     /// Feeds whose poll is due, oldest first.
     pub fn dueFeeds(db: *Db, arena: std.mem.Allocator, now: i64) Error![]const DueFeed {
         const stmt = try db.prepare(
@@ -437,6 +496,18 @@ pub const Db = struct {
     pub fn markDue(db: *Db, id: i64) Error!bool {
         try db.run("UPDATE feeds SET next_fetch_at = 0 WHERE id = ?1 AND status = 'active'", .{id});
         return sqlite3_changes(db.handle) != 0;
+    }
+
+    /// Hashes of raw bodies that only this feed uses, for deleting with it.
+    pub fn rawHashesOnlyFor(db: *Db, arena: std.mem.Allocator, id: i64) Error![]const []const u8 {
+        const stmt = try db.prepare(
+            \\SELECT DISTINCT raw_sha256 FROM fetch_log a WHERE feed_id = ?1 AND raw_sha256 IS NOT NULL
+            \\  AND NOT EXISTS (SELECT 1 FROM fetch_log b WHERE b.raw_sha256 = a.raw_sha256 AND b.feed_id != ?1)
+        , .{id});
+        defer _ = sqlite3_finalize(stmt);
+        var rows: std.ArrayList([]const u8) = .empty;
+        while (sqlite3_step(stmt) == SQLITE_ROW) try rows.append(arena, try columnText(stmt, 0, arena));
+        return rows.items;
     }
 
     /// Returns false when no such feed exists.
@@ -733,7 +804,7 @@ pub const Db = struct {
                 try db.run(
                     \\UPDATE entries SET url = ?2, canonical_url = ?3, title = ?4, author = ?5,
                     \\  published_at = ?6, updated_at = ?7, content_blocks_json = ?8, content_text = ?9,
-                    \\  content_hash = ?10, revision = revision + 1 WHERE id = ?1
+                    \\  content_hash = ?10, revision = revision + 1, full_status = NULL WHERE id = ?1
                 , .{ id, entry.url, entry.canonical_url, entry.title, entry.author, entry.published_at, entry.updated_at, entry.content_blocks_json, entry.content_text, entry.content_hash });
                 try db.run("INSERT INTO events (at, type, subject_id) VALUES (?1, 'entry.updated', ?2)", .{ now, id });
                 result.updated += 1;
@@ -1063,6 +1134,52 @@ test "only raw bodies past the newest for each feed are stale" {
     try testing.expectEqualStrings("a4", (try db.lastRawHash(a, first)).?);
     try testing.expectEqualStrings("b0", (try db.lastRawHash(a, second)).?);
     try testing.expectEqual(0, (try db.takeStaleRaw(a, 2)).len);
+}
+
+test "full text replaces content, and a publisher's edit asks for it again" {
+    var db: Db = try .open(":memory:", .writer);
+    defer db.close();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const feed_id = try db.addFeed("https://example.com/feed", false, 1);
+    _ = try db.ingest(feed_id, &.{sample("1", "One", "h1")}, 2000);
+
+    const due = try db.dueFullText(a, 0, 1000, 10);
+    try testing.expectEqual(1, due.len);
+    try db.saveFullText(due[0].id, "[]", "the whole article about gardens", 3000);
+    try testing.expectEqual(0, (try db.dueFullText(a, 0, 1000, 10)).len);
+    try testing.expectEqual(1, (try db.search(a, "gardens", .{})).len);
+
+    // The same feed text again must not undo the article.
+    _ = try db.ingest(feed_id, &.{sample("1", "One", "h1")}, 4000);
+    try testing.expectEqual(1, (try db.search(a, "gardens", .{})).len);
+
+    _ = try db.ingest(feed_id, &.{sample("1", "One", "h2")}, 5000);
+    try testing.expectEqual(1, (try db.dueFullText(a, 0, 1000, 10)).len);
+    try testing.expectEqual(0, (try db.dueFullText(a, 0, 5, 10)).len);
+    try testing.expectEqual(0, (try db.dueFullText(a, 999999, 1000, 10)).len);
+}
+
+test "an old database is upgraded in place" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const path = "/tmp/rss_-migrate-test.db";
+    defer inline for (.{ path, path ++ "-wal", path ++ "-shm" }) |name| {
+        _ = std.c.unlink(name);
+    };
+    {
+        var handle: ?*Handle = null;
+        try testing.expectEqual(0, sqlite3_open(path, &handle));
+        var old: Db = .{ .handle = handle.? };
+        defer old.close();
+        try old.exec(migrations[0]);
+        try old.run("INSERT INTO feeds (url, created_at) VALUES ('https://example.com/', 1)", .{});
+    }
+    var db: Db = try .open(path, .writer);
+    defer db.close();
+    try testing.expectEqual(1, (try db.stats(5)).feeds);
+    try testing.expectEqual(0, (try db.dueFullText(arena.allocator(), 0, 1000, 10)).len);
 }
 
 test "due feeds and removal" {

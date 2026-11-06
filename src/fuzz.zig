@@ -5,10 +5,12 @@
 const std = @import("std");
 const dates = @import("dates.zig");
 const blocks = @import("blocks.zig");
+const extract = @import("extract.zig");
 const feed = @import("feed.zig");
 const html = @import("html.zig");
 const layout = @import("layout.zig");
 const opml = @import("opml.zig");
+const robots = @import("robots.zig");
 const terminal = @import("terminal.zig");
 const url = @import("url.zig");
 const xml = @import("xml.zig");
@@ -50,6 +52,14 @@ test "html.toBlocks keeps its guarantees" {
         "<p>a <b>b</b> <a href=\"x\">c</a></p><ul><li>d<li>e</ul><table><tr><td>f</table><pre><code>g</code></pre><img src=\"h\"><script>i</script>",
         "<blockquote><h1>a</h1><iframe src=\"http://e/\"></iframe></blockquote><hr><br>&lt;p&gt;",
     } });
+}
+
+test "extraction handles any page" {
+    try testing.fuzz({}, extractPage, .{ .corpus = &.{"<html><body><nav>n</nav><article><p>aaaa aaaa aaaa</p><aside>b</aside></article><div class=\"ad\"><p>c</p></div><script>d</script></body></html>"} });
+}
+
+test "robots rules handle any file" {
+    try testing.fuzz({}, readRobots, .{ .corpus = &.{"User-agent: *\nDisallow: /*.pdf$\nAllow: /a*b*c\n"} });
 }
 
 test "url functions never crash" {
@@ -202,4 +212,15 @@ fn layArticle(_: void, smith: *Smith) anyerror!void {
     const text = input(smith);
     const nodes = try html.toBlocks(arena, text, .{ .base = "https://example.com/" });
     for ([_]usize{ 1, 8, 20 + text.len % 80 }) |columns| _ = try layout.lay(arena, nodes, columns);
+}
+
+fn extractPage(_: void, smith: *Smith) anyerror!void {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    _ = try extract.extract(arena.allocator(), input(smith), "https://example.com/a");
+}
+
+fn readRobots(_: void, smith: *Smith) anyerror!void {
+    const text = input(smith);
+    _ = robots.isAllowed(text[0 .. text.len / 2], "rss_", text[text.len / 2 ..]);
 }

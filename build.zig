@@ -18,6 +18,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{.{ .name = "core", .module = core }},
     });
     app.addAnonymousImport("schema", .{ .root_source_file = b.path("schema/0001_init.sql") });
+    app.addAnonymousImport("schema2", .{ .root_source_file = b.path("schema/0002_full_text.sql") });
     app.addCSourceFile(.{
         .file = b.path("vendor/sqlite/sqlite3.c"),
         .flags = &.{ "-DSQLITE_ENABLE_FTS5", "-DSQLITE_DQS=0", "-DSQLITE_THREADSAFE=2", "-O3", "-fno-sanitize=undefined" },

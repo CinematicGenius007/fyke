@@ -157,10 +157,15 @@ pub const FeedsRemove = struct {
     pub const Params = struct { id: i64 };
     pub const Result = Ok;
 
-    pub fn run(s: *Service, _: std.mem.Allocator, p: Params) !Result {
+    pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
         const writer = s.lockWriter();
-        defer s.unlockWriter();
-        if (!try writer.removeFeed(p.id)) return error.NoSuchFeed;
+        const hashes = removed: {
+            defer s.unlockWriter();
+            const hashes = try writer.rawHashesOnlyFor(arena, p.id);
+            if (!try writer.removeFeed(p.id)) return error.NoSuchFeed;
+            break :removed hashes;
+        };
+        for (hashes) |hash| service.deleteRaw(s, arena, hash);
         return .{};
     }
 };
@@ -323,6 +328,28 @@ pub const EntriesMark = struct {
     }
 };
 
+pub const EntriesFetchFull = struct {
+    pub const name = "entries.fetch_full";
+    pub const tier: Tier = .annotate;
+    pub const description = "Fetch an entry's article from its web page, replacing a short feed summary. This happens by itself for recent entries.";
+    pub const docs = .{ .id = "Entry id." };
+    pub const Params = struct { id: i64 };
+    pub const Result = struct { status: []const u8 };
+
+    pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
+        const reader = s.lockReader();
+        const row = reader.fullTextJob(arena, p.id) catch |err| {
+            s.unlockReader();
+            return err;
+        };
+        s.unlockReader();
+        const job = row orelse return error.NoSuchEntry;
+        const status = try service.fetchFullText(s, arena, job);
+        s.eventsChanged();
+        return .{ .status = status };
+    }
+};
+
 pub const OpmlImport = struct {
     pub const name = "opml.import";
     pub const tier: Tier = .manage;
@@ -447,7 +474,7 @@ pub const SchemaDescribe = struct {
     pub const Result = struct { schema: []const u8 };
 
     pub fn run(_: *Service, _: std.mem.Allocator, _: Params) !Result {
-        return .{ .schema = @embedFile("schema") };
+        return .{ .schema = @embedFile("schema") ++ "\n" ++ @embedFile("schema2") };
     }
 };
 
@@ -534,10 +561,10 @@ pub const DaemonHousekeep = struct {
 };
 
 pub const all = .{
-    FeedsList,       FeedsAdd,       FeedsRefresh,  FeedsRefreshAll, FeedsQueue, FeedsRemove,
-    EntriesList,     EntriesGet,     EntriesSearch, EntriesMark,     OpmlImport, OpmlExport,
-    StatsGet,        SchemaDescribe, DbQuery,       EventsSince,     OpsList,    DaemonStop,
-    DaemonHousekeep,
+    FeedsList,   FeedsAdd,        FeedsRefresh,   FeedsRefreshAll, FeedsQueue,       FeedsRemove,
+    EntriesList, EntriesGet,      EntriesSearch,  EntriesMark,     EntriesFetchFull, OpmlImport,
+    OpmlExport,  StatsGet,        SchemaDescribe, DbQuery,         EventsSince,      OpsList,
+    DaemonStop,  DaemonHousekeep,
 };
 
 pub const DispatchError = error{ UnknownMethod, TierDenied, InvalidParams };

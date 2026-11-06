@@ -8,6 +8,7 @@
 
 const std = @import("std");
 const core = @import("core");
+const fetch = @import("fetch.zig");
 const pipeline = @import("pipeline.zig");
 const store = @import("store.zig");
 
@@ -20,16 +21,35 @@ pub const Config = struct {
     per_host: usize = 2,
     /// When false, feeds are fetched only on request. Used by tests.
     auto_poll: bool = true,
+    /// Fetch articles from their pages when a feed gives only a summary.
+    full_text: bool = true,
     min_poll_seconds: i64 = 15 * 60,
 };
 
 const housekeeping_interval_ms = 3600 * 1000;
+
+/// A feed body shorter than this is treated as a summary.
+const short_text_length = 1500;
+/// Older entries are fetched only on request, so that subscribing to a feed with a
+/// long history does not turn into a crawl of the whole site.
+const full_text_window_ms = 30 * 24 * 3600 * 1000;
+const full_text_batch = 32;
+/// Fetching one page at a time, with this gap, keeps the load on any site trivial.
+const full_text_gap_ms = 1000;
+const full_text_idle_ms = 5 * 60 * 1000;
+const full_text_deadline_seconds = 15;
+/// An extraction must beat the feed's text by this much to replace it.
+const full_text_min_gain = 1.5;
+const robots_ttl_ms = 24 * 3600 * 1000;
+const robots_token = "rss_";
+const page_accept = "text/html,application/xhtml+xml;q=0.9";
 const raw_bodies_kept = 20;
 /// Ticks are at most this often, since each finished fetch asks for one.
 const min_tick_ms = 20;
 const max_tick_ms = 60 * 1000;
 
 const Job = struct { id: i64, host: []const u8 };
+const RobotsEntry = struct { text: []const u8, fetched_at: i64 };
 
 pub const Service = struct {
     gpa: std.mem.Allocator,
@@ -63,7 +83,13 @@ pub const Service = struct {
     /// Set by a refresh of everything, which runs even with `auto_poll` off.
     forced: bool = false,
 
+    /// Cached robots.txt files by host, guarded by `robots_lock`.
+    robots_lock: Io.Mutex = .init,
+    robots: std.StringHashMapUnmanaged(RobotsEntry) = .empty,
+
     wake: Io.Event = .unset,
+    /// Set when entries may have arrived, since the full text loop sleeps when idle.
+    full_text_wake: Io.Event = .unset,
     queue: Io.Queue(Job) = undefined,
     queue_buffer: []Job = &.{},
 
@@ -102,6 +128,7 @@ pub const Service = struct {
     }
 
     pub fn eventsChanged(s: *Service) void {
+        s.full_text_wake.set(s.io);
         s.events_lock.lockUncancelable(s.io);
         defer s.events_lock.unlock(s.io);
         s.events_changed.broadcast(s.io);
@@ -267,8 +294,143 @@ pub fn housekeep(s: *Service) !void {
         try writer.prune(s.now());
         break :stale try writer.takeStaleRaw(arena, raw_bodies_kept);
     };
-    for (stale) |hash| {
-        const name = try std.fmt.allocPrint(arena, "raw/{s}/{s}.gz", .{ hash[0..2], hash });
-        s.home.deleteFile(s.io, name) catch {};
+    for (stale) |hash| deleteRaw(s, arena, hash);
+}
+
+pub fn deleteRaw(s: *Service, arena: std.mem.Allocator, hash: []const u8) void {
+    const name = std.fmt.allocPrint(arena, "raw/{s}/{s}.gz", .{ hash[0..2], hash }) catch return;
+    s.home.deleteFile(s.io, name) catch {};
+}
+
+/// Works through recent short entries, one page at a time, for as long as the
+/// daemon runs. It has a loop of its own so that it can never delay feed polling.
+pub fn fullTextLoop(s: *Service) Io.Cancelable!void {
+    while (true) {
+        var arena_state: std.heap.ArenaAllocator = .init(s.gpa);
+        defer arena_state.deinit();
+        const arena = arena_state.allocator();
+
+        const reader = s.lockReader();
+        const jobs = reader.dueFullText(arena, s.now() - full_text_window_ms, short_text_length, full_text_batch) catch &.{};
+        s.unlockReader();
+
+        for (jobs) |job| {
+            var job_arena: std.heap.ArenaAllocator = .init(s.gpa);
+            defer job_arena.deinit();
+            _ = fetchFullText(s, job_arena.allocator(), job) catch |err| {
+                std.debug.print("full text {d}: {s}\n", .{ job.id, @errorName(err) });
+                setFullStatus(s, job.id, "failed");
+            };
+            s.eventsChanged();
+            try s.io.sleep(.fromMilliseconds(full_text_gap_ms), .awake);
+        }
+        if (jobs.len == 0) {
+            s.full_text_wake.waitTimeout(s.io, .{ .duration = .{ .raw = .fromMilliseconds(full_text_idle_ms), .clock = .awake } }) catch |err| switch (err) {
+                error.Timeout => {},
+                error.Canceled => return error.Canceled,
+            };
+            s.full_text_wake.reset();
+        }
     }
+}
+
+fn setFullStatus(s: *Service, id: i64, status: []const u8) void {
+    const writer = s.lockWriter();
+    defer s.unlockWriter();
+    writer.markFullText(id, status, s.now()) catch {};
+}
+
+/// Fetches one article. Returns its new status: `done` when it replaced the
+/// entry's content, otherwise `skipped` or `failed`.
+pub fn fetchFullText(s: *Service, arena: std.mem.Allocator, job: store.FullTextJob) ![]const u8 {
+    const status = attemptFullText(s, arena, job) catch "failed";
+    if (!std.mem.eql(u8, status, "done")) setFullStatus(s, job.id, status);
+    return status;
+}
+
+fn attemptFullText(s: *Service, arena: std.mem.Allocator, job: store.FullTextJob) ![]const u8 {
+    if (!core.url.isHttp(job.url)) return "skipped";
+    if (!try robotsAllow(s, arena, job)) return "skipped";
+
+    const response = try fetch.fetch(&s.client, arena, .{
+        .url = job.url,
+        .allow_private_network = job.allow_private_network,
+        .deadline_seconds = full_text_deadline_seconds,
+        .accept = page_accept,
+    });
+    if (response.status != 200) return "failed";
+    const kind = response.content_type orelse "";
+    if (std.ascii.findIgnoreCase(kind, "html") == null) return "skipped";
+
+    const page = core.encoding.toUtf8(arena, response.body) catch return "failed";
+    const found = (try core.extract.extract(arena, page, response.final_url)) orelse return "skipped";
+    const nodes = withoutTitle(found, job.title);
+
+    var text: Io.Writer.Allocating = .init(arena);
+    try core.blocks.writeText(&text.writer, nodes);
+    const gain = @as(f64, @floatFromInt(text.written().len)) / @as(f64, @floatFromInt(@max(job.text_length, 1)));
+    if (gain < full_text_min_gain) return "skipped";
+
+    var json: Io.Writer.Allocating = .init(arena);
+    try core.blocks.writeJson(&json.writer, nodes);
+
+    const writer = s.lockWriter();
+    defer s.unlockWriter();
+    try writer.saveFullText(job.id, json.written(), text.written(), s.now());
+    return "done";
+}
+
+/// Readers show the title themselves, so a page's own copy of it is dropped.
+fn withoutTitle(nodes: []const core.blocks.Node, title: ?[]const u8) []const core.blocks.Node {
+    const wanted = title orelse return nodes;
+    if (nodes.len == 0 or nodes[0].kind != .h or nodes[0].children.len != 1) return nodes;
+    const first = nodes[0].children[0];
+    if (first.kind == .text and std.ascii.eqlIgnoreCase(std.mem.trim(u8, first.value, " "), wanted)) return nodes[1..];
+    return nodes;
+}
+
+/// Asks the site's robots.txt, caching it for a day. A missing file allows
+/// everything. A file that cannot be read means not now, as RFC 9309 advises.
+fn robotsAllow(s: *Service, arena: std.mem.Allocator, job: store.FullTextJob) !bool {
+    const parts = core.url.split(job.url);
+    const authority = parts.authority orelse return false;
+    const path = if (parts.path.len == 0) "/" else parts.path;
+    const now = s.now();
+
+    s.robots_lock.lockUncancelable(s.io);
+    const cached = s.robots.get(authority);
+    s.robots_lock.unlock(s.io);
+    if (cached) |entry| {
+        if (now - entry.fetched_at < robots_ttl_ms) return core.robots.isAllowed(entry.text, robots_token, path);
+    }
+
+    const location = try std.fmt.allocPrint(arena, "{s}://{s}/robots.txt", .{ parts.scheme, authority });
+    const response = fetch.fetch(&s.client, arena, .{
+        .url = location,
+        .allow_private_network = job.allow_private_network,
+        .deadline_seconds = full_text_deadline_seconds,
+        .accept = "text/plain",
+    }) catch return false;
+    if (response.status >= 500) return false;
+    const text = if (response.status == 200) response.body else "";
+
+    s.robots_lock.lockUncancelable(s.io);
+    defer s.robots_lock.unlock(s.io);
+    const slot = try s.robots.getOrPut(s.gpa, authority);
+    if (slot.found_existing) {
+        s.gpa.free(slot.value_ptr.text);
+    } else {
+        slot.key_ptr.* = try s.gpa.dupe(u8, authority);
+    }
+    slot.value_ptr.* = .{ .text = try s.gpa.dupe(u8, text), .fetched_at = now };
+    return core.robots.isAllowed(text, robots_token, path);
+}
+
+test "the page's own title is dropped" {
+    const Node = core.blocks.Node;
+    const heading = [_]Node{.{ .kind = .text, .value = "Hello" }};
+    const nodes = [_]Node{ .{ .kind = .h, .level = 1, .children = &heading }, .{ .kind = .hr } };
+    try std.testing.expectEqual(1, withoutTitle(&nodes, "hello").len);
+    try std.testing.expectEqual(2, withoutTitle(&nodes, "Other").len);
+    try std.testing.expectEqual(2, withoutTitle(&nodes, null).len);
 }

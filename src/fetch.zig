@@ -23,7 +23,10 @@ pub const Request = struct {
     last_modified: ?[]const u8 = null,
     allow_private_network: bool = false,
     deadline_seconds: i64 = 30,
+    accept: []const u8 = feed_accept,
 };
+
+const feed_accept = "application/rss+xml, application/atom+xml, application/feed+json, application/xml;q=0.9, text/xml;q=0.9, */*;q=0.8";
 
 pub const Response = struct {
     status: u16,
@@ -90,7 +93,7 @@ fn fetchHops(client: *http.Client, arena: std.mem.Allocator, request: Request) a
 
         var extra: [3]http.Header = undefined;
         var extra_len: usize = 0;
-        extra[extra_len] = .{ .name = "accept", .value = "application/rss+xml, application/atom+xml, application/feed+json, application/xml;q=0.9, text/xml;q=0.9, */*;q=0.8" };
+        extra[extra_len] = .{ .name = "accept", .value = request.accept };
         extra_len += 1;
         if (hops == 0) {
             if (request.etag) |value| {
