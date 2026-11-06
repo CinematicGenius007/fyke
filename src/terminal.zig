@@ -265,8 +265,20 @@ pub const Screen = struct {
     }
 };
 
+pub const Mouse = struct {
+    pub const Button = enum { left, middle, right, wheel_up, wheel_down, other };
+
+    button: Button,
+    /// Zero-based cell.
+    x: usize,
+    y: usize,
+    /// False for a release.
+    pressed: bool,
+};
+
 pub const Key = union(enum) {
     char: u21,
+    mouse: Mouse,
     /// Ctrl plus a letter, as that lower-case letter.
     ctrl: u8,
     enter,
@@ -341,7 +353,31 @@ fn decodeEscape(input: []const u8) ?Decoded {
     return null;
 }
 
+/// Reads an SGR mouse report: ESC [ < button ; column ; row, ending in M for a
+/// press or m for a release. Bit 6 of the button means the wheel, and bit 5 means
+/// movement, which is not used.
+fn mouseKey(final: u8, parameters: []const u8) Key {
+    var fields = std.mem.splitScalar(u8, parameters[1..], ';');
+    const code = std.fmt.parseInt(u16, fields.next() orelse return .ignored, 10) catch return .ignored;
+    const column = std.fmt.parseInt(u32, fields.next() orelse return .ignored, 10) catch return .ignored;
+    const row = std.fmt.parseInt(u32, fields.next() orelse return .ignored, 10) catch return .ignored;
+    if (column == 0 or row == 0) return .ignored;
+
+    const button: Mouse.Button = if (code & 32 != 0) .other else if (code & 64 != 0)
+        (if (code & 3 == 0) .wheel_up else if (code & 3 == 1) .wheel_down else .other)
+    else switch (code & 3) {
+        0 => .left,
+        1 => .middle,
+        2 => .right,
+        else => .other,
+    };
+    return .{ .mouse = .{ .button = button, .x = column - 1, .y = row - 1, .pressed = final == 'M' } };
+}
+
 fn csiKey(final: u8, parameters: []const u8) Key {
+    if (parameters.len != 0 and parameters[0] == '<') {
+        return if (final == 'M' or final == 'm') mouseKey(final, parameters) else .ignored;
+    }
     return switch (final) {
         'A' => .up,
         'B' => .down,
@@ -471,6 +507,16 @@ test "keys" {
     try expectKey(.backtab, "\x1b[Z");
     try expectKey(.up, "\x1b[1;5A");
     try expectKey(.ignored, "\x1b[200~");
+}
+
+test "mouse reports" {
+    try expectKey(.{ .mouse = .{ .button = .left, .x = 9, .y = 4, .pressed = true } }, "\x1b[<0;10;5M");
+    try expectKey(.{ .mouse = .{ .button = .left, .x = 9, .y = 4, .pressed = false } }, "\x1b[<0;10;5m");
+    try expectKey(.{ .mouse = .{ .button = .wheel_up, .x = 0, .y = 0, .pressed = true } }, "\x1b[<64;1;1M");
+    try expectKey(.{ .mouse = .{ .button = .wheel_down, .x = 1, .y = 1, .pressed = true } }, "\x1b[<65;2;2M");
+    try expectKey(.{ .mouse = .{ .button = .other, .x = 1, .y = 1, .pressed = true } }, "\x1b[<35;2;2M");
+    try expectKey(.ignored, "\x1b[<0;0;5M");
+    try expectKey(.ignored, "\x1b[<0;1M");
 }
 
 test "partial input waits for more" {
