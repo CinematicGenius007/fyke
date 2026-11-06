@@ -29,6 +29,7 @@ extern fn sqlite3_column_double(stmt: *Stmt, i: c_int) f64;
 extern fn sqlite3_stmt_readonly(stmt: *Stmt) c_int;
 extern fn sqlite3_set_authorizer(db: *Handle, callback: *const AuthorizerFn, arg: ?*anyopaque) c_int;
 extern fn sqlite3_progress_handler(db: *Handle, ops: c_int, callback: ?*const ProgressFn, arg: ?*anyopaque) void;
+extern fn sqlite3_limit(db: *Handle, id: c_int, value: c_int) c_int;
 
 const AuthorizerFn = fn (?*anyopaque, c_int, ?[*:0]const u8, ?[*:0]const u8, ?[*:0]const u8, ?[*:0]const u8) callconv(.c) c_int;
 const ProgressFn = fn (?*anyopaque) callconv(.c) c_int;
@@ -42,11 +43,12 @@ const SQLITE_NULL = 5;
 const SQLITE_DENY = 1;
 const SQLITE_PRAGMA = 19;
 const SQLITE_ATTACH = 24;
+const SQLITE_LIMIT_LENGTH = 0;
 const SQLITE_DETACH = 25;
 
 pub const Error = error{ OutOfMemory, Sqlite };
 
-const migrations = [_][*:0]const u8{ @embedFile("schema"), @embedFile("schema2") };
+const migrations = [_][*:0]const u8{ @embedFile("schema"), @embedFile("schema2"), @embedFile("schema3") };
 
 pub const Feed = struct {
     id: i64,
@@ -64,7 +66,10 @@ pub const Feed = struct {
     error_count: i64,
     last_error: ?[]const u8,
     unread: i64,
-    entries: i64,    folder_id: ?i64,
+    entries: i64,
+    folder_id: ?i64,
+    skip_hours: i64,
+    skip_days: i64,
 };
 
 pub const EntrySummary = struct {
@@ -152,6 +157,8 @@ pub const FeedUpdate = struct {
     etag: ?[]const u8 = null,
     last_modified: ?[]const u8 = null,
     poll_seconds: ?i64 = null,
+    skip_hours: ?i64 = null,
+    skip_days: ?i64 = null,
     next_fetch_at: i64,
     last_fetch_at: i64,
     last_success_at: ?i64 = null,
@@ -168,6 +175,8 @@ pub const Filter = struct {
     since: ?i64 = null,
     /// Keyset cursor: return entries older than this (sort_at, id) position.
     before: ?Cursor = null,
+    /// Include the start of each entry's text.
+    with_summary: bool = false,
 };
 
 pub const Cursor = struct { sort_at: i64, id: i64 };
@@ -215,17 +224,19 @@ pub const Role = enum { writer, reader, sandbox };
 pub const Marks = struct {
     read: ?bool = null,
     starred: ?bool = null,
+    hidden: ?bool = null,
 };
 
 /// Binds a Zig value to a statement parameter. Text is not copied, so it must
-/// outlive the step that uses it.
+/// outlive the step that uses it. Integers beyond SQLite's range saturate, since
+/// some come straight from feeds.
 fn bindValue(stmt: *Stmt, index: c_int, value: anytype) c_int {
     const T = @TypeOf(value);
     switch (@typeInfo(T)) {
         .optional => return if (value) |inner| bindValue(stmt, index, inner) else sqlite3_bind_null(stmt, index),
         .null => return sqlite3_bind_null(stmt, index),
         .bool => return sqlite3_bind_int64(stmt, index, @intFromBool(value)),
-        .int, .comptime_int => return sqlite3_bind_int64(stmt, index, @intCast(value)),
+        .int, .comptime_int => return sqlite3_bind_int64(stmt, index, std.math.cast(i64, value) orelse std.math.maxInt(i64)),
         else => {
             const text: []const u8 = value;
             return sqlite3_bind_text(stmt, index, text.ptr, @intCast(text.len), null);
@@ -280,6 +291,11 @@ pub const Db = struct {
 
     /// Bounded by VM steps rather than by a clock, so results do not vary with load.
     const query_budget_callbacks = 200_000;
+    /// A query returns no more than this many bytes of values.
+    const query_max_bytes = 4 << 20;
+    /// The longest string or blob a sandboxed statement may build. VM steps do not
+    /// bound memory: one call such as `hex(zeroblob(n))` allocates in a single step.
+    const query_max_value = 16 << 20;
 
     fn denyDangerous(_: ?*anyopaque, action: c_int, _: ?[*:0]const u8, _: ?[*:0]const u8, _: ?[*:0]const u8, _: ?[*:0]const u8) callconv(.c) c_int {
         return switch (action) {
@@ -308,6 +324,7 @@ pub const Db = struct {
             .reader => try db.exec("PRAGMA query_only=ON"),
             .sandbox => {
                 try db.exec("PRAGMA query_only=ON");
+                _ = sqlite3_limit(db.handle, SQLITE_LIMIT_LENGTH, query_max_value);
                 // Pragmas are refused from here on, so query_only cannot be undone.
                 if (sqlite3_set_authorizer(db.handle, denyDangerous, null) != 0) return error.Sqlite;
             },
@@ -377,7 +394,7 @@ pub const Db = struct {
         \\  (SELECT count(*) FROM entries e LEFT JOIN entry_state s ON s.entry_id = e.id
         \\     WHERE e.feed_id = f.id AND s.read_at IS NULL),
         \\  (SELECT count(*) FROM entries e WHERE e.feed_id = f.id),
-        \\  f.folder_id
+        \\  f.folder_id, f.skip_hours, f.skip_days
         \\FROM feeds f
     ;
 
@@ -400,6 +417,8 @@ pub const Db = struct {
             .unread = sqlite3_column_int64(stmt, 14),
             .entries = sqlite3_column_int64(stmt, 15),
             .folder_id = columnOptionalInt(stmt, 16),
+            .skip_hours = sqlite3_column_int64(stmt, 17),
+            .skip_days = sqlite3_column_int64(stmt, 18),
         };
     }
 
@@ -637,23 +656,28 @@ pub const Db = struct {
     }
 
     /// Hashes of stored bodies past the newest `keep` for each feed, after clearing
-    /// them from the log. The caller deletes the files.
+    /// them from the log. Feeds can share a body, so a hash is returned only once
+    /// no feed refers to it. The caller deletes the files.
     pub fn takeStaleRaw(db: *Db, arena: std.mem.Allocator, keep: i64) Error![]const []const u8 {
-        var hashes: std.ArrayList([]const u8) = .empty;
+        var pairs: std.ArrayList(struct { feed_id: i64, hash: []const u8 }) = .empty;
         const stmt = try db.prepare(
-            \\SELECT id, raw_sha256 FROM (
-            \\  SELECT id, raw_sha256, row_number() OVER (PARTITION BY feed_id ORDER BY id DESC) AS position
+            \\SELECT feed_id, raw_sha256 FROM (
+            \\  SELECT feed_id, raw_sha256, row_number() OVER (PARTITION BY feed_id ORDER BY id DESC) AS position
             \\  FROM (SELECT max(id) AS id, feed_id, raw_sha256 FROM fetch_log
             \\        WHERE raw_sha256 IS NOT NULL GROUP BY feed_id, raw_sha256)
             \\) WHERE position > ?1
         , .{keep});
         defer _ = sqlite3_finalize(stmt);
-        while (sqlite3_step(stmt) == SQLITE_ROW) try hashes.append(arena, try columnText(stmt, 1, arena));
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            try pairs.append(arena, .{ .feed_id = sqlite3_column_int64(stmt, 0), .hash = try columnText(stmt, 1, arena) });
+        }
 
         var stale: std.ArrayList([]const u8) = .empty;
-        for (hashes.items) |hash| {
-            try db.run("UPDATE fetch_log SET raw_sha256 = NULL WHERE raw_sha256 = ?1", .{hash});
-            try stale.append(arena, hash);
+        for (pairs.items) |pair| {
+            try db.run("UPDATE fetch_log SET raw_sha256 = NULL WHERE feed_id = ?1 AND raw_sha256 = ?2", .{ pair.feed_id, pair.hash });
+            const others = try db.prepare("SELECT 1 FROM fetch_log WHERE raw_sha256 = ?1 LIMIT 1", .{pair.hash});
+            defer _ = sqlite3_finalize(others);
+            if (sqlite3_step(others) != SQLITE_ROW) try stale.append(arena, pair.hash);
         }
         return stale.items;
     }
@@ -708,6 +732,7 @@ pub const Db = struct {
         w.writeAll("],\"rows\":[") catch return error.OutOfMemory;
 
         var rows: usize = 0;
+        var value_bytes: usize = 0;
         var truncated = false;
         while (true) {
             const rc = sqlite3_step(stmt.?);
@@ -717,7 +742,8 @@ pub const Db = struct {
                 try writeError(w, db.errorMessage());
                 return out.written();
             }
-            if (rows == max_rows) {
+            value_bytes += rowBytes(stmt.?, columns);
+            if (rows == max_rows or value_bytes > query_max_bytes) {
                 truncated = true;
                 break;
             }
@@ -732,6 +758,17 @@ pub const Db = struct {
         }
         w.print("],\"truncated\":{}}}", .{truncated}) catch return error.OutOfMemory;
         return out.written();
+    }
+
+    /// Text and blobs only, since asking for the size of a number converts it.
+    fn rowBytes(stmt: *Stmt, columns: usize) usize {
+        var total: usize = 0;
+        for (0..columns) |i| {
+            const type_code = sqlite3_column_type(stmt, @intCast(i));
+            if (type_code == SQLITE_INTEGER or type_code == SQLITE_FLOAT or type_code == SQLITE_NULL) continue;
+            total += @intCast(sqlite3_column_bytes(stmt, @intCast(i)));
+        }
+        return total;
     }
 
     fn writeError(w: *std.Io.Writer, message: []const u8) error{OutOfMemory}!void {
@@ -761,13 +798,14 @@ pub const Db = struct {
             \\  status = COALESCE(?6, status), etag = COALESCE(?7, etag),
             \\  last_modified = COALESCE(?8, last_modified), poll_seconds = COALESCE(?9, poll_seconds),
             \\  next_fetch_at = ?10, last_fetch_at = ?11, last_success_at = COALESCE(?12, last_success_at),
-            \\  error_count = ?13, last_error = ?14
+            \\  error_count = ?13, last_error = ?14, skip_hours = COALESCE(?15, skip_hours),
+            \\  skip_days = COALESCE(?16, skip_days)
             \\WHERE id = ?1
         , .{
             update.id,           update.site_url,      update.title,         update.description,
             update.format,       update.status,        update.etag,          update.last_modified,
             update.poll_seconds, update.next_fetch_at, update.last_fetch_at, update.last_success_at,
-            update.error_count,  update.last_error,
+            update.error_count,  update.last_error,    update.skip_hours,    update.skip_days,
         });
         if (update.url) |url| {
             // Another subscription may already hold the new URL. Keeping the old
@@ -783,10 +821,11 @@ pub const Db = struct {
         , .{ log.feed_id, log.started_at, log.duration_ms, log.http_status, log.bytes, log.raw_sha256, log.new_entries, log.updated_entries, log.err });
     }
 
-    /// Hash of the last stored body, for skipping bodies that have not changed.
+    /// Hash of the last body that was stored and parsed, for skipping bodies that have
+    /// not changed. A failed body does not count, or repeating it would read as success.
     pub fn lastRawHash(db: *Db, arena: std.mem.Allocator, feed_id: i64) Error!?[]const u8 {
         const stmt = try db.prepare(
-            \\SELECT raw_sha256 FROM fetch_log WHERE feed_id = ?1 AND raw_sha256 IS NOT NULL
+            \\SELECT raw_sha256 FROM fetch_log WHERE feed_id = ?1 AND raw_sha256 IS NOT NULL AND error IS NULL
             \\ORDER BY id DESC LIMIT 1
         , .{feed_id});
         defer _ = sqlite3_finalize(stmt);
@@ -843,7 +882,8 @@ pub const Db = struct {
 
     const summary_columns =
         \\SELECT e.id, e.feed_id, COALESCE(f.title_override, f.title), e.title, e.url, e.sort_at,
-        \\  s.read_at IS NOT NULL, s.starred_at IS NOT NULL, substr(e.content_text, 1, 200)
+        \\  s.read_at IS NOT NULL, s.starred_at IS NOT NULL,
+        \\  CASE WHEN ?8 THEN substr(e.content_text, 1, 200) END
         \\FROM entries e JOIN feeds f ON f.id = e.feed_id LEFT JOIN entry_state s ON s.entry_id = e.id
     ;
 
@@ -885,6 +925,7 @@ pub const Db = struct {
             if (filter.before) |c| c.id else null,
             filter.limit,
             filter.since,
+            filter.with_summary,
         });
         defer _ = sqlite3_finalize(stmt);
         var rows: std.ArrayList(EntrySummary) = .empty;
@@ -924,8 +965,9 @@ pub const Db = struct {
     /// ordering is not the default. Each word is quoted, so input cannot use FTS5
     /// query syntax and cannot produce a syntax error.
     ///
-    /// Only the most recent 2,000 matches are considered. Snippets are costly, so
-    /// the query narrows to the final rows first and builds snippets for those alone.
+    /// Only the 2,000 most recently stored entries that match and pass the filters
+    /// are considered. Snippets are costly, so the query narrows to the final rows
+    /// first and builds snippets for those alone.
     pub fn search(db: *Db, arena: std.mem.Allocator, words_text: []const u8, options: SearchOptions) Error![]const EntrySummary {
         var match: std.ArrayList(u8) = .empty;
         var words = std.mem.tokenizeAny(u8, words_text, " \t\r\n");
@@ -987,12 +1029,14 @@ pub const Db = struct {
     fn searchText(db: *Db, arena: std.mem.Allocator, match: []const u8, options: SearchOptions) Error![]const EntrySummary {
         const stmt = try db.prepare(
             \\WITH matches AS (
-            \\  SELECT rowid AS id FROM entries_fts WHERE entries_fts MATCH ?1 ORDER BY rowid DESC LIMIT 2000
-            \\), chosen AS (
-            \\  SELECT e.id FROM matches m JOIN entries e ON e.id = m.id
+            \\  SELECT e.id, e.sort_at FROM entries_fts
+            \\  CROSS JOIN entries e ON e.id = entries_fts.rowid
             \\  LEFT JOIN entry_state s ON s.entry_id = e.id
-            \\  WHERE (?3 = 0 OR s.read_at IS NULL) AND (?4 IS NULL OR e.sort_at >= ?4) AND s.hidden_at IS NULL
-            \\  ORDER BY e.sort_at DESC, e.id DESC LIMIT ?2
+            \\  WHERE entries_fts MATCH ?1 AND (?3 = 0 OR s.read_at IS NULL)
+            \\    AND (?4 IS NULL OR e.sort_at >= ?4) AND s.hidden_at IS NULL
+            \\  ORDER BY entries_fts.rowid DESC LIMIT 2000
+            \\), chosen AS (
+            \\  SELECT id FROM matches ORDER BY sort_at DESC, id DESC LIMIT ?2
             \\)
             \\SELECT e.id, e.feed_id, COALESCE(f.title_override, f.title), e.title, e.url, e.sort_at,
             \\  s.read_at IS NOT NULL, s.starred_at IS NOT NULL,
@@ -1025,6 +1069,9 @@ pub const Db = struct {
         }
         if (marks.starred) |starred| {
             try db.run("UPDATE entry_state SET starred_at = ?2 WHERE entry_id = ?1", .{ id, if (starred) now else null });
+        }
+        if (marks.hidden) |hidden| {
+            try db.run("UPDATE entry_state SET hidden_at = ?2 WHERE entry_id = ?1", .{ id, if (hidden) now else null });
         }
         return true;
     }
@@ -1172,6 +1219,112 @@ test "full text replaces content, and a publisher's edit asks for it again" {
     try testing.expectEqual(1, (try db.dueFullText(a, 0, 1000, 10)).len);
     try testing.expectEqual(0, (try db.dueFullText(a, 0, 5, 10)).len);
     try testing.expectEqual(0, (try db.dueFullText(a, 999999, 1000, 10)).len);
+}
+
+test "an enclosure size beyond SQLite's range is stored, not fatal" {
+    var db: Db = try .open(":memory:", .writer);
+    defer db.close();
+    const feed_id = try db.addFeed("https://example.com/feed", false, 1);
+    var entry = sample("1", "One", "h1");
+    entry.enclosures = &.{.{ .url = "https://example.com/a", .mime_type = null, .bytes = std.math.maxInt(u64) }};
+    try testing.expectEqual(1, (try db.ingest(feed_id, &.{entry}, 2000)).new);
+}
+
+test "a body another feed still needs is kept" {
+    var db: Db = try .open(":memory:", .writer);
+    defer db.close();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const first = try db.addFeed("https://example.com/a", false, 1);
+    const second = try db.addFeed("https://example.com/b", false, 1);
+    try db.logFetch(.{ .feed_id = first, .started_at = 1, .duration_ms = 1, .raw_sha256 = "shared" });
+    try db.logFetch(.{ .feed_id = first, .started_at = 1, .duration_ms = 1, .raw_sha256 = "newer" });
+    try db.logFetch(.{ .feed_id = second, .started_at = 1, .duration_ms = 1, .raw_sha256 = "shared" });
+
+    try testing.expectEqual(0, (try db.takeStaleRaw(a, 1)).len);
+    try testing.expectEqualStrings("shared", (try db.lastRawHash(a, second)).?);
+}
+
+test "query output stops growing at its byte limit" {
+    var db: Db = try .open(":memory:", .sandbox);
+    defer db.close();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const sql = "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 100) SELECT printf('%.*c', 1000000, 'x') FROM n";
+    const json = try db.query(arena.allocator(), sql, 100);
+    try testing.expect(json.len < Db.query_max_bytes + 4096);
+    try testing.expect(std.mem.endsWith(u8, json, "\"truncated\":true}"));
+}
+
+test "one huge value cannot be built, or returned past the byte limit" {
+    var db: Db = try .open(":memory:", .sandbox);
+    defer db.close();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const too_long = try db.query(a, "SELECT hex(zeroblob(100000000))", 10);
+    try testing.expect(std.mem.indexOf(u8, too_long, "too big") != null);
+
+    const over_budget = try db.query(a, "SELECT hex(zeroblob(4000000))", 10);
+    try testing.expect(over_budget.len < 4096);
+    try testing.expect(std.mem.endsWith(u8, over_budget, "\"truncated\":true}"));
+}
+
+test "a failed body is tracked for pruning, but is not the last good body" {
+    var db: Db = try .open(":memory:", .writer);
+    defer db.close();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const feed_id = try db.addFeed("https://example.com/a", false, 1);
+    try db.logFetch(.{ .feed_id = feed_id, .started_at = 1, .duration_ms = 1, .raw_sha256 = "good" });
+    try db.logFetch(.{ .feed_id = feed_id, .started_at = 1, .duration_ms = 1, .raw_sha256 = "bad", .err = "NotAFeed" });
+
+    try testing.expectEqualStrings("good", (try db.lastRawHash(a, feed_id)).?);
+    const stale = try db.takeStaleRaw(a, 1);
+    try testing.expectEqual(1, stale.len);
+    try testing.expectEqualStrings("good", stale[0]);
+}
+
+test "a hidden entry leaves lists and search until shown again" {
+    var db: Db = try .open(":memory:", .writer);
+    defer db.close();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const feed_id = try db.addFeed("https://example.com/feed", false, 1);
+    _ = try db.ingest(feed_id, &.{sample("1", "One", "h1")}, 2000);
+    const id = (try db.listEntries(a, .{}))[0].id;
+
+    try testing.expect(try db.mark(id, .{ .hidden = true }, 3000));
+    try testing.expectEqual(0, (try db.listEntries(a, .{})).len);
+    try testing.expectEqual(0, (try db.search(a, "parser", .{})).len);
+    try testing.expect(try db.mark(id, .{ .hidden = false }, 3000));
+    try testing.expectEqual(1, (try db.listEntries(a, .{})).len);
+}
+
+test "search filters apply before the window of recent matches" {
+    var db: Db = try .open(":memory:", .writer);
+    defer db.close();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const feed_id = try db.addFeed("https://example.com/feed", false, 1);
+    _ = try db.ingest(feed_id, &.{sample("old", "Old", "h")}, 2000);
+    const unread = (try db.listEntries(a, .{}))[0].id;
+
+    var rows: std.ArrayList(NewEntry) = .empty;
+    for (0..2100) |i| try rows.append(a, sample(try std.fmt.allocPrint(a, "n{d}", .{i}), "New", "h"));
+    _ = try db.ingest(feed_id, rows.items, 2000);
+    const stmt = try db.prepare("INSERT INTO entry_state (entry_id, read_at) SELECT id, 1 FROM entries WHERE id != ?1", .{unread});
+    defer _ = sqlite3_finalize(stmt);
+    _ = sqlite3_step(stmt);
+
+    const found = try db.search(a, "zig", .{ .unread_only = true });
+    try testing.expectEqual(1, found.len);
+    try testing.expectEqual(unread, found[0].id);
 }
 
 test "an old database is upgraded in place" {

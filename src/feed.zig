@@ -57,6 +57,10 @@ pub const Feed = struct {
     base: ?[]const u8 = null,
     /// Publisher's polling hint, from <ttl> or the syndication module.
     poll_seconds_hint: ?u32 = null,
+    /// Hours from <skipHours>, in UTC. Bit n is hour n.
+    skip_hours: u24 = 0,
+    /// Days from <skipDays>. Bit n is weekday n, counting from Sunday.
+    skip_days: u7 = 0,
     entries: []const Entry = &.{},
     /// Date strings that could not be read, kept for diagnostics.
     unparsed_dates: u32 = 0,
@@ -280,6 +284,15 @@ fn rssVersion(root: xml.Start) Format {
     return .rss20;
 }
 
+fn weekdayIndex(text: []const u8) ?u3 {
+    const names = [_][]const u8{ "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday" };
+    const trimmed = std.mem.trim(u8, text, " \t\r\n");
+    for (names, 0..) |name, index| {
+        if (std.ascii.eqlIgnoreCase(trimmed, name)) return @intCast(index);
+    }
+    return null;
+}
+
 fn parseRss(arena: std.mem.Allocator, p: *xml.Parser, format: Format) Error!Feed {
     var feed: Feed = .{ .format = format };
     var entries: std.ArrayList(Entry) = .empty;
@@ -295,7 +308,8 @@ fn parseRss(arena: std.mem.Allocator, p: *xml.Parser, format: Format) Error!Feed
         const ns = namespaceOf(name);
 
         if (isRssCore(ns)) {
-            if (is(name, "channel")) continue; // Its children are read by this same loop.
+            // Their children are read by this same loop.
+            if (is(name, "channel") or is(name, "skipHours") or is(name, "skipDays")) continue;
             if (is(name, "item")) {
                 const entry = try parseRssItem(arena, p, .{ .feed = &feed });
                 if (entries.items.len < max_entries) try entries.append(arena, entry);
@@ -310,6 +324,12 @@ fn parseRss(arena: std.mem.Allocator, p: *xml.Parser, format: Format) Error!Feed
             } else if (is(name, "ttl")) {
                 const minutes = std.fmt.parseInt(u32, try readText(arena, p), 10) catch 0;
                 if (minutes != 0) feed.poll_seconds_hint = minutes *| 60;
+            } else if (is(name, "hour")) {
+                const hour = std.fmt.parseInt(u8, std.mem.trim(u8, try readText(arena, p), " \t\r\n"), 10) catch 255;
+                // The specification once numbered hours from 1 to 24.
+                if (hour <= 24) feed.skip_hours |= @as(u24, 1) << @intCast(hour % 24);
+            } else if (is(name, "day")) {
+                if (weekdayIndex(try readText(arena, p))) |day| feed.skip_days |= @as(u7, 1) << day;
             } else {
                 // Includes <image> and <textinput>, whose own <title> and <link>
                 // must not be mistaken for the feed's.
@@ -937,4 +957,15 @@ test "identity prefers guid, then link, then a hash" {
     try testing.expectEqualStrings(by_title, try identity(a, .{ .title = "t", .published_at = 1 }));
     const other = try identity(a, .{ .title = "t", .published_at = 2 });
     try testing.expect(!std.mem.eql(u8, by_title, other));
+}
+
+test "skipHours and skipDays become masks" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const parsed = try parse(arena.allocator(),
+        \\<rss><channel><skipHours><hour>0</hour><hour>23</hour><hour>24</hour><hour>x</hour></skipHours>
+        \\<skipDays><day>Sunday</day><day> saturday </day><day>Someday</day></skipDays></channel></rss>
+    );
+    try std.testing.expectEqual(@as(u24, 1 | 1 << 23), parsed.skip_hours);
+    try std.testing.expectEqual(@as(u7, 1 | 1 << 6), parsed.skip_days);
 }

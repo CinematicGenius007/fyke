@@ -211,6 +211,8 @@ pub fn isPublicIp6(a: [16]u8) bool {
     if (a[0] == 0xFE and a[1] & 0xC0 == 0x80) return false; // Link-local.
     if (a[0] == 0xFF) return false; // Multicast.
     if (a[0] == 0x20 and a[1] == 0x01 and a[2] == 0x0D and a[3] == 0xB8) return false; // Documentation.
+    if (a[0] == 0x20 and a[1] == 0x02) return isPublicIp4(a[2..6].*); // 6to4 carries an IPv4 address.
+    if (a[0] == 0x20 and a[1] == 0x01 and a[2] == 0 and a[3] == 0) return false; // Teredo tunnels.
     return true;
 }
 
@@ -302,4 +304,13 @@ test "IPv6 cannot be used to reach private addresses" {
     try testing.expect(!isPublicIp6(link_local));
     try testing.expect(!isPublicIp6(unique_local));
     try testing.expect(isPublicIp6(public));
+}
+
+test "IPv6 tunnels are judged by the address they carry" {
+    const private_6to4 = [16]u8{ 0x20, 0x02, 10, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    const public_6to4 = [16]u8{ 0x20, 0x02, 8, 8, 8, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    const teredo = [16]u8{ 0x20, 0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    try testing.expect(!isPublicIp6(private_6to4));
+    try testing.expect(isPublicIp6(public_6to4));
+    try testing.expect(!isPublicIp6(teredo));
 }

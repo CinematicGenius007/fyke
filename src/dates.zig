@@ -41,7 +41,8 @@ fn civilFromDays(days_since_epoch: i64) struct { year: u64, month: u64, day: u64
     const day = day_of_year - @divFloor(153 * shifted_month + 2, 5) + 1;
     const month = if (shifted_month < 10) shifted_month + 3 else shifted_month - 9;
     const year = year_of_era + era * 400 + @intFromBool(month <= 2);
-    return .{ .year = @intCast(@max(year, 0)), .month = @intCast(month), .day = @intCast(day) };
+    // `formatIso` has room for four digits.
+    return .{ .year = @intCast(std.math.clamp(year, 0, 9999)), .month = @intCast(month), .day = @intCast(day) };
 }
 
 const min_year = 1900;

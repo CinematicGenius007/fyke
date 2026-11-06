@@ -5,6 +5,10 @@ const daemon = @import("daemon.zig");
 
 const Io = std.Io;
 
+/// How long a call waits for the daemon's first byte. The slowest operations wait
+/// on the network and have deadlines of their own, well within this.
+const reply_timeout_ms = 120 * 1000;
+
 /// One connection to the daemon.
 pub const Client = struct {
     io: Io,
@@ -25,9 +29,21 @@ pub const Client = struct {
 
         var line: Io.Writer.Allocating = .init(c.arena);
         const in = &c.reader.interface;
+        if (in.bufferedLen() == 0) try c.waitForReply();
         _ = try in.streamDelimiter(&line.writer, '\n');
         in.toss(1);
         return line.written();
+    }
+
+    /// A daemon that stopped answering must surface as an error, not as a hang.
+    fn waitForReply(c: *Client) !void {
+        var fds = [_]std.c.pollfd{.{ .fd = c.stream.socket.handle, .events = std.c.POLL.IN, .revents = 0 }};
+        while (true) {
+            const ready = std.c.poll(&fds, fds.len, reply_timeout_ms);
+            if (ready > 0) return;
+            if (ready == 0) return error.DaemonTimeout;
+            if (std.posix.errno(ready) != .INTR) return error.DaemonUnavailable;
+        }
     }
 
     /// Calls an operation and returns its typed result.
@@ -89,19 +105,15 @@ pub const Connector = struct {
     fn startDaemon(k: Connector) !void {
         const cwd = Io.Dir.cwd();
         try cwd.createDirPath(k.io, k.home_path);
-        const log_path = try std.fmt.allocPrint(k.arena, "{s}/rssd.log", .{k.home_path});
-        // Each start replaces the log, which keeps it from growing without bound.
-        var log = try cwd.createFile(k.io, log_path, .{});
-        defer log.close(k.io);
 
         const self = try std.process.executablePathAlloc(k.io, k.arena);
         // Its own process group, so that it outlives this client and any terminal.
         _ = try std.process.spawn(k.io, .{
-            .argv = &.{ self, "daemon" },
+            .argv = &.{ self, "daemon", "--log" },
             .environ_map = k.environ,
             .stdin = .ignore,
             .stdout = .ignore,
-            .stderr = .{ .file = log },
+            .stderr = .ignore,
             .pgid = 0,
         });
     }

@@ -15,8 +15,7 @@ const store = @import("store.zig");
 const Io = std.Io;
 
 pub const Config = struct {
-    /// Concurrent fetches. A dead host can hold one for about 90 seconds, because
-    /// Zig 0.17 cannot cancel a TCP connect, so this leaves room for that.
+    /// Concurrent fetches.
     workers: usize = 16,
     per_host: usize = 2,
     /// When false, feeds are fetched only on request. Used by tests.
@@ -69,6 +68,9 @@ pub const Service = struct {
     /// Signaled after events are written, for `events.subscribe`.
     events_lock: Io.Mutex = .init,
     events_changed: Io.Condition = .init,
+
+    /// Held while `config.set` rewrites config.json.
+    config_lock: Io.Mutex = .init,
 
     /// Set by `daemon.stop`. The connection that asked sets `stop` once its reply
     /// has been sent, since exiting first would leave the client with no answer.
@@ -258,7 +260,8 @@ pub fn workerLoop(s: *Service) Io.Cancelable!void {
         };
         fetchJob(s, job.id) catch |err| {
             std.debug.print("feed {d}: {s}\n", .{ job.id, @errorName(err) });
-            // Without this, a failure before any bookkeeping would retry at once, forever.
+            // Reached only when the feed could not be read or its failure recorded.
+            // Without this, it would retry at once, forever.
             const writer = s.lockWriter();
             defer s.unlockWriter();
             const later = s.now() + 3600 * 1000;
@@ -281,7 +284,11 @@ fn fetchJob(s: *Service, id: i64) !void {
         return err;
     };
     s.unlockReader();
-    _ = try pipeline.refresh(s.context(), arena, row orelse return);
+    const feed = row orelse return;
+    const started = s.now();
+    _ = pipeline.refresh(s.context(), arena, feed) catch |err| {
+        _ = try pipeline.failed(s.context(), feed, started, null, @errorName(err), null, null);
+    };
 }
 
 /// Keeps storage bounded: old raw bodies, events and fetch logs.
