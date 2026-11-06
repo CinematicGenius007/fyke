@@ -137,29 +137,40 @@ private struct GeneralPane: View {
         .onChange(of: fullText) { _, on in
             Task { let _: Ok? = try? await Daemon.shared.call("config.set", FullTextParams(fullText: on)) }
         }
-        .onChange(of: background) { _, on in LoginAgent.set(on) }
+        .onChange(of: background) { _, on in
+            guard on != LoginAgent.isInstalled else { return }
+            Task {
+                do {
+                    try await LoginAgent.set(on)
+                } catch {
+                    model.problem = error.localizedDescription
+                }
+                background = LoginAgent.isInstalled
+            }
+        }
     }
 }
 
-/// A launchd agent, so polling continues after logging in with the app closed.
+/// `rss service`, so polling continues after logging in with the app closed.
 enum LoginAgent {
-    private static let label = "local.rss_.daemon"
     private static var file: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/LaunchAgents/\(label).plist")
+        FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/LaunchAgents/local.rss_.daemon.plist")
     }
 
     static var isInstalled: Bool { FileManager.default.fileExists(atPath: file.path) }
 
-    static func set(_ on: Bool) {
-        guard on else {
-            try? FileManager.default.removeItem(at: file)
-            return
-        }
-        let binary = Bundle.main.executableURL!.deletingLastPathComponent().appending(path: "rss").path
-        let plist: [String: Any] = ["Label": label, "ProgramArguments": [binary, "daemon"], "RunAtLoad": true]
-        guard let data = try? PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0) else { return }
-        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? data.write(to: file)
+    static func set(_ on: Bool) async throws {
+        let program = Daemon.shared.programPath
+        try await Task.detached {
+            let process = Process()
+            process.executableURL = URL(filePath: program)
+            process.arguments = ["service", on ? "install" : "uninstall"]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { throw RPCFailure(message: "Could not change the login item") }
+        }.value
     }
 }
 

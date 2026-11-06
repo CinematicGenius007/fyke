@@ -89,12 +89,16 @@ pub const Candidate = struct {
 };
 
 const max_candidates = 8;
+/// No new page is tried past this, so that finding a feed on a slow site ends within
+/// the client's reply timeout, given the deadline of the fetch already running.
+pub const discovery_budget_ms = 60 * 1000;
 const preview_entries = 3;
 
 /// Finds every feed behind `input` without subscribing. Each advertised feed
 /// costs one request, so the list is capped. Well-known paths are only tried
 /// when a page advertises nothing, as in `discover`.
 pub fn preview(c: Context, arena: std.mem.Allocator, input: []const u8, allow_private_network: bool) ![]const Candidate {
+    const started = c.now();
     const start = try normalizeInput(arena, input);
     const first = try fetch.fetch(c.client, arena, .{ .url = start, .allow_private_network = allow_private_network });
     if (first.status != 200) return error.HttpError;
@@ -105,17 +109,22 @@ pub fn preview(c: Context, arena: std.mem.Allocator, input: []const u8, allow_pr
         return list.items;
     }
     for (try core.html.discoverFeeds(arena, first.body, first.final_url)) |link| {
-        if (list.items.len == max_candidates) break;
+        if (list.items.len == max_candidates or outOfTime(c, started)) break;
         try appendCandidate(c, arena, &list, link, allow_private_network);
     }
     if (list.items.len != 0) return list.items;
 
     const paths = [_][]const u8{ "/feed", "/feed.xml", "/rss", "/rss.xml", "/atom.xml", "/index.xml", "/feed.json" };
     for (paths) |path| {
+        if (outOfTime(c, started)) break;
         try appendCandidate(c, arena, &list, try url.resolve(arena, first.final_url, path), allow_private_network);
         if (list.items.len != 0) break;
     }
     return list.items;
+}
+
+fn outOfTime(c: Context, started: i64) bool {
+    return c.now() - started > discovery_budget_ms;
 }
 
 fn appendCandidate(c: Context, arena: std.mem.Allocator, list: *std.ArrayList(Candidate), link: []const u8, allow_private_network: bool) !void {
@@ -152,15 +161,18 @@ const Found = struct { url: []const u8, response: fetch.Response };
 /// The order is from docs/rss-primer.md: the URL itself, what the page advertises,
 /// then well-known paths.
 fn discover(c: Context, arena: std.mem.Allocator, start: []const u8, allow_private_network: bool) !Found {
+    const started = c.now();
     const first = try fetch.fetch(c.client, arena, .{ .url = start, .allow_private_network = allow_private_network });
     if (first.status != 200) return error.HttpError;
     if (isFeed(arena, first.body)) return .{ .url = first.final_url, .response = first };
 
     for (try core.html.discoverFeeds(arena, first.body, first.final_url)) |candidate| {
+        if (outOfTime(c, started)) return error.NoFeedFound;
         if (try tryFeed(c, arena, candidate, allow_private_network)) |found| return found;
     }
     const paths = [_][]const u8{ "/feed", "/feed.xml", "/rss", "/rss.xml", "/atom.xml", "/index.xml", "/feed.json" };
     for (paths) |path| {
+        if (outOfTime(c, started)) return error.NoFeedFound;
         if (try tryFeed(c, arena, try url.resolve(arena, first.final_url, path), allow_private_network)) |found| return found;
     }
     return error.NoFeedFound;

@@ -232,8 +232,10 @@ final class AppModel {
     private var currentId: Int64? { article?.entry.id ?? selectedId }
 
     func toggleRead() {
-        guard let id = currentId, let row = entries.first(where: { $0.id == id }) else { return }
-        Task { await setRead(id, !row.read) }
+        guard let id = currentId else { return }
+        let read = article?.entry.id == id ? article?.entry.read : entries.first { $0.id == id }?.read
+        guard let read else { return }
+        Task { await setRead(id, !read) }
     }
 
     func toggleStar() {
@@ -299,10 +301,14 @@ final class AppModel {
         Task {
             do {
                 let result: StatusResult = try await Daemon.shared.callSlow("entries.fetch_full", IdParams(id: id))
-                fullTextStatus = result.status == "done" ? nil : "No fuller article found on the page"
-                await open(id)
+                guard article?.entry.id == id else { return }
+                if result.status == "done" {
+                    await open(id)
+                } else {
+                    fullTextStatus = "No fuller article found on the page"
+                }
             } catch {
-                fullTextStatus = error.localizedDescription
+                if article?.entry.id == id { fullTextStatus = error.localizedDescription }
             }
         }
     }

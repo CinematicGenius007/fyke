@@ -344,6 +344,12 @@ check("an extreme age does not stop the daemon", "result" in extreme.call("entri
 check("nor does a negative one", "result" in extreme.call("entries.search", query="word", since_days=-2**63))
 check("a huge value cannot be built by a query", "too big" in json.dumps(extreme.call("db.query", sql="SELECT hex(zeroblob(100000000))")))
 
+silent = socket.socket(); silent.bind(("127.0.0.1", 0)); silent.listen(1)
+started = time.time()
+stalled = rss("add", f"http://127.0.0.1:{silent.getsockname()[1]}/feed", "--allow-private", ok=False)
+check("a host that accepts and then stalls ends at the deadline", stalled.returncode != 0 and time.time() - started < 35, time.time() - started)
+silent.close()
+
 malformed["on"] = True
 feed_id = json.loads(rss("feeds", "--json").stdout)["items"][0]["id"]
 for _ in range(25): rss("refresh", str(feed_id))
