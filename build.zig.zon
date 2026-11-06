@@ -1,0 +1,7 @@
+.{
+    .name = .rss_,
+    .version = "0.0.0",
+    .fingerprint = 0x49030752ff588321,
+    .minimum_zig_version = "0.17.1",
+    .paths = .{ "build.zig", "build.zig.zon", "src", "tools", "schema", "vendor" },
+}
