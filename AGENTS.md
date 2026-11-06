@@ -2,7 +2,7 @@
 
 Local-first RSS reader with AI aggregation, built from scratch. One daemon owns a SQLite database; the GUI, TUI, CLI and MCP server are thin clients of one API.
 
-Status: milestones 1 to 5 are implemented: parser, HTML to blocks, fetcher, SQLite store, daemon, operation registry, the `rss` CLI as a socket client, `rss mcp` and `rss tui`. No GUI or aggregator yet. `spikes/` is throwaway. Language: Zig 0.17.1 core, SwiftUI macOS GUI.
+Status: milestones 1 to 6 are implemented: parser, HTML to blocks, fetcher, SQLite store, daemon, operation registry, the `rss` CLI as a socket client, `rss mcp`, `rss tui` and the SwiftUI app in `gui/`. No aggregator yet. `spikes/` is throwaway. Language: Zig 0.17.1 core, SwiftUI macOS GUI.
 
 ## Read in this order
 
@@ -46,9 +46,14 @@ python3 tools/py_mcp.py ./zig-out/bin/rss      # official Python client, needs p
 python3 tools/mcp_http_bridge.py ./zig-out/bin/rss  # then, in another shell:
 npx @modelcontextprotocol/conformance@0.1.16 server --url http://127.0.0.1:8931/mcp --suite all --spec-version 2025-11-25 --expected-failures tools/conformance-baseline.yml
 node tools/sdk_mcp.mjs ./zig-out/bin/rss modern  # official client; see the file for setup
+python3 tools/eval_extract.py ./zig-out/bin/feedcheck html.jsonl dump.jsonl  # sends real requests
 python3 tools/load_corpus.py ./zig-out/bin/rss corpus dump.jsonl
 python3 tools/scale.py ./zig-out/bin/rss local corpus 1000
+python3 tools/bundle_app.py                 # builds zig-out/rss_.app, after zig build -Drelease
+python3 tools/gen_tokens.py                 # gui/tokens.css to Tokens.swift
 ```
+
+Colors, fonts and radii are designed in the Paper file. Export them to `gui/tokens.css`, regenerate, and never edit `Tokens.swift`. `RSS_SNAPSHOT=out.png` makes the app save its window and quit, with `RSS_SCREEN` choosing a screen and `-theme dark -followSystem NO` a theme. Use `RSS_HOME` so that checks never touch real data.
 
 A new capability is a struct in `src/ops.zig`. Add it to `all`, and the socket and MCP serve it. Give it `docs` for its parameters, or `agent_visible = false`.
 

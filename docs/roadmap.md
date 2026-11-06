@@ -10,7 +10,7 @@ No deadlines. Each milestone produces something you can use, and each has a test
 | 3 | **Daemon** (done) | Concurrency, sockets, scheduling | 1,000 feeds poll in the background; clients connect; OPML import and export work |
 | 4 | **TUI** (done) | Terminals, rendering, input | Daily reading works with no browser; search, marks and live updates work |
 | 5 | **MCP** (done) | Protocol design, comptime schemas | Claude Code and one other agent answer "what did I miss about X?" from your feeds |
-| 6 | **GUI** | Native app, IPC | Full parity with the TUI; you prefer it for daily use |
+| 6 | **GUI** (built) | Native app, IPC | Full parity with the TUI; you prefer it for daily use |
 | 7 | **Aggregator v1** | Clustering, ranking | Dedupe, stories and ranking work with no model at all |
 | 8 | **Runners** | Model APIs, job queues | Morning brief with validated citations through `http` and `exec` |
 | 9 | **ACP** | Agent protocols | Any ACP agent runs a lens, with progress streaming into the UI; "ask my feeds" chat |
@@ -94,6 +94,19 @@ Built after milestone 5, by choice. Measured 2026-11-06.
 
 Limits: pyte is not a real terminal, so this has not been checked by eye in Ghostty, iTerm or Terminal. Adding a feed blocks the interface for up to 30 s. Emoji sequences joined with zero-width joiners may measure wrongly, as terminals disagree about them. Images show as a link. 200 s of coverage fuzzing found nothing, but ended at a time limit with no run count.
 
+## After milestone 5
+
+The TUI got a second design pass, then was frozen: two-line entries, a side bar for selection in place of filled rows, relative dates, a measured reading column, mouse support, and `O` for the terminal browser. Set `terminal_browser` in `config.json` to change that command.
+
+**Full-text fetching** replaces short feed summaries with the article from the page. It runs one request at a time with a one second gap, asks `robots.txt` first, covers the last 30 days by itself, and takes `f` in the TUI or `entries.fetch_full` for anything older. Set `full_text` to false in `config.json` to turn it off. An extraction replaces the feed's text only if it is at least 1.5 times as long.
+
+| Check | Result |
+|---|---|
+| `tools/eval_extract.py` | 149 real pages from feeds that publish full text, so the true article is known: 142 good, median recall 100%, median precision 99.6%. 3 found nothing, and those entries keep their summary |
+| Zed and Delta feeds | 5 Delta posts went from about 90 characters to about 8,000 in the first 24 seconds |
+
+That sample is blogs that already publish full text, and sites that publish only summaries may be harder. Video players can leave stray text such as "0:00" behind.
+
 ## Milestone 5 results
 
 Built before milestone 4, by choice. Measured 2026-11-06.
@@ -113,6 +126,21 @@ Built before milestone 4, by choice. Measured 2026-11-06.
 Agents exposed what the protocol tests could not. Both reported almost no Zig news, although 0.17.1 had just shipped: the entry "0.17.1 Released", in a feed called "News" on ziglang.org, never contains the word "zig". Search now matches feed names and hosts too, and Claude Code then found it.
 
 The official conformance suite is not run: its server mode needs an HTTP URL, and `rss mcp` is stdio only. Other limits: two model runs are not a measure of injection resistance, and `outputSchema` and `subscriptions/listen` are not implemented.
+
+## Milestone 6 results
+
+Built from the approved Paper designs. Measured 2026-11-06 against real feeds in a throwaway `RSS_HOME`.
+
+| Check | Result |
+|---|---|
+| Socket client | The app holds no database connection. Quick calls share one connection, and calls that wait on the network get their own |
+| Driven through accessibility | `j`, `s`, Settings, the full-text switch and adding a feed all reached the daemon |
+| Add feed | `lobste.rs` offered 2 feeds, and subscribing to one appeared in the sidebar with no restart |
+| Rendering | All, feed, reader, first run, sheet and every Settings tab compared by eye with Paper, in Light and Dark where noted below |
+
+New operations: `feeds.preview`, `folders.list`, `config.get`, `config.set`. `feeds.add` takes `title` and `folder`, and `entries.list` takes `with_summary`.
+
+Limits: the Briefing screen is a placeholder until milestone 7. Shortcuts cannot be rebound. The sidebar lists feeds without their folders. Newsprint and Terminal derive most colors, because Paper defines only three for each. The default reading font is not bundled: other Macs fall back to Newsreader. Finding feeds on a site took 5 to 14 seconds in one test, because each advertised feed is fetched. There is no automated GUI test suite yet, and "you prefer it for daily use" is yours to judge.
 
 ## Deferred, deliberately
 

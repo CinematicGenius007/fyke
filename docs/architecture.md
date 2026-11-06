@@ -1,6 +1,6 @@
 # Architecture
 
-Status: parser, fetcher, store, daemon, CLI, MCP server and TUI are built; the GUI and aggregator are design. See the [roadmap](roadmap.md). The language choice is in [decisions/0001-language.md](decisions/0001-language.md).
+Status: parser, fetcher, store, daemon, CLI, MCP server, TUI and GUI are built; the aggregator is design. See the [roadmap](roadmap.md). The language choice is in [decisions/0001-language.md](decisions/0001-language.md).
 
 ## Goals
 
@@ -71,6 +71,7 @@ Dependencies only point downward. The bottom layer does no I/O, which keeps it t
 | | `store` | The only module containing SQL |
 | Pure | `xml` | Lenient streaming pull parser |
 | | `html` | Tokenizer, then HTML to blocks |
+| | `extract`, `robots` | Article extraction, robots.txt rules |
 | | `feed` | RSS, Atom, JSON Feed, OPML, to `Entry` |
 | | `terminal`, `layout` | Cell grid, key decoder, article layout |
 | | `dates`, `url`, `simhash` | Small pure utilities |
@@ -86,6 +87,7 @@ Dependencies only point downward. The bottom layer does no I/O, which keeps it t
 - **Skip unchanged bodies.** About 10% of servers ignored validators in the spike. If a `200` body matches the last hash, stop here.
 - **Parser.** Sniffs the format from content, not from `Content-Type`. Pure function: bytes in, entries out, with an arena freed once per fetch.
 - **Content cleaner.** Resolves relative URLs, strips tracking pixels and params, converts HTML to blocks, and extracts `content_text`.
+- **Full text.** A separate loop fetches the article for short entries, one page at a time, after asking `robots.txt`. See [src/extract.zig](../src/extract.zig). Page text is as untrusted as feed text, and reaches agents the same way.
 - **Identity and dedupe.** Applies the [identity rule](rss-primer.md#entry-identity), then cross-feed matching on `canonical_url` and `simhash`.
 - **Commit.** Workers hand results to a single writer that batches them into one transaction and appends `events`.
 

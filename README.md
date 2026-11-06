@@ -2,7 +2,7 @@
 
 A local-first RSS reader with AI aggregation, built from scratch. Read in a GUI or TUI, connect any agent on your machine, and keep all of the data yourself.
 
-Status: the daemon polls feeds in the background. Read them with the TUI or CLI, or through any MCP agent. No GUI or aggregator yet. `rss_` is a working name.
+Status: the daemon polls feeds in the background. Read them with the macOS app, the TUI or CLI, or through any MCP agent. No aggregator yet. `rss_` is a working name.
 
 ```bash
 zig build -Drelease
