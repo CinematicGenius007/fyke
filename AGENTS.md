@@ -61,7 +61,7 @@ node tools/sdk_mcp.mjs ./zig-out/bin/rss modern  # official client; see the file
 python3 tools/eval_extract.py ./zig-out/bin/feedcheck html.jsonl dump.jsonl  # sends real requests
 python3 tools/load_corpus.py ./zig-out/bin/rss corpus dump.jsonl
 python3 tools/scale.py ./zig-out/bin/rss local corpus 1000
-python3 tools/e2e_gui.py                    # key presses in the app, after bundle_app.py
+python3 tools/e2e_gui.py                    # key presses and clicks in the app, after bundle_app.py
 python3 tools/bundle_app.py                 # builds zig-out/rss_.app; --install copies it to /Applications
 python3 tools/gen_tokens.py                 # gui/tokens.css to Tokens.swift
 ```

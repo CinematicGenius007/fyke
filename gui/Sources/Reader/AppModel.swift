@@ -28,6 +28,47 @@ enum Confirmation: Identifiable {
     }
 }
 
+/// A value shared with a callback on another thread.
+final class Locked<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: Value
+    init(_ value: Value) { stored = value }
+    var value: Value { lock.withLock { stored } }
+    func update(_ change: (inout Value) -> Void) { lock.withLock { change(&stored) } }
+}
+
+/// A move of the data folder, from the question to the result.
+@MainActor @Observable
+final class DataMove {
+    enum Warning {
+        case external, noSpace
+
+        var text: String {
+            switch self {
+            case .external: "This is an external drive. If it is not connected, rss_ cannot start."
+            case .noSpace: "There is not enough free space there."
+            }
+        }
+    }
+
+    enum Phase: Equatable {
+        case asking
+        case moving(String)
+        case failed(String)
+    }
+
+    let target: URL
+    let bytes: Int64
+    let warning: Warning?
+    var phase = Phase.asking
+
+    init(target: URL, bytes: Int64, warning: Warning?) {
+        self.target = target
+        self.bytes = bytes
+        self.warning = warning
+    }
+}
+
 struct Article {
     var entry: Entry
     var blocks: [Block]
@@ -57,6 +98,7 @@ final class AppModel {
     /// The remote page showing in place of the reader.
     var web: WebState?
     var fullTextStatus: String?
+    var dataMove: DataMove?
     var settingsTab = SettingsView.Tab(rawValue: ProcessInfo.processInfo.environment["RSS_TAB"] ?? "") ?? .General
 
     private var pendingReload: Task<Void, Never>?
@@ -125,6 +167,7 @@ final class AppModel {
             await reload()
             hasLoaded = true
             await openRequestedScreen()
+            await openRequestedMove()
             for await event in Daemon.shared.events(since: stats.lastEventSeq) {
                 _ = event
                 scheduleReload()
@@ -161,8 +204,18 @@ final class AppModel {
         }
     }
 
+    /// `RSS_MOVE` asks about moving the data folder at launch, and `RSS_MOVE_RUN` agrees,
+    /// for checks that cannot click a file panel.
+    private func openRequestedMove() async {
+        let environment = ProcessInfo.processInfo.environment
+        guard let path = environment["RSS_MOVE"] else { return }
+        await proposeMove(to: URL(filePath: path))
+        if environment["RSS_MOVE_RUN"] != nil { startMove() }
+    }
+
     /// A poll can produce hundreds of events at once. One reload covers them.
     private func scheduleReload() {
+        if Daemon.shared.paused { return }
         pendingReload?.cancel()
         pendingReload = Task {
             try? await Task.sleep(for: .milliseconds(250))
@@ -171,6 +224,7 @@ final class AppModel {
     }
 
     func reload() async {
+        if Daemon.shared.paused { return }
         do {
             let feedList: Items<Feed> = try await Daemon.shared.call("feeds.list")
             let folderList: Items<Folder> = try await Daemon.shared.call("folders.list")
@@ -476,6 +530,122 @@ final class AppModel {
             problem = error.localizedDescription
             return nil
         }
+    }
+
+    // MARK: Data folder
+
+    /// Asks the person to choose a folder, then asks whether to go ahead.
+    func chooseDataFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.prompt = "Choose"
+        guard panel.runModal() == .OK, let chosen = panel.url else { return }
+        Task { await proposeMove(to: chosen) }
+    }
+
+    /// A folder that already holds something gets a folder of its own inside it, so
+    /// that data never mixes with someone else's files.
+    private func proposeMove(to chosen: URL) async {
+        let manager = FileManager.default
+        func isEmpty(_ url: URL) -> Bool { ((try? manager.contentsOfDirectory(atPath: url.path)) ?? []).isEmpty }
+        var target = chosen
+        if !isEmpty(chosen) {
+            target = chosen.appending(path: "rss_data")
+            if manager.fileExists(atPath: target.path) && !isEmpty(target) {
+                problem = "That folder already holds a rss_data folder"
+                return
+            }
+        }
+        let use: StorageUse? = try? await Daemon.shared.call("storage.get", NoParams())
+        let bytes = (use?.databaseBytes ?? 0) + (use?.rawBytes ?? 0) + (use?.logBytes ?? 0) + (use?.settingsBytes ?? 0)
+        let keys: Set<URLResourceKey> = [
+            .volumeIsInternalKey, .volumeIsLocalKey, .volumeIsRemovableKey, .volumeAvailableCapacityForImportantUsageKey,
+            .volumeIdentifierKey,
+        ]
+        var warning: DataMove.Warning?
+        let here = try? Daemon.shared.home.resolvingSymlinksInPath().resourceValues(forKeys: keys)
+        if let values = try? chosen.resourceValues(forKeys: keys) {
+            // Inside one volume a move is a rename, which needs no room and unplugs nothing.
+            let sameVolume = values.volumeIdentifier?.isEqual(here?.volumeIdentifier) ?? false
+            if sameVolume {
+                warning = nil
+            } else if let free = values.volumeAvailableCapacityForImportantUsage, free < bytes * 12 / 10 {
+                warning = .noSpace
+            } else if values.volumeIsInternal != true || values.volumeIsLocal == false || values.volumeIsRemovable == true {
+                // A disk image reports no answer for internal, so only a yes counts.
+                warning = .external
+            }
+        }
+        dataMove = DataMove(target: target, bytes: bytes, warning: warning)
+    }
+
+    /// Runs `rss data move`, so that the work of stopping the daemon, moving files and
+    /// restarting is in one place that the terminal uses too.
+    func startMove() {
+        guard let move = dataMove, move.phase == .asking, move.warning != .noSpace else { return }
+        move.phase = .moving("Stopping…")
+        Daemon.shared.paused = true
+        let program = Daemon.shared.programPath
+        let target = move.target.path
+        Task {
+            let result = await Self.runMove(program: program, target: target) { stage in
+                Task { @MainActor in move.phase = .moving(stage) }
+            }
+            Daemon.shared.paused = false
+            if result.status == 0 {
+                dataMove = nil
+                await Prefs.shared.load()
+                await reload()
+            } else {
+                // Past "starting" the data and the link are in place, and only the restart failed.
+                let moved = result.output.contains("starting")
+                move.phase = .failed(moved ? "Your data moved, but rss_ could not restart. Opening rss_ again usually fixes this." : Self.moveFailure(result.errors))
+                await reload()
+            }
+        }
+    }
+
+    private nonisolated static let stageNames = [
+        "stopping": "Stopping", "moving": "Moving", "verifying": "Checking the copy", "linking": "Linking", "starting": "Restarting",
+    ]
+
+    /// Runs the command and reports each stage as it prints it, since a copy can take minutes.
+    private nonisolated static func runMove(program: String, target: String, stage: @escaping @Sendable (String) -> Void) async -> (status: Int32, output: String, errors: String) {
+        await Task.detached {
+            let process = Process()
+            process.executableURL = URL(filePath: program)
+            process.arguments = ["data", "move", target]
+            let out = Pipe(), err = Pipe()
+            process.standardOutput = out
+            process.standardError = err
+            let seen = Locked("")
+            out.fileHandleForReading.readabilityHandler = { handle in
+                let text = String(decoding: handle.availableData, as: UTF8.self)
+                seen.update { $0 += text }
+                for line in text.split(separator: "\n") { if let name = stageNames[String(line)] { stage(name + "…") } }
+            }
+            do { try process.run() } catch { return (1, "", error.localizedDescription) }
+            process.waitUntilExit()
+            out.fileHandleForReading.readabilityHandler = nil
+            let errors = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            return (process.terminationStatus, seen.value, errors)
+        }.value
+    }
+
+    /// The command names what stopped it, and only a few of these a person can cause.
+    private static func moveFailure(_ text: String) -> String {
+        let reasons = [
+            ("TargetNotEmpty", "That folder is not empty."),
+            ("InsideCurrentFolder", "That folder is inside the one in use."),
+            ("ParentMissing", "That folder's location does not exist."),
+            ("NoSpaceLeft", "There was not enough free space."),
+            ("DaemonStillRunning", "rss_ could not stop its background service."),
+            ("VerifyFailed", "The copy did not match, so nothing was changed."),
+        ]
+        let reason = reasons.first { text.contains($0.0) }?.1 ?? "Something went wrong."
+        return reason + " Your data is where it was."
     }
 
     func newFolderHolding(_ feed: Int64) { newFolder(in: nil, holding: feed) }

@@ -496,3 +496,75 @@ struct ShortcutsPopup: View {
         .frame(maxWidth: .infinity)
     }
 }
+
+/// Asks before the data folder moves, and shows the move while it runs.
+struct MoveDialog: View {
+    let move: DataMove
+    @Environment(AppModel.self) private var model
+    @Environment(\.palette) private var p
+    @Environment(\.titleFamily) private var family
+
+    private var place: String {
+        move.target.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
+    }
+
+    private var size: String { move.bytes.formatted(.byteCount(style: .file)) }
+
+    var body: some View {
+        ZStack {
+            p.scrim.ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 0) {
+                Text(move.phase == .asking || isFailed ? "Move your data?" : "Moving your data")
+                    .font(.custom(family, fixedSize: 22).weight(.semibold)).tracking(-0.22).padding(.bottom, 6)
+                switch move.phase {
+                case .asking: asking
+                case .moving(let stage): Text(stage).font(.ui(14)).foregroundStyle(p.inkSoft)
+                case .failed(let reason): failed(reason)
+                }
+            }
+            .padding(22)
+            .frame(width: 420, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: Radii.sheet).fill(p.ground)
+                    .shadow(color: .black.opacity(p.isDark ? 0.5 : 0.15), radius: 25, y: 18)
+            }
+            .overlay(RoundedRectangle(cornerRadius: Radii.sheet).stroke(p.hairline))
+        }
+    }
+
+    private var isFailed: Bool {
+        if case .failed = move.phase { return true }
+        return false
+    }
+
+    private var summary: some View {
+        (Text("\(size) moves to ") + Text(place).font(.code(13)).foregroundStyle(p.ink) + Text(". rss_ restarts when it is done."))
+            .font(.ui(14)).foregroundStyle(p.inkSoft).fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder private var asking: some View {
+        summary
+        if let warning = move.warning {
+            HStack(alignment: .top, spacing: 8) {
+                Icon(glyph: .warning).padding(.top, 1)
+                Text(warning.text).font(.ui(13)).foregroundStyle(p.muted).fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, 12)
+        }
+        HStack(spacing: 8) {
+            Spacer()
+            Button("Cancel") { model.dataMove = nil }.buttonStyle(Plain()).keyboardShortcut(.cancelAction)
+            Button("Move data") { model.startMove() }.buttonStyle(Solid()).disabled(move.warning == .noSpace)
+        }
+        .padding(.top, 18)
+    }
+
+    @ViewBuilder private func failed(_ reason: String) -> some View {
+        Text(reason).font(.ui(14)).foregroundStyle(p.inkSoft).fixedSize(horizontal: false, vertical: true)
+        HStack {
+            Spacer()
+            Button("Close") { model.dataMove = nil }.buttonStyle(Plain()).keyboardShortcut(.cancelAction)
+        }
+        .padding(.top, 18)
+    }
+}
