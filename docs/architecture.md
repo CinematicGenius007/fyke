@@ -1,6 +1,6 @@
 # Architecture
 
-Status: parser, fetcher, store, daemon, CLI, MCP server, TUI and GUI are built; the aggregator is design. See the [roadmap](roadmap.md). The language choice is in [decisions/0001-language.md](decisions/0001-language.md).
+Status: parser, fetcher, store, daemon, CLI, MCP server, TUI and GUI are built. The aggregator is design, so `aggregate` and `runners` below are planned modules. See the [roadmap](roadmap.md). The language choice is in [decisions/0001-language.md](decisions/0001-language.md).
 
 ## Goals
 
@@ -10,7 +10,7 @@ Status: parser, fetcher, store, daemon, CLI, MCP server, TUI and GUI are built; 
 4. **Open to any agent.** Agents reach all data through standards, with no per-agent code.
 5. **Fast.** See [performance budgets](#performance-budgets).
 
-Non-goals for now: multi-user, cloud sync, mobile, hosting a public service.
+Non-goals: multi-user, cloud sync, mobile, hosting a public service.
 
 ## The shape of the system
 
@@ -28,7 +28,7 @@ The third rule is what makes a non-web GUI and a TUI practical. Rendering arbitr
 
 ### Why a daemon and not a library
 
-Polling must run while no UI is open, and several clients (GUI plus an agent) need access at once. A socket also makes the UI language independent of the core language, which is what keeps [the language decision](decisions/0001-language.md) reversible. The daemon starts on demand when a client finds no socket, and can run as a `launchd` agent.
+Polling must run while no UI is open, and several clients (GUI plus an agent) need access at once. A socket also makes the UI language independent of the core language, which is what keeps [the language decision](decisions/0001-language.md) reversible. The daemon starts on demand when a client finds no socket. `rss service install` runs it as a `launchd` agent instead, from login.
 
 ## On-disk layout
 
@@ -38,11 +38,12 @@ Everything lives under `$RSS_HOME`, default `~/.local/share/rss_`. Backing up is
 rss.db            SQLite database (WAL mode)
 raw/ab/abcd….gz   Fetched feed bodies, by SHA-256
 rssd.sock         API socket, mode 0600
+rssd.log          Log of a daemon started in the background, replaced at each start
 config.json       Settings
-interests.md      Your stated interests, plain text, used for ranking
+interests.md      Your stated interests, plain text, used for ranking (planned)
 ```
 
-Keeping raw bodies means a parser bug is fixable after the fact: fix it, reparse history. Retention is the last 20 distinct bodies per feed.
+Keeping raw bodies means a parser bug is fixable after the fact: fix it, reparse history. Retention is the last 20 distinct bodies per feed, counting bodies that failed to parse.
 
 ## Concurrency
 
@@ -60,21 +61,22 @@ Dependencies only point downward. The bottom layer does no I/O, which keeps it t
 
 | Layer | Module | Responsibility |
 |---|---|---|
-| Surfaces | `main`, `tui`, `mcp`, `client`, `apps/*` | Adapters. No logic of their own |
+| Surfaces | `main`, `tui`, `mcp`, `client`, `launchd`, `gui/` | Adapters. No logic of their own |
 | API | `ops` | Operation registry, schemas, tier checks |
 | | `daemon` | JSON-RPC over the socket, event streaming |
 | Engine | `service` | Shared state, scheduler, workers, housekeeping |
 | | `pipeline` | Runs ingest from bytes to committed rows |
-| | `aggregate` | Lenses, stages, job queue |
-| | `runners` | `http`, `exec`, `acp` backends |
+| | `aggregate` | Lenses, stages, job queue (planned) |
+| | `runners` | `http`, `exec`, `acp` backends (planned) |
 | I/O | `fetch` | HTTP, redirects, validators, SSRF guard |
 | | `store` | The only module containing SQL |
 | Pure | `xml` | Lenient streaming pull parser |
 | | `html` | Tokenizer, then HTML to blocks |
 | | `extract`, `robots` | Article extraction, robots.txt rules |
-| | `feed` | RSS, Atom, JSON Feed, OPML, to `Entry` |
-| | `terminal`, `layout` | Cell grid, key decoder, article layout |
-| | `dates`, `url`, `simhash` | Small pure utilities |
+| | `feed`, `opml` | RSS, Atom and JSON Feed to `Entry`, and subscription lists |
+| | `blocks` | The content model, and its JSON, Markdown and text forms |
+| | `terminal`, `layout`, `width_table` | Cell grid, key decoder, article layout, character widths |
+| | `dates`, `url`, `encoding` | Small pure utilities |
 
 ## Ingest pipeline
 
@@ -82,13 +84,13 @@ Dependencies only point downward. The bottom layer does no I/O, which keeps it t
 
 *A feed body is stored before it is parsed, so any later stage can be replayed.* ([source](diagrams/ingest.mmd))
 
-- **Scheduler.** Finds due feeds with `feeds_due`. Next poll is computed from the feed's observed posting rate, publisher hints, backoff and jitter.
-- **Fetcher.** Bounded worker pool with a per-host limit, and a hard deadline per fetch. Protocol behavior is in the [primer](rss-primer.md#being-a-polite-http-client). TCP connect cannot yet be canceled in Zig 0.17, so a dead host can hold a worker until the OS gives up, around 90 s. Dead hosts back off quickly, and the pool has spare capacity for this.
+- **Scheduler.** Finds due feeds with `feeds_due`. Next poll is computed from the feed's observed posting rate, publisher hints, backoff and jitter, then moved out of any `skipHours` and `skipDays`. A refresh someone asks for ignores those two.
+- **Fetcher.** Bounded worker pool with a per-host limit, and a hard deadline per fetch. Protocol behavior is in the [primer](rss-primer.md#being-a-polite-http-client). The standard library's TCP connect cannot be canceled, so `fetch` replaces it through the `Io` interface, and the deadline holds for a host that never answers.
 - **Skip unchanged bodies.** About 10% of servers ignored validators in the spike. If a `200` body matches the last hash, stop here.
 - **Parser.** Sniffs the format from content, not from `Content-Type`. Pure function: bytes in, entries out, with an arena freed once per fetch.
 - **Content cleaner.** Resolves relative URLs, strips tracking pixels and params, converts HTML to blocks, and extracts `content_text`.
 - **Full text.** A separate loop fetches the article for short entries, one page at a time, after asking `robots.txt`. See [src/extract.zig](../src/extract.zig). Page text is as untrusted as feed text, and reaches agents the same way.
-- **Identity and dedupe.** Applies the [identity rule](rss-primer.md#entry-identity), then cross-feed matching on `canonical_url` and `simhash`.
+- **Identity.** Applies the [identity rule](rss-primer.md#entry-identity), and stores `canonical_url` for the cross-feed dedupe the [aggregator](aggregator.md) will add.
 - **Commit.** Workers hand results to a single writer that batches them into one transaction and appends `events`.
 
 Failure in one feed never affects another; it is recorded in `fetch_log` and retried with backoff.
@@ -120,7 +122,7 @@ Renderers: native text views in the GUI, ANSI in the TUI, Markdown for agents. M
 
 ## Data model
 
-[schema/0001_init.sql](../schema/0001_init.sql) is the source of truth and is commented for reading. In summary:
+[schema/](../schema/) is the source of truth and is commented for reading, starting at [0001_init.sql](../schema/0001_init.sql). In summary:
 
 | Group | Tables |
 |---|---|
@@ -167,6 +169,7 @@ Feeds are untrusted input from the internet, and this app hands that input to AI
 | Scripts in content | Impossible by construction: blocks have no script type |
 | Tracking | Remote images load on request, known pixels are stripped, click-tracking params removed |
 | Other local users | Socket and data directory are owner-only, set explicitly because a new socket defaults to `0755`. No TCP port by default |
+| Agents causing requests | `entries.fetch_full` is in the annotate tier, so such an agent can make the daemon fetch a URL that a feed chose. It goes through the same address check and asks `robots.txt` first. `feeds.preview` and `feeds.add`, which take any URL, need the manage tier |
 | Secrets in the database | API keys live in Keychain or environment variables. `runners.config_json` holds only a reference |
 
 ## Performance budgets
