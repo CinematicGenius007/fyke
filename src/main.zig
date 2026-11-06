@@ -6,6 +6,7 @@ const core = @import("core");
 const client_module = @import("client.zig");
 const daemon = @import("daemon.zig");
 const data_home = @import("data_home.zig");
+const data_move = @import("data_move.zig");
 const launchd = @import("launchd.zig");
 const mcp = @import("mcp.zig");
 const ops = @import("ops.zig");
@@ -35,6 +36,7 @@ const usage =
     \\  mcp [--tier read|annotate|manage]   MCP server on stdio, for agents
     \\  daemon [stop]                  run in the foreground, or stop it
     \\  service install|uninstall|status   run the daemon from login, on macOS
+    \\  data move <folder>             move the data folder, then restart
     \\
     \\Clients start the daemon when needed.
     \\Data lives in $RSS_HOME, by default ~/.rss_
@@ -156,6 +158,14 @@ pub fn main(init: std.process.Init) !u8 {
         return 0;
     }
 
+    if (std.mem.eql(u8, command, "data")) {
+        return dataCommand(connector, init.environ_map, args, out) catch |err| {
+            try out.flush();
+            std.debug.print("rss: data: {s}\n", .{@errorName(err)});
+            return 1;
+        };
+    }
+
     if (std.mem.eql(u8, command, "service")) {
         return serviceCommand(connector, init.environ_map, args, out) catch |err| {
             std.debug.print("rss: service: {s}\n", .{@errorName(err)});
@@ -199,6 +209,21 @@ pub fn main(init: std.process.Init) !u8 {
     }
     try out.writeAll(usage);
     return 2;
+}
+
+fn dataCommand(connector: client_module.Connector, environ: *const std.process.Environ.Map, args: Args, out: *Io.Writer) !u8 {
+    const user_home = environ.get("HOME") orelse return error.NoHomeDirectory;
+    const action = args.positional() orelse "";
+    if (!std.mem.eql(u8, action, "move")) {
+        try out.writeAll(usage);
+        return 2;
+    }
+    const target = if (args.items.len > 1) args.items[1] else {
+        try out.writeAll(usage);
+        return 2;
+    };
+    try data_move.run(connector, user_home, target, out);
+    return 0;
 }
 
 fn serviceCommand(connector: client_module.Connector, environ: *const std.process.Environ.Map, args: Args, out: *Io.Writer) !u8 {
@@ -378,6 +403,7 @@ fn daemonCommand(app: App, args: Args) !void {
 
 test {
     _ = launchd;
+    _ = data_move;
     _ = @import("pipeline.zig");
     _ = @import("store.zig");
     _ = mcp;

@@ -578,5 +578,58 @@ check("a link at the new path is left in place", p.returncode == 0 and os.path.i
 subprocess.run([RSS, "daemon", "stop"], env=env_link, capture_output=True, timeout=30)
 shutil.rmtree(user); shutil.rmtree(user2); shutil.rmtree(user3)
 
+# rss data move, with a throwaway HOME so that nothing real is touched
+mv_home = tempfile.mkdtemp(prefix="rss-v-", dir="/tmp")
+env_mv = {k: v for k, v in os.environ.items() if k != "RSS_HOME"}
+env_mv["HOME"] = mv_home
+def move(*args):
+    return subprocess.run([RSS, "data", "move", *args], env=env_mv, capture_output=True, text=True, timeout=90)
+def status():
+    return subprocess.run([RSS, "status"], env=env_mv, capture_output=True, text=True, timeout=30)
+def feed_list():
+    return subprocess.run([RSS, "feeds", "--json"], env=env_mv, capture_output=True, text=True, timeout=30).stdout
+os.makedirs(mv_home + "/.rss_")
+open(mv_home + "/.rss_/config.json", "w").write('{"auto_poll": false}')
+status()
+subprocess.run([RSS, "add", f"http://127.0.0.1:{server.server_address[1]}/feed.xml", "--allow-private"], env=env_mv, capture_output=True, timeout=30)
+feeds_before = feed_list()
+check("data move refuses a relative path", "NotAbsolute" in move("relative").stderr)
+os.makedirs(mv_home + "/full"); open(mv_home + "/full/x", "w").write("x")
+check("and a folder that holds other files", "TargetNotEmpty" in move(mv_home + "/full").stderr)
+check("and one inside the data folder", "InsideCurrentFolder" in move(mv_home + "/.rss_/inner").stderr)
+check("and one whose parent is missing", "ParentMissing" in move(mv_home + "/nope/data").stderr)
+p = move(mv_home + "/first")
+check("data move reports its stages", p.returncode == 0 and p.stdout.split() == ["stopping", "moving", "linking", "starting", "done"], p.stdout + p.stderr)
+check("~/.rss_ links to the new folder", os.path.islink(mv_home + "/.rss_") and os.path.realpath(mv_home + "/.rss_") == os.path.realpath(mv_home + "/first"))
+check("the daemon runs on the moved data", feed_list() == feeds_before)
+long_name = mv_home + "/" + "very-long-folder-name-" * 6 + "data"
+p = move(long_name)
+check("a link makes a long folder name work, which a socket path could not hold", p.returncode == 0 and status().returncode == 0 and len(long_name) > 110, p.stderr + status().stderr)
+check("moving again leaves nothing behind", not os.path.exists(mv_home + "/first"))
+p = move(mv_home + "/.rss_")
+check("moving back to ~/.rss_ makes it a folder again", p.returncode == 0 and os.path.isdir(mv_home + "/.rss_") and not os.path.islink(mv_home + "/.rss_"), p.stdout + p.stderr)
+check("and the data is intact", feed_list() == feeds_before)
+check("moving onto the same folder is refused", "SameFolder" in move(mv_home + "/.rss_").stderr)
+check("RSS_HOME blocks a move", "HomeIsOverridden" in subprocess.run([RSS, "data", "move", mv_home + "/x"], env=dict(env_mv, RSS_HOME=mv_home + "/.rss_"), capture_output=True, text=True, timeout=30).stderr)
+
+if sys.platform == "darwin":
+    # A real second volume, because a rename cannot cross one
+    image = mv_home + "/v.dmg"; mount = mv_home + "/vol"
+    subprocess.run(["hdiutil", "create", "-quiet", "-size", "40m", "-fs", "APFS", "-volname", "rssv", image], check=True)
+    os.makedirs(mount); subprocess.run(["hdiutil", "attach", "-quiet", "-mountpoint", mount, image], check=True)
+    try:
+        p = move(mount + "/data")
+        check("a move to another volume copies and verifies", p.returncode == 0 and "verifying" in p.stdout.split(), p.stdout + p.stderr)
+        check("the data is there, behind a link, and the old folder is gone", os.path.islink(mv_home + "/.rss_") and os.path.realpath(mv_home + "/.rss_").startswith(os.path.realpath(mount)) and not os.path.exists(mv_home + "/.rss_.old"))
+        check("the daemon runs there", feed_list() == feeds_before)
+        p = move(mv_home + "/.rss_")
+        check("and back again from another volume", p.returncode == 0 and os.path.isdir(mv_home + "/.rss_") and not os.path.islink(mv_home + "/.rss_") and not os.path.exists(mount + "/data"), p.stdout + p.stderr)
+        check("with its data intact", feed_list() == feeds_before)
+    finally:
+        subprocess.run([RSS, "daemon", "stop"], env=env_mv, capture_output=True, timeout=30)
+        subprocess.run(["hdiutil", "detach", "-quiet", "-force", mount], capture_output=True)
+subprocess.run([RSS, "daemon", "stop"], env=env_mv, capture_output=True, timeout=30)
+shutil.rmtree(mv_home, ignore_errors=True)
+
 server.shutdown(); shutil.rmtree(home)
 print(f"\n{passed} checks passed")
