@@ -3,6 +3,7 @@ import SwiftUI
 struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.palette) private var p
+    @Environment(FloatLayer.self) private var layer
     @Environment(\.openSettings) private var openSettings
     @FocusState private var focused: Bool
 
@@ -23,17 +24,23 @@ struct RootView: View {
         .task {
             if ProcessInfo.processInfo.environment["RSS_SCREEN"] == "settings" { openSettings() }
         }
+        .onChange(of: model.showingShortcuts) { _, showing in if !showing { focused = true } }
+        .onChange(of: model.renaming) { _, renaming in if renaming == nil { focused = true } }
         .onChange(of: model.search.isShowing) { _, showing in if !showing { focused = true } }
         .onChange(of: model.showingAddFeed) { _, showing in if !showing { focused = true } }
         .sheet(isPresented: $model.showingAddFeed) { AddFeedSheet() }
         .overlay { if model.search.isShowing { SearchPanel() } }
+        .overlay { if model.showingShortcuts { ShortcutsPopup() } }
+        .overlay {
+            if let confirmation = model.confirmation { ConfirmationDialog(confirmation: confirmation).id(confirmation.id) }
+        }
         .overlay(alignment: .bottom) {
-            if let problem = model.problem {
+            if let problem = model.problem ?? Prefs.shared.fileProblem.map({ "config.json has a mistake, so the last good settings stay in use: \($0)" }) {
                 Text(problem)
                     .font(.ui(13))
                     .foregroundStyle(p.onAccent)
                     .padding(.horizontal, 12).padding(.vertical, 7)
-                    .background(p.ink, in: RoundedRectangle(cornerRadius: Tokens.radiusControl))
+                    .background(p.ink, in: RoundedRectangle(cornerRadius: Radii.control))
                     .padding(.bottom, 20)
             }
         }
@@ -48,7 +55,7 @@ struct RootView: View {
             EntryList().frame(width: 375)
             Rule(vertical: true)
             ReaderPane()
-        } else if model.article != nil {
+        } else if model.article != nil || model.web != nil {
             ReaderPane()
         } else {
             TimelineView()
@@ -58,9 +65,15 @@ struct RootView: View {
     /// The same keys as the terminal app, where it has them.
     private func handle(_ press: KeyPress) -> KeyPress.Result {
         if press.modifiers.contains(.command) { return .ignored }
+        if model.showingShortcuts {
+            if press.key == .escape || press.characters == "?" { model.showingShortcuts = false }
+            return .handled
+        }
         switch press.key {
         case .return: model.openSelected(); return .handled
-        case .escape: model.back(); return .handled
+        case .escape:
+            if layer.item != nil { layer.close() } else { model.back() }
+            return .handled
         case .downArrow: model.moveSelection(1); return .handled
         case .upArrow: model.moveSelection(-1); return .handled
         default: break
@@ -73,14 +86,13 @@ struct RootView: View {
         case "m": model.toggleRead()
         case "u": model.toggleUnreadOnly()
         case "o": model.openPage()
+        case "O": model.openInBrowser()
         case "f": model.fetchFull()
         case "r": model.refresh()
         case "a": model.showingAddFeed = true
         case "t": model.showingType.toggle()
         case "/": model.search.show()
-        case "?":
-            model.settingsTab = .Shortcuts
-            openSettings()
+        case "?": model.showingShortcuts = true
         default: return .ignored
         }
         return .handled
@@ -96,89 +108,6 @@ struct Rule: View {
         Rectangle()
             .fill(strong ? p.ink : p.hairline)
             .frame(width: vertical ? 1 : nil, height: vertical ? nil : 1)
-    }
-}
-
-struct Sidebar: View {
-    @Environment(AppModel.self) private var model
-    @Environment(\.palette) private var p
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            searchRow
-            item("Briefing", place: .briefing, count: nil)
-            item("All", place: .all, count: model.feeds.isEmpty ? nil : model.totalUnread)
-            item("Starred", place: .starred, count: nil)
-
-            HStack {
-                Text("FEEDS")
-                    .font(.ui(11, .semibold)).tracking(0.66)
-                    .foregroundStyle(p.muted)
-                Spacer()
-                Button { model.showingAddFeed = true } label: {
-                    Text("+").font(.ui(17)).foregroundStyle(p.inkSoft).frame(width: 20, height: 14)
-                }
-                .buttonStyle(.plain)
-                .help("Add a feed")
-            }
-            .padding(.horizontal, 10).padding(.top, 22).padding(.bottom, 6)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(model.feeds) { feed in
-                        item(feed.name, place: .feed(feed.id), count: feed.unread == 0 ? nil : feed.unread, quiet: feed.unread == 0)
-                    }
-                }
-            }
-            .scrollIndicators(.never)
-
-            Text(status).font(.ui(12)).foregroundStyle(p.muted)
-                .padding(.horizontal, 10).padding(.vertical, 14)
-        }
-        .padding(.horizontal, 12).padding(.top, 48)
-        .frame(width: 231)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .background(p.surface)
-    }
-
-    private var searchRow: some View {
-        Button { model.search.show() } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(p.inkSoft)
-                Text("Search").font(.ui(14)).foregroundStyle(p.ink)
-                Spacer(minLength: 8)
-                Text("⌘F").font(.ui(13)).foregroundStyle(p.muted)
-            }
-            .padding(.horizontal, 10).padding(.vertical, 7)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var status: String {
-        guard let date = model.updatedAt else { return " " }
-        return "Updated " + date.formatted(.relative(presentation: .named))
-    }
-
-    private func item(_ title: String, place: Place, count: Int64?, quiet: Bool = false) -> some View {
-        let selected = model.place == place
-        return Button { model.go(to: place) } label: {
-            HStack {
-                Text(title)
-                    .font(.ui(14, selected ? .semibold : .regular))
-                    .foregroundStyle(quiet ? p.muted : p.ink)
-                    .lineLimit(1)
-                Spacer(minLength: 8)
-                if let count {
-                    Text(count, format: .number.grouping(.never))
-                        .font(.ui(13, .medium)).foregroundStyle(p.unread)
-                }
-            }
-            .padding(.horizontal, 10).padding(.vertical, 7)
-            .background(selected ? p.selectedStrong : .clear, in: RoundedRectangle(cornerRadius: Tokens.radiusControl))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 }
 
@@ -203,6 +132,8 @@ struct EntryList: View {
     @Environment(AppModel.self) private var model
     @Environment(\.palette) private var p
     @Environment(\.readingFamily) private var family
+    @Environment(\.titleFamily) private var titleFamily
+    @State private var hovered: Int64?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -219,6 +150,7 @@ struct EntryList: View {
                     }
                     .padding(.horizontal, 12).padding(.bottom, 12)
                 }
+                .themedScrollbar()
                 .onChange(of: model.selectedId) { _, id in
                     if let id { withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(id) } }
                 }
@@ -241,7 +173,7 @@ struct EntryList: View {
         return Button { Task { await model.open(row.id) } } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Text(row.title ?? "Untitled")
-                    .font(.custom(family, fixedSize: 18).weight(.medium))
+                    .font(.custom(titleFamily, fixedSize: 18).weight(.medium))
                     .foregroundStyle(row.read ? p.read : p.unread)
                     .line(23, size: 18)
                 if let text = row.preview {
@@ -255,6 +187,31 @@ struct EntryList: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .overlay(alignment: .bottomTrailing) {
+            StarToggle(row: row, showing: selected || hovered == row.id).padding(6)
+        }
+        .onHover { hovered = $0 ? row.id : (hovered == row.id ? nil : hovered) }
+    }
+}
+
+/// Filled once starred. Until then it appears only on the row in use, so a long list
+/// stays quiet.
+struct StarToggle: View {
+    let row: EntrySummary
+    let showing: Bool
+    @Environment(AppModel.self) private var model
+    @Environment(\.palette) private var p
+
+    var body: some View {
+        if row.starred || showing {
+            Button { model.toggleStar(row.id) } label: {
+                Icon(glyph: .star, size: 14, color: row.starred ? p.unread : p.muted, filled: row.starred)
+                    .frame(width: 26, height: 26)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(row.starred ? "Remove star" : "Star")
+        }
     }
 }
 
@@ -263,6 +220,9 @@ struct TimelineView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.palette) private var p
     @Environment(\.readingFamily) private var family
+    @Environment(\.titleFamily) private var titleFamily
+
+    @State private var hovered: Int64?
 
     private var cutoff: Date { Calendar.current.date(byAdding: .day, value: -7, to: .now)! }
     private var recent: [EntrySummary] { model.entries.filter { $0.date >= cutoff } }
@@ -274,7 +234,7 @@ struct TimelineView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(model.placeTitle)
-                            .font(.custom(family, fixedSize: 48).weight(.semibold)).tracking(-0.72)
+                            .font(.custom(titleFamily, fixedSize: 48).weight(.semibold)).tracking(-0.72)
                         Spacer()
                         Button { model.toggleUnreadOnly() } label: {
                             Text(model.unreadOnly ? "Unread · \(model.totalUnread)" : "All · \(model.totalUnread) unread")
@@ -295,6 +255,7 @@ struct TimelineView: View {
                 .padding(.top, 72).padding(.bottom, 48)
                 .frame(maxWidth: .infinity)
             }
+            .themedScrollbar()
             .onChange(of: model.selectedId) { _, id in
                 if let id { withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(id) } }
             }
@@ -321,7 +282,7 @@ struct TimelineView: View {
                 HStack(alignment: .top, spacing: 24) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(row.title ?? "Untitled")
-                            .font(.custom(family, fixedSize: 21).weight(.medium))
+                            .font(.custom(titleFamily, fixedSize: 21).weight(.medium))
                             .foregroundStyle(row.read ? p.read : p.unread)
                         if let text = row.preview {
                             Text(text).font(.ui(14)).foregroundStyle(p.inkSoft).lineLimit(1)
@@ -335,6 +296,8 @@ struct TimelineView: View {
                     .font(.ui(13)).foregroundStyle(p.muted)
                     .frame(width: 120, alignment: .trailing)
                     .padding(.top, 5)
+                    StarToggle(row: row, showing: model.selectedId == row.id || hovered == row.id)
+                        .frame(width: 26).padding(.top, 2)
                 }
                 .padding(.vertical, 16)
                 .padding(.horizontal, model.selectedId == row.id ? 8 : 0)
@@ -343,6 +306,7 @@ struct TimelineView: View {
             }
             .contentShape(Rectangle())
         }
+        .onHover { hovered = $0 ? row.id : (hovered == row.id ? nil : hovered) }
         .buttonStyle(.plain)
     }
 }
@@ -351,11 +315,12 @@ struct TimelineView: View {
 struct BriefingView: View {
     @Environment(\.palette) private var p
     @Environment(\.readingFamily) private var family
+    @Environment(\.titleFamily) private var titleFamily
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(Date.now.formatted(.dateTime.weekday(.wide)) + ",\n" + Date.now.formatted(.dateTime.day().month(.wide)))
-                .font(.custom(family, fixedSize: 64).weight(.semibold)).tracking(-1)
+                .font(.custom(titleFamily, fixedSize: 64).weight(.semibold)).tracking(-1)
             Text("No briefing yet. It arrives with the aggregator.")
                 .font(.custom(family, fixedSize: 21)).foregroundStyle(p.inkSoft)
         }
@@ -368,12 +333,13 @@ struct FirstRunView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.palette) private var p
     @Environment(\.readingFamily) private var family
+    @Environment(\.titleFamily) private var titleFamily
     @State private var address = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Nothing to read yet.")
-                .font(.custom(family, fixedSize: 52).weight(.semibold)).tracking(-1)
+                .font(.custom(titleFamily, fixedSize: 52).weight(.semibold)).tracking(-1)
             Text("Add a site you like. Everything stays on this Mac.")
                 .font(.custom(family, fixedSize: 21)).foregroundStyle(p.inkSoft)
                 .padding(.top, 14).padding(.bottom, 32)
@@ -408,7 +374,7 @@ struct Primary: ButtonStyle {
         configuration.label
             .font(.ui(14, .medium)).foregroundStyle(p.onAccent)
             .padding(.horizontal, 14).padding(.vertical, 6)
-            .background(p.unread, in: RoundedRectangle(cornerRadius: Tokens.radiusControl))
+            .background(p.unread, in: RoundedRectangle(cornerRadius: Radii.control))
             .opacity(configuration.isPressed ? 0.8 : 1)
     }
 }
@@ -419,7 +385,7 @@ struct Plain: ButtonStyle {
         configuration.label
             .font(.ui(14)).foregroundStyle(p.ink)
             .padding(.horizontal, 10).padding(.vertical, 5)
-            .overlay(RoundedRectangle(cornerRadius: Tokens.radiusControl).stroke(p.control))
+            .overlay(RoundedRectangle(cornerRadius: Radii.control).stroke(p.control))
             .contentShape(Rectangle())
             .opacity(configuration.isPressed ? 0.7 : 1)
     }

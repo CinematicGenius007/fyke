@@ -84,21 +84,68 @@ struct Palette: Equatable {
         default: light
         }
     }
+
+    /// The tokens of one theme, in the order the Tokens pane lists them.
+    @MainActor static let tokenRows: [(label: String, palette: WritableKeyPath<Palette, Color>, override: WritableKeyPath<ThemeTokens, String?>)] = [
+        ("Ground", \.ground, \.ground), ("Surface", \.surface, \.surface), ("Selected", \.selected, \.selected),
+        ("Selected strong", \.selectedStrong, \.selectedStrong), ("Hairline", \.hairline, \.hairline), ("Control", \.control, \.control),
+        ("Ink", \.ink, \.ink), ("Ink soft", \.inkSoft, \.inkSoft), ("Muted", \.muted, \.muted), ("Unread", \.unread, \.unread),
+        ("Read", \.read, \.read), ("On accent", \.onAccent, \.onAccent), ("Scrim", \.scrim, \.scrim),
+    ]
+
+    /// A theme with the user's overrides on top.
+    @MainActor func applying(_ overrides: ThemeTokens) -> Palette {
+        var palette = self
+        for row in Palette.tokenRows {
+            if let text = overrides[keyPath: row.override], let color = Color(hex: text) { palette[keyPath: row.palette] = color }
+        }
+        return palette
+    }
+
+    /// Any theme, built-in or the user's.
+    @MainActor static func resolved(_ id: String) -> Palette {
+        guard let theme = Prefs.shared.custom(id) else { return named(id) }
+        var palette = named(theme.base).applying(theme.tokens)
+        palette.id = id
+        return palette
+    }
+}
+
+extension Color {
+    /// `#RRGGBB` or `#RRGGBBAA`.
+    init?(hex text: String) {
+        let digits = text.hasPrefix("#") ? String(text.dropFirst()) : text
+        guard digits.count == 6 || digits.count == 8, let value = UInt32(digits, radix: 16) else { return nil }
+        self.init(rgba: digits.count == 6 ? value << 8 | 0xFF : value)
+    }
+
+    var hex: String {
+        guard let color = NSColor(self).usingColorSpace(.sRGB) else { return "#000000" }
+        let parts = [color.redComponent, color.greenComponent, color.blueComponent].map { Int(($0 * 255).rounded()) }
+        let alpha = Int((color.alphaComponent * 255).rounded())
+        let text = String(format: "#%02X%02X%02X", parts[0], parts[1], parts[2])
+        return alpha == 255 ? text : text + String(format: "%02X", alpha)
+    }
+
+    /// WCAG relative luminance, for the contrast note in the color picker.
+    var luminance: Double {
+        guard let color = NSColor(self).usingColorSpace(.sRGB) else { return 0 }
+        func channel(_ value: CGFloat) -> Double {
+            value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channel(color.redComponent) + 0.7152 * channel(color.greenComponent) + 0.0722 * channel(color.blueComponent)
+    }
+
+    func contrast(with other: Color) -> Double {
+        let (a, b) = (luminance, other.luminance)
+        return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+    }
 }
 
 extension EnvironmentValues {
     @Entry var palette: Palette = .light
     @Entry var readingFamily: String = Tokens.fontReading
-}
-
-enum Keys {
-    static let theme = "theme"
-    static let followSystem = "followSystem"
-    static let readingFont = "readingFont"
-    static let textSize = "textSize"
-    static let lineSpacing = "lineSpacing"
-    static let columnWidth = "columnWidth"
-    static let loadImages = "loadImages"
+    @Entry var titleFamily: String = Tokens.fontReading
 }
 
 enum Fonts {
@@ -119,8 +166,13 @@ enum Fonts {
 }
 
 extension Font {
-    static func ui(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font { .system(size: size, weight: weight) }
-    static func code(_ size: CGFloat) -> Font { .custom(Tokens.fontCode, fixedSize: size) }
+    @MainActor static func ui(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        .custom(Fonts.resolve(Prefs.shared.currentFonts.ui ?? Tokens.fontUi), fixedSize: size).weight(weight)
+    }
+
+    @MainActor static func code(_ size: CGFloat) -> Font {
+        .custom(Fonts.resolve(Prefs.shared.currentFonts.code ?? Tokens.fontCode), fixedSize: size)
+    }
 }
 
 /// Sets exact line height, as the design does, rather than the font's default.

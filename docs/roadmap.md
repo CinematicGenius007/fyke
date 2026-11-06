@@ -140,7 +140,7 @@ Built from the approved Paper designs. Measured 2026-11-06 against real feeds in
 
 New operations: `feeds.preview`, `folders.list`, `config.get`, `config.set`. `feeds.add` takes `title` and `folder`, and `entries.list` takes `with_summary`.
 
-Limits: the Briefing screen is a placeholder until milestone 7. Shortcuts cannot be rebound. The sidebar lists feeds without their folders. Newsprint and Terminal derive most colors, because Paper defines only three for each. The default reading font is not bundled: other Macs fall back to Newsreader. Finding feeds on a site took 5 to 14 seconds in one test, because each advertised feed is fetched. `tools/e2e_gui.py` covers search keys only, and the preference test is a judgment no check can make.
+Limits: the Briefing screen is a placeholder until milestone 7. Shortcuts cannot be rebound. Newsprint and Terminal derive most colors, because Paper defines only three for each. The default reading font is not bundled: other Macs fall back to Newsreader. Finding feeds on a site took 5 to 14 seconds in one test, because each advertised feed is fetched. `tools/e2e_gui.py` covers search and shortcut keys only, and the preference test is a judgment no check can make.
 
 ## After milestone 6
 

@@ -4,8 +4,8 @@
     python3 tools/bundle_app.py             builds the app
     python3 tools/bundle_app.py --install   also copies it to /Applications
 
-The app holds no data. Feeds live in ~/.local/share/rss_ and settings in the user's
-preferences under the bundle identifier, so replacing the app keeps both.
+The app holds no data. Feeds and settings live in ~/.rss_, so replacing the app
+keeps both.
 """
 import pathlib, plistlib, shutil, subprocess, sys, tempfile
 
@@ -48,6 +48,8 @@ shutil.copytree(root / "gui/Fonts", resources / "Fonts")
 make_icon(resources / "AppIcon.icns")
 with open(app / "Contents/Info.plist", "wb") as out:
     plistlib.dump({
+        # The page viewer shows what a browser would, and some sites are plain http.
+        "NSAppTransportSecurity": {"NSAllowsArbitraryLoadsInWebContent": True},
         "CFBundleName": "rss_",
         "CFBundleDisplayName": "rss_",
         "CFBundleIdentifier": identifier,
