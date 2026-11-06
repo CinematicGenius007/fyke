@@ -34,6 +34,8 @@ Polling must run while no UI is open, and several clients (GUI plus an agent) ne
 
 Everything lives under `$RSS_HOME`, default `~/.rss_`. Backing up is copying this folder.
 
+`rss data move <folder>` moves the data to another folder, and Settings > General runs it. It stops the daemon, takes the daemon's own lock so that no client can start one on a folder that is being moved, moves the folder, and starts the daemon again, reinstalling the background service if it was on. On the same volume it is one rename. Across volumes it copies, checks that file counts and sizes match, and only then deletes the old folder, so a failure at any step leaves the data where it was. `~/.rss_` stays the one address clients use: after a move it is a link to the chosen folder. That also keeps socket paths short, because a Unix socket path holds about 104 bytes and a long folder name would not fit. Moving the data back to `~/.rss_` replaces the link with the folder. The command refuses while `RSS_HOME` is set, since that names the folder directly.
+
 Data at `~/.local/share/rss_`, the location of earlier versions, moves to `~/.rss_` the first time any `rss` command runs without `RSS_HOME`. One rename moves it, and a link stays at the old path for older binaries and launch agents. If both locations hold data, `~/.rss_` is used and the old folder is left alone. If they are on different volumes, the data stays and `~/.rss_` becomes a link to it.
 
 ```text

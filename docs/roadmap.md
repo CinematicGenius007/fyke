@@ -175,7 +175,18 @@ The reading default is Newsreader, which ships in the app. Any other installed f
 
 None of this is built. There are no releases yet: the app is built from source, as the [README](../README.md) describes.
 
-The first releases will be source releases, built by whoever installs them. That needs no Apple Developer account. A local build is never quarantined, and `tools/bundle_app.py` gives it the ad-hoc signature Apple Silicon requires on the machine that built it. Distributing a binary is different: macOS quarantines an unsigned download, and each user would have to approve it in Privacy & Security.
+People who use the app should never need a terminal. Moving the data folder is already done inside the app, and updating is meant to be too. That means releases carry a prebuilt app, with its own signature in place of Apple's.
+
+### Updates
+
+| Piece | Plan |
+|---|---|
+| Prebuilt releases | CI builds the app on every tag and attaches it to a GitHub Release, with a changelog section |
+| Signature | Each archive is signed with an ed25519 key. The app holds the public key and CI holds the private one, so an update can be checked without an Apple Developer account. A tampered or unsigned archive is refused |
+| Quarantine | macOS quarantines files that browsers download, and a file the app downloads itself is expected not to be. This is checked by test before any update depends on it |
+| Checking | Settings asks once, in plain words, whether to check for updates. The answer is off until given. A check is one request to GitHub's releases API and sends nothing about the person. It only reports that a newer version exists |
+| Updating | The app downloads, verifies the signature and checksum, replaces itself, restarts the daemon and reopens. The daemon and app compare `api_version`, so a mismatch after an update resolves itself |
+| First install | An unsigned download needs one approval in Privacy & Security, because only a paid Apple Developer account removes that. Building from source avoids it, since a local build is never quarantined |
 
 ### Before the first release
 
@@ -185,11 +196,11 @@ The first releases will be source releases, built by whoever installs them. That
 | One version number | `tools/bundle_app.py` hard-codes `0.1`. One source feeds the app, `Info.plist` and a new `rss --version` |
 | Changelog | `CHANGELOG.md`, one section per release, drawn from Conventional Commits |
 | Continuous integration | A macOS runner on every pull request: `zig fmt --check`, `zig build test`, the end-to-end scripts, `tools/bundle_app.py` and `tools/e2e_gui.py`. Zig is pinned to the version `CONTRIBUTING.md` names |
-| Install script | `tools/install.sh` checks for Zig and Xcode's command line tools, explains what is missing, builds, installs to `/Applications` and restarts the daemon. Updating is pulling and running it again |
+| Install script | `tools/install.sh` checks for Zig and Xcode's command line tools, builds, installs to `/Applications` and restarts the daemon, for people who build from source |
 
 ### Releasing
 
-A release is a tag, `vMAJOR.MINOR.PATCH`, on `main`. Pushing it runs the full checks, then publishes a GitHub Release with the changelog section and a source archive with its SHA-256.
+A release is a tag, `vMAJOR.MINOR.PATCH`, on `main`. Pushing it runs the full checks, builds and signs the app, and publishes a GitHub Release with the changelog section, the archive, its signature and its SHA-256.
 
 Version numbers follow what a user would notice. A patch fixes behavior. A minor version adds features and may add schema migrations, which run on their own at the daemon's next start. A major version would change the data folder or the config format, and says so in the changelog. Raising `api_version` in `src/ops.zig` and `Daemon.apiVersion` in the app together is part of any change that clients rely on.
 
@@ -199,18 +210,18 @@ Before a tag, the corpus oracles and `tools/scale.py` run by hand, since neither
 
 | Route | For | Notes |
 |---|---|---|
-| `tools/install.sh` from a clone | Anyone with the tools | First, because it needs nothing new |
-| Homebrew tap | Most people | A formula in a tap of ours builds from the source archive and pulls in Zig. Homebrew builds locally, so nothing is quarantined. A formula cannot place an app in `/Applications`, so it installs `rss`, and the app with one further command it prints |
-| Unsigned download | People who ask | Later, if at all, labeled as unsigned, with the steps to approve it. A built-in update check is out of scope, because the app makes no calls home today |
-| Signed and notarized | Nobody yet | Needs a paid Apple Developer account. It would replace the unsigned download if the project grows that far |
+| Download from GitHub Releases | Most people | Unsigned by Apple, so the first launch needs one approval. Updates after that are inside the app |
+| Homebrew tap | People who use Homebrew | A formula builds from the source archive, so nothing is quarantined. Updates use `brew upgrade` |
+| `tools/install.sh` from a clone | People who build from source | Needs Zig and Xcode's command line tools |
+| Signed and notarized | Nobody yet | Needs a paid Apple Developer account. It would remove the first-launch approval |
 
 ### Order
 
 1. Pick the name.
 2. Add the version number, the changelog and continuous integration.
-3. Add `tools/install.sh`, and tag `v0.1.0` as a source release.
-4. Add the Homebrew tap.
-5. Decide on an unsigned download from what users ask for.
+3. Add the signing key and the release workflow, and tag `v0.1.0`.
+4. Add the update check and the in-app update.
+5. Add `tools/install.sh` and the Homebrew tap.
 
 ## Deferred, deliberately
 
