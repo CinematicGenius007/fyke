@@ -4,7 +4,7 @@ OPML, recovery from a crash, and background polling.
 
 Usage: e2e_daemon.py <path-to-rss>
 """
-import http.server, json, os, shutil, signal, socket, socketserver, sqlite3, stat, subprocess, sys, tempfile, threading, time
+import collections, http.server, json, os, shutil, signal, socket, socketserver, sqlite3, stat, subprocess, sys, tempfile, threading, time
 
 RSS = os.path.abspath(sys.argv[1])
 home = tempfile.mkdtemp(prefix="rss-d-", dir="/tmp")  # Short, for the socket path limit.
@@ -361,6 +361,60 @@ check("bad bodies stay within retention", raw_files <= 40, raw_files)
 with open(home + "/rssd.log", "a") as log: log.write("marker\n")
 check("a second daemon refuses to start", rss("daemon", "--log", ok=False).returncode != 0)
 check("and leaves the running daemon's log alone", "marker" in open(home + "/rssd.log").read())
+
+# Full text after failures: this part needs the background loop
+flaky = {"up": False, "hits": collections.Counter()}
+ARTICLE = "<html><body><article>" + "".join(f"<p>Recovered paragraph {i} with enough words to count as an article body.</p>" for i in range(40)) + "</article></body></html>"
+class Flaky(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def do_GET(self):
+        flaky["hits"][self.path] += 1
+        host = f"http://127.0.0.1:{self.server.server_address[1]}"
+        if self.path == "/feed.xml":
+            items = "".join(f"<item><title>{t}</title><guid>{t}</guid><link>{host}{p}</link><description>Short.</description></item>" for t, p in (("Flaky", "/flaky"), ("Gone", "/gone")))
+            status, kind, body = 200, "application/rss+xml", f'<rss version="2.0"><channel><title>Flaky</title>{items}</channel></rss>'
+        elif self.path == "/flaky" and flaky["up"]: status, kind, body = 200, "text/html", ARTICLE
+        elif self.path == "/flaky": status, kind, body = 503, "text/html", ""
+        else: status, kind, body = 404, "text/plain", ""
+        data = body.encode()
+        self.send_response(status); self.send_header("Content-Type", kind); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
+flaky_server = Server(("127.0.0.1", 0), Flaky)
+threading.Thread(target=flaky_server.serve_forever, daemon=True).start()
+flaky_base = f"http://127.0.0.1:{flaky_server.server_address[1]}"
+
+def full_row(title):
+    return json.loads(rss("query", f"SELECT full_status, full_attempts, full_retry_at FROM entries WHERE title = '{title}'").stdout)["rows"][0]
+
+rss("add", flaky_base + "/feed.xml", "--allow-private")
+check("a 503 is tried", wait_for(lambda: flaky["hits"]["/flaky"] == 1, 15), flaky["hits"])
+check("and waits for a retry, with no status", wait_for(lambda: full_row("Flaky")[:2] == [None, 1]), full_row("Flaky"))
+check("with a time set", full_row("Flaky")[2] is not None)
+later = Raw().call("entries.fetch_full", id=json.loads(rss("query", "SELECT id FROM entries WHERE title = 'Flaky'").stdout)["rows"][0][0])
+check("asking by hand reports later", later["result"]["status"] == "later", later)
+check("and leaves the entry waiting", full_row("Flaky")[0] is None)
+
+rss("daemon", "stop")
+db = sqlite3.connect(home + "/rss.db"); db.execute("update entries set full_retry_at = 0 where title in ('Flaky', 'Gone')"); db.commit(); db.close()
+flaky["up"] = True
+rss("status")
+check("the retry fetches the article", wait_for(lambda: full_row("Flaky")[0] == "done", 15), full_row("Flaky"))
+check("a 404 is final", wait_for(lambda: full_row("Gone")[0] == "failed", 15), full_row("Gone"))
+check("and is not tried again", flaky["hits"]["/gone"] == 1, flaky["hits"])
+
+dead = socket.socket(); dead.bind(("127.0.0.1", 0)); dead_port = dead.getsockname()[1]; dead.close()
+outage_items = "".join(f"<item><title>Dead {i}</title><guid>d{i}</guid><link>http://127.0.0.1:{dead_port + i}/a</link><description>Short.</description></item>" for i in range(6))
+class Outage(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def do_GET(self):
+        data = f'<rss version="2.0"><channel><title>Dead links</title>{outage_items}</channel></rss>'.encode()
+        self.send_response(200); self.send_header("Content-Type", "application/rss+xml"); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
+outage_server = Server(("127.0.0.1", 0), Outage)
+threading.Thread(target=outage_server.serve_forever, daemon=True).start()
+rss("add", f"http://127.0.0.1:{outage_server.server_address[1]}/feed.xml", "--allow-private")
+time.sleep(8)
+rows = json.loads(rss("query", "SELECT full_status, full_attempts FROM entries WHERE title LIKE 'Dead %'").stdout)["rows"]
+check("an outage settles nothing", all(status is None for status, _ in rows), rows)
+check("and costs at most the two tries before it was noticed", sum(tries for _, tries in rows) <= 2, rows)
 
 rss("daemon", "stop")
 

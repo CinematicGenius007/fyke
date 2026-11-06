@@ -305,7 +305,7 @@ final class AppModel {
                 if result.status == "done" {
                     await open(id)
                 } else {
-                    fullTextStatus = "No fuller article found on the page"
+                    fullTextStatus = result.status == "later" ? "Could not reach the page. It will be tried again." : "No fuller article found on the page"
                 }
             } catch {
                 if article?.entry.id == id { fullTextStatus = error.localizedDescription }

@@ -162,6 +162,7 @@ Measured 2026-11-06.
 | IPv6 tunnels | 6to4 addresses are judged by the IPv4 address they carry, and Teredo is refused |
 | Housekeeping | A raw body shared by two feeds stays until neither needs it |
 | Full text | Pages in a charset that cannot be converted keep their summary. The gain check counts characters. Entries with enough text are settled once, not read on every wake |
+| Full-text retries | Temporary failures retry after 1, 6 and 24 hours, then stop. An outage counts no tries after the first two hosts, and `e2e_daemon.py` covers both |
 | Search filters | Apply before the 2,000 match window, so a common word with a filter still finds old matches |
 | `db.query` | Returns at most 4 MiB of values, with `truncated` set, and refuses to build any value over 16 MiB |
 | Bad bodies | Bodies that fail to parse count toward the retention of 20, so a feed cannot fill the disk with them |

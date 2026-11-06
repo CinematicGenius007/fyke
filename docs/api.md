@@ -56,7 +56,7 @@ Registered operations cover the common paths, and SQL covers every question nobo
 | Operation | Purpose |
 |---|---|
 | `entries.mark` | Read, starred, hidden. Hidden entries leave lists and search |
-| `entries.fetch_full` | Fetch an entry's article from its page |
+| `entries.fetch_full` | Fetch an entry's article from its page, ignoring any wait. Status is `done`, `skipped`, `failed`, or `later` when the site could not be reached |
 
 Planned: `entries.tag`, to add or remove tags recorded with their source. `notes.add`, to attach a note. `artifacts.put`, to store agent output with citations, so that an external agent run on your own schedule can publish into the Briefing view with no runner configured.
 
