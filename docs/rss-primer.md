@@ -73,7 +73,7 @@ In a test of 178 feeds offering validators, 17 still returned the full body, unc
 - Send `Accept-Encoding: gzip` and a `User-Agent` that names the project.
 - Limit concurrent requests per host, since many feeds share a host.
 - Spread polls with jitter so they do not all fire on the hour.
-- Respect hints where present: `<ttl>`, `<skipHours>`, `<skipDays>`, `sy:updatePeriod`, and `Cache-Control`.
+- Respect hints where present: `<ttl>`, `<skipHours>`, `<skipDays>`, `sy:updatePeriod`. `Cache-Control` is not read yet.
 - Adapt: a feed that posts monthly does not need hourly polling.
 
 **Push exists but is optional.** [WebSub](https://www.w3.org/TR/websub/) lets a hub call you when a feed changes, but needs a publicly reachable callback. A local-first app has none, so we poll.

@@ -6,6 +6,7 @@
 //!   feedcheck corpus --hostile          time inputs built to trigger slow paths
 //!   feedcheck corpus --html             convert every entry body to blocks
 //!   feedcheck corpus --html-dump        bodies and their text, for tools/oracle_html.py
+//!   feedcheck --extract page.html url   print the article found in a saved page
 //!
 //! Mutation mode reports the slowest parse relative to input size, since a
 //! hostile feed that is slow to parse is as much a bug as one that crashes.
@@ -41,6 +42,19 @@ pub fn main(init: std.process.Init) !void {
     const io = init.io;
     const args = try init.minimal.args.toSlice(arena);
     if (args.len < 2) return error.MissingDirectory;
+
+    if (args.len >= 4 and std.mem.eql(u8, args[1], "--extract")) {
+        const page = try Io.Dir.cwd().readFileAlloc(io, args[2], arena, .limited(64 << 20));
+        const text = try core.encoding.toUtf8(arena, page);
+        const nodes = (try core.extract.extract(arena, text, args[3])) orelse return;
+        var out: Io.Writer.Allocating = .init(arena);
+        try core.blocks.writeText(&out.writer, nodes);
+        var buffer: [4096]u8 = undefined;
+        var stdout = Io.File.stdout().writer(io, &buffer);
+        try stdout.interface.writeAll(out.written());
+        try stdout.interface.flush();
+        return;
+    }
 
     var dir = try Io.Dir.cwd().openDir(io, args[1], .{ .iterate = true });
     defer dir.close(io);

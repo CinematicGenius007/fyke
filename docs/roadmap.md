@@ -10,7 +10,7 @@ No deadlines. Each milestone produces something you can use, and each has a test
 | 3 | **Daemon** (done) | Concurrency, sockets, scheduling | 1,000 feeds poll in the background; clients connect; OPML import and export work |
 | 4 | **TUI** (done) | Terminals, rendering, input | Daily reading works with no browser; search, marks and live updates work |
 | 5 | **MCP** (done) | Protocol design, comptime schemas | Claude Code and one other agent answer "what did I miss about X?" from your feeds |
-| 6 | **GUI** | Native app, IPC | Full parity with the TUI; you prefer it for daily use |
+| 6 | **GUI** (built) | Native app, IPC | Full parity with the TUI; you prefer it for daily use |
 | 7 | **Aggregator v1** | Clustering, ranking | Dedupe, stories and ranking work with no model at all |
 | 8 | **Runners** | Model APIs, job queues | Morning brief with validated citations through `http` and `exec` |
 | 9 | **ACP** | Agent protocols | Any ACP agent runs a lens, with progress streaming into the UI; "ask my feeds" chat |
@@ -34,13 +34,13 @@ Measured 2026-11-06 on a corpus of 756 real URLs. Rebuild it with `tools/fetch_c
 | Mutation fuzz | 4.75 million mutated real feeds, no crashes, worst 83 ns per byte |
 | Coverage-guided fuzz | Exit 0 with no failures. Summary showed 10.5M cumulative runs of `feed.parse`; it does not print the other 4 targets |
 
-About 20 minutes of fuzzing is not the 24 hours the milestone asks for. To finish it:
+About 20 minutes of fuzzing is not the 24 hours the milestone asks for. This run takes longer than a day, at about 2,400 inputs a second, and prints only when it ends:
 
 ```bash
 ./zig-out/bin/feedcheck corpus --mutate 390000 3
 ```
 
-Not in this milestone: HTML to blocks, URL normalization and resolving relative links, and `skipHours` and `skipDays`. Non-Latin legacy encodings such as Shift-JIS are refused with an error rather than converted; none appeared in the corpus. OPML export is left for milestone 3.
+Not in this milestone: HTML to blocks, URL normalization and resolving relative links. Non-Latin legacy encodings such as Shift-JIS are refused with an error rather than converted; none appeared in the corpus. OPML export is left for milestone 3.
 
 ## Milestone 2 results
 
@@ -73,11 +73,11 @@ Measured 2026-11-06.
 | Idle CPU | 0.00 s over 30 s |
 | Client latency at 1,000 feeds | `list` 7 ms, `search` 9 ms, `feeds --json` 18 ms, including process start |
 
-Open: `skipHours` and `skipDays`, a `launchd` agent, cancelable TCP connect, and finding the one feed the standard HTTP client rejects with `HttpHeadersInvalid`. It parsed under curl, and `fetch_log` records it. The `rss` client does not time out if the daemon hangs.
+All items left open here were closed after milestone 6. See below.
 
 ## Milestone 4 results
 
-Built after milestone 5, by choice. Measured 2026-11-06.
+Built after milestone 5. Measured 2026-11-06.
 
 | Check | Result |
 |---|---|
@@ -92,11 +92,24 @@ Built after milestone 5, by choice. Measured 2026-11-06.
 | Idle | 2.9 MB, 0.00 s CPU over 10 s |
 | One key press | 212 bytes sent to the terminal |
 
-Limits: pyte is not a real terminal, so this has not been checked by eye in Ghostty, iTerm or Terminal. Adding a feed blocks the interface for up to 30 s. Emoji sequences joined with zero-width joiners may measure wrongly, as terminals disagree about them. Images show as a link. 200 s of coverage fuzzing found nothing, but ended at a time limit with no run count.
+Limits: pyte is not a real terminal, so this has not been checked by eye in Ghostty, iTerm or Terminal. Emoji sequences joined with zero-width joiners may measure wrongly, as terminals disagree about them. Images show as a link. 200 s of coverage fuzzing found nothing, but ended at a time limit with no run count.
+
+## After milestone 5
+
+The TUI got a second design pass, then was frozen: two-line entries, a side bar for selection in place of filled rows, relative dates, a measured reading column, mouse support, and `O` for the terminal browser. Set `terminal_browser` in `config.json` to change that command.
+
+**Full-text fetching** replaces short feed summaries with the article from the page. It runs one request at a time with a one second gap, asks `robots.txt` first, covers the last 30 days by itself, and takes `f` in the TUI or `entries.fetch_full` for anything older. Set `full_text` to false in `config.json` to turn it off. An extraction replaces the feed's text only if it is at least 1.5 times as long.
+
+| Check | Result |
+|---|---|
+| `tools/eval_extract.py` | 149 real pages from feeds that publish full text, so the true article is known: 142 good, median recall 100%, median precision 99.6%. 3 found nothing, and those entries keep their summary |
+| Zed and Delta feeds | 5 Delta posts went from about 90 characters to about 8,000 in the first 24 seconds |
+
+That sample is blogs that already publish full text, and sites that publish only summaries may be harder. Video players can leave stray text such as "0:00" behind.
 
 ## Milestone 5 results
 
-Built before milestone 4, by choice. Measured 2026-11-06.
+Built before milestone 4. Measured 2026-11-06.
 
 | Check | Result |
 |---|---|
@@ -112,8 +125,52 @@ Built before milestone 4, by choice. Measured 2026-11-06.
 
 Agents exposed what the protocol tests could not. Both reported almost no Zig news, although 0.17.1 had just shipped: the entry "0.17.1 Released", in a feed called "News" on ziglang.org, never contains the word "zig". Search now matches feed names and hosts too, and Claude Code then found it.
 
-The official conformance suite is not run: its server mode needs an HTTP URL, and `rss mcp` is stdio only. Other limits: two model runs are not a measure of injection resistance, and `outputSchema` and `subscriptions/listen` are not implemented.
+Limits: two model runs are not a measure of injection resistance, and `outputSchema` and `subscriptions/listen` are not implemented.
+
+## Milestone 6 results
+
+Built from the approved Paper designs. Measured 2026-11-06 against real feeds in a throwaway `RSS_HOME`.
+
+| Check | Result |
+|---|---|
+| Socket client | The app holds no database connection. Quick calls share one connection, and calls that wait on the network get their own |
+| Driven through accessibility | `j`, `s`, Settings, the full-text switch and adding a feed all reached the daemon |
+| Add feed | `lobste.rs` offered 2 feeds, and subscribing to one appeared in the sidebar with no restart |
+| Rendering | All, feed, reader, first run, sheet and every Settings tab compared by eye with Paper, in Light and Dark where noted below |
+
+New operations: `feeds.preview`, `folders.list`, `config.get`, `config.set`. `feeds.add` takes `title` and `folder`, and `entries.list` takes `with_summary`.
+
+Limits: the Briefing screen is a placeholder until milestone 7. Shortcuts cannot be rebound. The sidebar lists feeds without their folders. Newsprint and Terminal derive most colors, because Paper defines only three for each. The default reading font is not bundled: other Macs fall back to Newsreader. Finding feeds on a site took 5 to 14 seconds in one test, because each advertised feed is fetched. `tools/e2e_gui.py` covers search keys only, and the preference test is a judgment no check can make.
+
+## After milestone 6
+
+Measured 2026-11-06.
+
+| Change | Check |
+|---|---|
+| Search in the GUI: a popup on `⌘F` or `/`, and a sidebar row | Empty, results and nothing-found states compared with Paper, in Light and Dark. `tools/e2e_gui.py` plays the keys through AppKit: 8 checks |
+| Standalone app | `tools/bundle_app.py` builds the app with its fonts, icon and `rss`. Run alone, it started its own daemon and rendered Newsreader with no font errors |
+| `skipHours` and `skipDays` | Stored with the feed by schema 0003, so that polls ending in `304` obey them. Unit tests cover the masks and the move to the next free hour |
+| `rss service` | Installed, reported, ran the daemon and uninstalled, against a throwaway home |
+| Cancelable TCP connect | A black-holed address fails at 30.1 s, which is the deadline |
+| The feed behind `HttpHeadersInvalid` | The server sends `content-encoding: none`, which the standard library rejects. `fetch` masks that header, and the feed now subscribes |
+| Client timeout | `rss` gives up after 120 s of silence from the daemon |
+| Adding a feed in the TUI | Runs on its own thread, so the interface stays live. Finding a feed stops trying new pages after 60 s |
+| A host that accepts and then stalls | Ends at the fetch deadline, and `e2e_daemon.py` covers it |
+| Hostile numbers | An enclosure size beyond 2^63 stopped the daemon. Integers bound to SQLite now saturate, and a unit test covers it |
+| Long quotes | Markdown keeps every line of a quote of any length |
+| IPv6 tunnels | 6to4 addresses are judged by the IPv4 address they carry, and Teredo is refused |
+| Housekeeping | A raw body shared by two feeds stays until neither needs it |
+| Full text | Pages in a charset that cannot be converted keep their summary. The gain check counts characters. Entries with enough text are settled once, not read on every wake |
+| Full-text retries | Temporary failures retry after 1, 6 and 24 hours, then stop. An outage counts no tries after the first two hosts, and `e2e_daemon.py` covers both |
+| Search filters | Apply before the 2,000 match window, so a common word with a filter still finds old matches |
+| `db.query` | Returns at most 4 MiB of values, with `truncated` set, and refuses to build any value over 16 MiB |
+| Bad bodies | Bodies that fail to parse count toward the retention of 20, so a feed cannot fill the disk with them |
+| Request numbers | `since_days` of any size gives a sane cutoff |
+| `entries.mark` | Takes `hidden`, which lists and search respect |
+
+The reading default is Newsreader, which ships in the app. Any other installed font can be chosen in Settings.
 
 ## Deferred, deliberately
 
-Full-text extraction for summary-only feeds, a hand-written HTTP client, podcast playback, Linux and Windows GUIs, Streamable HTTP for MCP, feed backfill with RFC 5005, sync across machines.
+A hand-written HTTP client, podcast playback, Linux and Windows GUIs, Streamable HTTP for MCP, feed backfill with RFC 5005, sync across machines.

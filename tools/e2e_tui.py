@@ -16,9 +16,9 @@ opened = shim + "/opened.txt"
 env = dict(os.environ, RSS_HOME=home, TERM="xterm-256color", PATH=shim + ":" + os.environ["PATH"])
 open(home + "/config.json", "w").write('{"auto_poll": false}')
 # A stand-in for the browser opener, which records exactly what it was given.
-for name in ("open", "xdg-open"):
+for name in ("open", "xdg-open", "terminal-browser"):
     path = f"{shim}/{name}"
-    open(path, "w").write(f'#!/bin/sh\nprintf "%s\\n" "$#:$1" >> {opened}\n')
+    open(path, "w").write(f'#!/bin/sh\nprintf "%s\\n" "$#:$*" >> {opened}\n')
     os.chmod(path, 0o755)
 
 state = {"live": 0}
@@ -139,7 +139,7 @@ t = Term()
 check("first paint", t.wait_for("Main Feed"), t.text())
 print(f"     to first paint, through pyte: {(time.time() - start) * 1000:.0f} ms")
 check("uses the alternate screen", b"\x1b[?1049h" in t.raw)
-check("lists the entries", "Item 0349" in t.text() and "Feeds" in t.text(), t.text())
+check("lists the entries", "Item 0349" in t.text() and "FEEDS" in t.text(), t.text())
 
 def separators(term):
     columns = set()
@@ -204,6 +204,46 @@ check("read entries are hidden", "First article" not in t.text(), t.text())
 t.keys("u", 0.3)
 check("and shown again", "First article" in t.text())
 
+# Mouse
+def find(term, text):
+    for y, line in enumerate(term.screen.display):
+        if text in line:
+            for x in range(term.columns):
+                if term.screen.buffer[y][x].data == text[0] and "".join(term.screen.buffer[y][i].data for i in range(x, min(x + len(text), term.columns))) == text:
+                    return x, y
+    raise AssertionError(f"{text!r} not on screen:\n{term.text()}")
+def click(term, text, seconds=0.3):
+    x, y = find(term, text)
+    term.keys(f"\x1b[<0;{x + 1};{y + 1}M\x1b[<0;{x + 1};{y + 1}m", seconds)
+def wheel(term, text, button, times=1):
+    x, y = find(term, text)
+    for _ in range(times): term.keys(f"\x1b[<{button};{x + 1};{y + 1}M", 0.05)
+
+check("mouse reporting is on", b"\x1b[?1000h\x1b[?1006h" in t.raw)
+click(t, "Big Feed")
+check("clicking a feed selects it", "Item 0349" in t.text(), t.text())
+click(t, "Main Feed")
+check("and back", "First article" in t.text(), t.text())
+click(t, "First article")
+check("clicking an entry opens it", "Section" in t.text(), t.text())
+before = t.text()
+wheel(t, "Section", 65, 4)
+check("the wheel scrolls the article", t.text() != before and "Section" not in t.text(), t.text())
+wheel(t, "Paragraph", 64, 8)
+check("and back up", "Section" in t.text(), t.text())
+os.path.exists(opened) and os.remove(opened)
+t.keys("O", 0.5)
+got = open(opened).read().strip() if os.path.exists(opened) else ""
+check("O opens the terminal browser beside the reader", got.startswith("6:open https://example.com/one") and got.endswith("--split right --size 0.6"), got)
+t.keys("q", 0.2)
+t.keys("g", 0.1)
+t.keys(b"\x1b[<0;9999;9999M\x1b[<65;9999;9999M\x1b[<0;1;1M", 0.2)
+check("clicks outside anything are harmless", t.p.poll() is None)
+t.keys("\t", 0.1)
+t.keys("a", 0.2); t.keys("http://127.0.0.1:1/feed\r", 0.1)
+check("adding a feed runs in the background", "Adding" in t.text() or "Connection" in t.text(), t.text())
+check("and reports how it went", t.wait_for("Connection"), t.text())
+
 # Injection
 check("escape sequences in feeds do nothing", t.screen.title in ("", None) and b"\x1b]0;" not in t.raw, t.screen.title)
 check("and the text around them still shows", "Evil]0;HACKED title[2J" in t.text(), t.text())
@@ -260,7 +300,7 @@ check("Ctrl-C exits cleanly", code == 0, code)
 check("the alternate screen is left", t.raw.rstrip().endswith(b"\x1b[?1049l"), t.raw[-120:])
 check("terminal settings are restored", after == t.saved)
 
-t = Term(); t.wait_for("Feeds"); t.p.send_signal(signal.SIGTERM)
+t = Term(); t.wait_for("FEEDS"); t.p.send_signal(signal.SIGTERM)
 code, after = t.finish()
 check("SIGTERM restores the terminal", after == t.saved and code != 0, code)
 
@@ -269,8 +309,9 @@ check("no terminal is a clear error", p.returncode == 1 and "NotATerminal" in p.
 
 # Random keys
 rng = random.Random(1)
-t = Term(100, 30); t.wait_for("Feeds")
+t = Term(100, 30); t.wait_for("FEEDS")
 pieces = [b"j", b"k", b"g", b"G", b"\t", b"\r", b"\x1b", b"q", b"h", b"l", b"m", b"s", b"n", b"u", b"/", b"?", b" ", b"b", b"1",
+          b"\x1b[<0;20;5M", b"\x1b[<0;60;9M", b"\x1b[<64;70;9M", b"\x1b[<65;20;3M", b"\x1b[<0;9;9",
           b"\x1b[A", b"\x1b[B", b"\x1b[5~", b"\x1b[6~", b"\x04", b"\x15", b"\x7f", "中".encode(), b"\xff", b"\x1b[", b"\x1b[999999999~", b"x"]
 sent = 0
 while sent < MONKEY:
@@ -278,7 +319,6 @@ while sent < MONKEY:
     data = data.replace(b"r", b"").replace(b"R", b"").replace(b"o", b"").replace(b"\x03", b"")
     # Quitting would end the test, so quit keys are replaced outside of prompts.
     data = data.replace(b"q", b"h")
-    # "a" would start a real network fetch of random text.
     t.drain_write(data); sent += 1
     if sent % 200 == 0:
         columns, rows = rng.choice([(100, 30), (130, 40), (75, 24), (40, 12), (12, 3), (200, 60)])
@@ -294,7 +334,7 @@ t.resize(100, 30)
 t.keys("\x1b", 0.1); t.keys("\x1b", 0.1); t.keys("\x0c", 0.3)
 t.screen.reset()
 t.keys("\x0c", 0.5)
-check("it still responds after all that", "? help" in t.text() or "unread" in t.text() or "%" in t.text(), t.text())
+check("it still responds after all that", "help" in t.text() or "unread" in t.text() or "%" in t.text(), t.text())
 t.keys("\x03", 0.1)
 code, after = t.finish()
 check("and still exits cleanly", code == 0 and after == t.saved, code)

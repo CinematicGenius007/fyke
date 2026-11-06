@@ -29,6 +29,7 @@ extern fn sqlite3_column_double(stmt: *Stmt, i: c_int) f64;
 extern fn sqlite3_stmt_readonly(stmt: *Stmt) c_int;
 extern fn sqlite3_set_authorizer(db: *Handle, callback: *const AuthorizerFn, arg: ?*anyopaque) c_int;
 extern fn sqlite3_progress_handler(db: *Handle, ops: c_int, callback: ?*const ProgressFn, arg: ?*anyopaque) void;
+extern fn sqlite3_limit(db: *Handle, id: c_int, value: c_int) c_int;
 
 const AuthorizerFn = fn (?*anyopaque, c_int, ?[*:0]const u8, ?[*:0]const u8, ?[*:0]const u8, ?[*:0]const u8) callconv(.c) c_int;
 const ProgressFn = fn (?*anyopaque) callconv(.c) c_int;
@@ -42,11 +43,12 @@ const SQLITE_NULL = 5;
 const SQLITE_DENY = 1;
 const SQLITE_PRAGMA = 19;
 const SQLITE_ATTACH = 24;
+const SQLITE_LIMIT_LENGTH = 0;
 const SQLITE_DETACH = 25;
 
 pub const Error = error{ OutOfMemory, Sqlite };
 
-const schema = @embedFile("schema");
+const migrations = [_][*:0]const u8{ @embedFile("schema"), @embedFile("schema2"), @embedFile("schema3"), @embedFile("schema4"), @embedFile("schema5") };
 
 pub const Feed = struct {
     id: i64,
@@ -65,6 +67,9 @@ pub const Feed = struct {
     last_error: ?[]const u8,
     unread: i64,
     entries: i64,
+    folder_id: ?i64,
+    skip_hours: i64,
+    skip_days: i64,
 };
 
 pub const EntrySummary = struct {
@@ -80,6 +85,8 @@ pub const EntrySummary = struct {
     starred: bool,
     /// Matching text, from search only.
     snippet: ?[]const u8 = null,
+    /// The start of the entry's text, for lists that show one.
+    summary: ?[]const u8 = null,
 };
 
 pub const SearchOptions = struct {
@@ -150,6 +157,8 @@ pub const FeedUpdate = struct {
     etag: ?[]const u8 = null,
     last_modified: ?[]const u8 = null,
     poll_seconds: ?i64 = null,
+    skip_hours: ?i64 = null,
+    skip_days: ?i64 = null,
     next_fetch_at: i64,
     last_fetch_at: i64,
     last_success_at: ?i64 = null,
@@ -166,9 +175,22 @@ pub const Filter = struct {
     since: ?i64 = null,
     /// Keyset cursor: return entries older than this (sort_at, id) position.
     before: ?Cursor = null,
+    /// Include the start of each entry's text.
+    with_summary: bool = false,
 };
 
 pub const Cursor = struct { sort_at: i64, id: i64 };
+
+/// An entry whose article should be fetched from its page.
+pub const FullTextJob = struct {
+    id: i64,
+    url: []const u8,
+    title: ?[]const u8,
+    text_length: i64,
+    allow_private_network: bool,
+    /// Tries so far that ended in a temporary failure.
+    attempts: i64,
+};
 
 pub const DueFeed = struct { id: i64, url: []const u8 };
 
@@ -204,17 +226,19 @@ pub const Role = enum { writer, reader, sandbox };
 pub const Marks = struct {
     read: ?bool = null,
     starred: ?bool = null,
+    hidden: ?bool = null,
 };
 
 /// Binds a Zig value to a statement parameter. Text is not copied, so it must
-/// outlive the step that uses it.
+/// outlive the step that uses it. Integers beyond SQLite's range saturate, since
+/// some come straight from feeds.
 fn bindValue(stmt: *Stmt, index: c_int, value: anytype) c_int {
     const T = @TypeOf(value);
     switch (@typeInfo(T)) {
         .optional => return if (value) |inner| bindValue(stmt, index, inner) else sqlite3_bind_null(stmt, index),
         .null => return sqlite3_bind_null(stmt, index),
         .bool => return sqlite3_bind_int64(stmt, index, @intFromBool(value)),
-        .int, .comptime_int => return sqlite3_bind_int64(stmt, index, @intCast(value)),
+        .int, .comptime_int => return sqlite3_bind_int64(stmt, index, std.math.cast(i64, value) orelse std.math.maxInt(i64)),
         else => {
             const text: []const u8 = value;
             return sqlite3_bind_text(stmt, index, text.ptr, @intCast(text.len), null);
@@ -269,6 +293,11 @@ pub const Db = struct {
 
     /// Bounded by VM steps rather than by a clock, so results do not vary with load.
     const query_budget_callbacks = 200_000;
+    /// A query returns no more than this many bytes of values.
+    const query_max_bytes = 4 << 20;
+    /// The longest string or blob a sandboxed statement may build. VM steps do not
+    /// bound memory: one call such as `hex(zeroblob(n))` allocates in a single step.
+    const query_max_value = 16 << 20;
 
     fn denyDangerous(_: ?*anyopaque, action: c_int, _: ?[*:0]const u8, _: ?[*:0]const u8, _: ?[*:0]const u8, _: ?[*:0]const u8) callconv(.c) c_int {
         return switch (action) {
@@ -297,6 +326,7 @@ pub const Db = struct {
             .reader => try db.exec("PRAGMA query_only=ON"),
             .sandbox => {
                 try db.exec("PRAGMA query_only=ON");
+                _ = sqlite3_limit(db.handle, SQLITE_LIMIT_LENGTH, query_max_value);
                 // Pragmas are refused from here on, so query_only cannot be undone.
                 if (sqlite3_set_authorizer(db.handle, denyDangerous, null) != 0) return error.Sqlite;
             },
@@ -321,10 +351,10 @@ pub const Db = struct {
         defer _ = sqlite3_finalize(stmt);
         _ = sqlite3_step(stmt);
         const version = sqlite3_column_int64(stmt, 0);
-        if (version == 0) {
+        for (migrations[@intCast(@min(version, migrations.len))..]) |sql| {
             try db.exec("BEGIN");
             errdefer db.exec("ROLLBACK") catch {};
-            try db.exec(schema);
+            try db.exec(sql);
             try db.exec("COMMIT");
         }
     }
@@ -364,8 +394,9 @@ pub const Db = struct {
         \\  f.allow_private_network, f.etag, f.last_modified, f.poll_seconds, f.next_fetch_at,
         \\  f.last_success_at, f.error_count, f.last_error,
         \\  (SELECT count(*) FROM entries e LEFT JOIN entry_state s ON s.entry_id = e.id
-        \\     WHERE e.feed_id = f.id AND s.read_at IS NULL),
-        \\  (SELECT count(*) FROM entries e WHERE e.feed_id = f.id)
+        \\     WHERE e.feed_id = f.id AND s.read_at IS NULL AND s.hidden_at IS NULL),
+        \\  (SELECT count(*) FROM entries e WHERE e.feed_id = f.id),
+        \\  f.folder_id, f.skip_hours, f.skip_days
         \\FROM feeds f
     ;
 
@@ -387,6 +418,9 @@ pub const Db = struct {
             .last_error = try columnOptionalText(stmt, 13, arena),
             .unread = sqlite3_column_int64(stmt, 14),
             .entries = sqlite3_column_int64(stmt, 15),
+            .folder_id = columnOptionalInt(stmt, 16),
+            .skip_hours = sqlite3_column_int64(stmt, 17),
+            .skip_days = sqlite3_column_int64(stmt, 18),
         };
     }
 
@@ -403,6 +437,77 @@ pub const Db = struct {
         defer _ = sqlite3_finalize(stmt);
         if (sqlite3_step(stmt) != SQLITE_ROW) return null;
         return try readFeed(stmt, arena);
+    }
+
+    fn readFullTextJob(stmt: *Stmt, arena: std.mem.Allocator) error{OutOfMemory}!FullTextJob {
+        return .{
+            .id = sqlite3_column_int64(stmt, 0),
+            .url = try columnText(stmt, 1, arena),
+            .title = try columnOptionalText(stmt, 2, arena),
+            .text_length = sqlite3_column_int64(stmt, 3),
+            .allow_private_network = sqlite3_column_int64(stmt, 4) != 0,
+            .attempts = sqlite3_column_int64(stmt, 5),
+        };
+    }
+
+    /// Recent entries with little text that are waiting for a try, newest first.
+    pub fn dueFullText(db: *Db, arena: std.mem.Allocator, since: i64, short_text: i64, limit: i64, now: i64) Error![]const FullTextJob {
+        const stmt = try db.prepare(
+            \\SELECT e.id, e.url, e.title, length(e.content_text), f.allow_private_network, e.full_attempts
+            \\FROM entries e JOIN feeds f ON f.id = e.feed_id
+            \\WHERE e.full_status IS NULL AND e.url IS NOT NULL AND e.sort_at >= ?1
+            \\  AND length(e.content_text) < ?2 AND (e.full_retry_at IS NULL OR e.full_retry_at <= ?4)
+            \\ORDER BY e.sort_at DESC LIMIT ?3
+        , .{ since, short_text, limit, now });
+        defer _ = sqlite3_finalize(stmt);
+        var rows: std.ArrayList(FullTextJob) = .empty;
+        while (sqlite3_step(stmt) == SQLITE_ROW) try rows.append(arena, try readFullTextJob(stmt, arena));
+        return rows.items;
+    }
+
+    pub fn fullTextJob(db: *Db, arena: std.mem.Allocator, id: i64) Error!?FullTextJob {
+        const stmt = try db.prepare(
+            \\SELECT e.id, e.url, e.title, length(e.content_text), f.allow_private_network, e.full_attempts
+            \\FROM entries e JOIN feeds f ON f.id = e.feed_id WHERE e.id = ?1 AND e.url IS NOT NULL
+        , .{id});
+        defer _ = sqlite3_finalize(stmt);
+        if (sqlite3_step(stmt) != SQLITE_ROW) return null;
+        return try readFullTextJob(stmt, arena);
+    }
+
+    /// Replaces an entry's content with its extracted article.
+    pub fn saveFullText(db: *Db, id: i64, blocks_json: []const u8, text: []const u8, now: i64) Error!void {
+        try db.begin();
+        errdefer db.rollback();
+        try db.run(
+            \\UPDATE entries SET content_blocks_json = ?2, content_text = ?3, full_status = 'done',
+            \\  full_attempted_at = ?4 WHERE id = ?1
+        , .{ id, blocks_json, text, now });
+        try db.run("INSERT INTO events (at, type, subject_id) VALUES (?1, 'entry.updated', ?2)", .{ now, id });
+        try db.commit();
+    }
+
+    /// Settles recent entries that already have enough text, so that `dueFullText`
+    /// reads only those still waiting. A publisher's edit clears the status again.
+    pub fn skipLongEntries(db: *Db, since: i64, short_text: i64, now: i64) Error!void {
+        try db.run(
+            \\UPDATE entries SET full_status = 'skipped', full_attempted_at = ?3
+            \\WHERE full_status IS NULL AND sort_at >= ?1 AND length(content_text) >= ?2
+        , .{ since, short_text, now });
+    }
+
+    pub fn markFullText(db: *Db, id: i64, status: []const u8, now: i64) Error!void {
+        try db.run("UPDATE entries SET full_status = ?2, full_attempted_at = ?3, full_retry_at = NULL WHERE id = ?1", .{ id, status, now });
+    }
+
+    /// Records a temporary failure, and when to try again.
+    pub fn retryFullText(db: *Db, id: i64, attempts: i64, retry_at: i64, now: i64) Error!void {
+        try db.run("UPDATE entries SET full_attempts = ?2, full_retry_at = ?3, full_attempted_at = ?4 WHERE id = ?1", .{ id, attempts, retry_at, now });
+    }
+
+    /// Moves an entry back in the queue without counting a try.
+    pub fn postponeFullText(db: *Db, id: i64, retry_at: i64) Error!void {
+        try db.run("UPDATE entries SET full_retry_at = ?2 WHERE id = ?1", .{ id, retry_at });
     }
 
     /// Feeds whose poll is due, oldest first.
@@ -439,6 +544,18 @@ pub const Db = struct {
         return sqlite3_changes(db.handle) != 0;
     }
 
+    /// Hashes of raw bodies that only this feed uses, for deleting with it.
+    pub fn rawHashesOnlyFor(db: *Db, arena: std.mem.Allocator, id: i64) Error![]const []const u8 {
+        const stmt = try db.prepare(
+            \\SELECT DISTINCT raw_sha256 FROM fetch_log a WHERE feed_id = ?1 AND raw_sha256 IS NOT NULL
+            \\  AND NOT EXISTS (SELECT 1 FROM fetch_log b WHERE b.raw_sha256 = a.raw_sha256 AND b.feed_id != ?1)
+        , .{id});
+        defer _ = sqlite3_finalize(stmt);
+        var rows: std.ArrayList([]const u8) = .empty;
+        while (sqlite3_step(stmt) == SQLITE_ROW) try rows.append(arena, try columnText(stmt, 0, arena));
+        return rows.items;
+    }
+
     /// Returns false when no such feed exists.
     pub fn removeFeed(db: *Db, id: i64) Error!bool {
         try db.run("DELETE FROM feeds WHERE id = ?1", .{id});
@@ -462,7 +579,7 @@ pub const Db = struct {
         const stmt = try db.prepare(
             \\SELECT (SELECT count(*) FROM feeds),
             \\  (SELECT count(*) FROM entries),
-            \\  (SELECT count(*) FROM entries) - (SELECT count(*) FROM entry_state WHERE read_at IS NOT NULL),
+            \\  (SELECT count(*) FROM entries) - (SELECT count(*) FROM entry_state WHERE read_at IS NOT NULL OR hidden_at IS NOT NULL),
             \\  (SELECT count(*) FROM feeds WHERE status = 'active' AND next_fetch_at <= ?1),
             \\  (SELECT count(*) FROM feeds WHERE error_count > 0),
             \\  (SELECT COALESCE(max(seq), 0) FROM events)
@@ -502,6 +619,12 @@ pub const Db = struct {
         if (sqlite3_step(stmt) == SQLITE_ROW) return sqlite3_column_int64(stmt, 0);
         try db.run("INSERT INTO folders (parent_id, name) VALUES (?1, ?2)", .{ parent_id, name });
         return sqlite3_last_insert_rowid(db.handle);
+    }
+
+    /// Details chosen by the user when subscribing. Null leaves a value as it is.
+    pub fn setFeedDetails(db: *Db, id: i64, title: ?[]const u8, folder_id: ?i64) Error!void {
+        if (title) |text| try db.run("UPDATE feeds SET title_override = ?2 WHERE id = ?1", .{ id, text });
+        if (folder_id) |folder| try db.run("UPDATE feeds SET folder_id = ?2 WHERE id = ?1", .{ id, folder });
     }
 
     /// Adds an imported subscription, due at once. Returns false if it already existed.
@@ -555,23 +678,28 @@ pub const Db = struct {
     }
 
     /// Hashes of stored bodies past the newest `keep` for each feed, after clearing
-    /// them from the log. The caller deletes the files.
+    /// them from the log. Feeds can share a body, so a hash is returned only once
+    /// no feed refers to it. The caller deletes the files.
     pub fn takeStaleRaw(db: *Db, arena: std.mem.Allocator, keep: i64) Error![]const []const u8 {
-        var hashes: std.ArrayList([]const u8) = .empty;
+        var pairs: std.ArrayList(struct { feed_id: i64, hash: []const u8 }) = .empty;
         const stmt = try db.prepare(
-            \\SELECT id, raw_sha256 FROM (
-            \\  SELECT id, raw_sha256, row_number() OVER (PARTITION BY feed_id ORDER BY id DESC) AS position
+            \\SELECT feed_id, raw_sha256 FROM (
+            \\  SELECT feed_id, raw_sha256, row_number() OVER (PARTITION BY feed_id ORDER BY id DESC) AS position
             \\  FROM (SELECT max(id) AS id, feed_id, raw_sha256 FROM fetch_log
             \\        WHERE raw_sha256 IS NOT NULL GROUP BY feed_id, raw_sha256)
             \\) WHERE position > ?1
         , .{keep});
         defer _ = sqlite3_finalize(stmt);
-        while (sqlite3_step(stmt) == SQLITE_ROW) try hashes.append(arena, try columnText(stmt, 1, arena));
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            try pairs.append(arena, .{ .feed_id = sqlite3_column_int64(stmt, 0), .hash = try columnText(stmt, 1, arena) });
+        }
 
         var stale: std.ArrayList([]const u8) = .empty;
-        for (hashes.items) |hash| {
-            try db.run("UPDATE fetch_log SET raw_sha256 = NULL WHERE raw_sha256 = ?1", .{hash});
-            try stale.append(arena, hash);
+        for (pairs.items) |pair| {
+            try db.run("UPDATE fetch_log SET raw_sha256 = NULL WHERE feed_id = ?1 AND raw_sha256 = ?2", .{ pair.feed_id, pair.hash });
+            const others = try db.prepare("SELECT 1 FROM fetch_log WHERE raw_sha256 = ?1 LIMIT 1", .{pair.hash});
+            defer _ = sqlite3_finalize(others);
+            if (sqlite3_step(others) != SQLITE_ROW) try stale.append(arena, pair.hash);
         }
         return stale.items;
     }
@@ -626,6 +754,7 @@ pub const Db = struct {
         w.writeAll("],\"rows\":[") catch return error.OutOfMemory;
 
         var rows: usize = 0;
+        var value_bytes: usize = 0;
         var truncated = false;
         while (true) {
             const rc = sqlite3_step(stmt.?);
@@ -635,7 +764,8 @@ pub const Db = struct {
                 try writeError(w, db.errorMessage());
                 return out.written();
             }
-            if (rows == max_rows) {
+            value_bytes += rowBytes(stmt.?, columns);
+            if (rows == max_rows or value_bytes > query_max_bytes) {
                 truncated = true;
                 break;
             }
@@ -650,6 +780,17 @@ pub const Db = struct {
         }
         w.print("],\"truncated\":{}}}", .{truncated}) catch return error.OutOfMemory;
         return out.written();
+    }
+
+    /// Text and blobs only, since asking for the size of a number converts it.
+    fn rowBytes(stmt: *Stmt, columns: usize) usize {
+        var total: usize = 0;
+        for (0..columns) |i| {
+            const type_code = sqlite3_column_type(stmt, @intCast(i));
+            if (type_code == SQLITE_INTEGER or type_code == SQLITE_FLOAT or type_code == SQLITE_NULL) continue;
+            total += @intCast(sqlite3_column_bytes(stmt, @intCast(i)));
+        }
+        return total;
     }
 
     fn writeError(w: *std.Io.Writer, message: []const u8) error{OutOfMemory}!void {
@@ -679,13 +820,14 @@ pub const Db = struct {
             \\  status = COALESCE(?6, status), etag = COALESCE(?7, etag),
             \\  last_modified = COALESCE(?8, last_modified), poll_seconds = COALESCE(?9, poll_seconds),
             \\  next_fetch_at = ?10, last_fetch_at = ?11, last_success_at = COALESCE(?12, last_success_at),
-            \\  error_count = ?13, last_error = ?14
+            \\  error_count = ?13, last_error = ?14, skip_hours = COALESCE(?15, skip_hours),
+            \\  skip_days = COALESCE(?16, skip_days)
             \\WHERE id = ?1
         , .{
             update.id,           update.site_url,      update.title,         update.description,
             update.format,       update.status,        update.etag,          update.last_modified,
             update.poll_seconds, update.next_fetch_at, update.last_fetch_at, update.last_success_at,
-            update.error_count,  update.last_error,
+            update.error_count,  update.last_error,    update.skip_hours,    update.skip_days,
         });
         if (update.url) |url| {
             // Another subscription may already hold the new URL. Keeping the old
@@ -701,10 +843,11 @@ pub const Db = struct {
         , .{ log.feed_id, log.started_at, log.duration_ms, log.http_status, log.bytes, log.raw_sha256, log.new_entries, log.updated_entries, log.err });
     }
 
-    /// Hash of the last stored body, for skipping bodies that have not changed.
+    /// Hash of the last body that was stored and parsed, for skipping bodies that have
+    /// not changed. A failed body does not count, or repeating it would read as success.
     pub fn lastRawHash(db: *Db, arena: std.mem.Allocator, feed_id: i64) Error!?[]const u8 {
         const stmt = try db.prepare(
-            \\SELECT raw_sha256 FROM fetch_log WHERE feed_id = ?1 AND raw_sha256 IS NOT NULL
+            \\SELECT raw_sha256 FROM fetch_log WHERE feed_id = ?1 AND raw_sha256 IS NOT NULL AND error IS NULL
             \\ORDER BY id DESC LIMIT 1
         , .{feed_id});
         defer _ = sqlite3_finalize(stmt);
@@ -733,7 +876,8 @@ pub const Db = struct {
                 try db.run(
                     \\UPDATE entries SET url = ?2, canonical_url = ?3, title = ?4, author = ?5,
                     \\  published_at = ?6, updated_at = ?7, content_blocks_json = ?8, content_text = ?9,
-                    \\  content_hash = ?10, revision = revision + 1 WHERE id = ?1
+                    \\  content_hash = ?10, revision = revision + 1, full_status = NULL,
+                    \\  full_attempts = 0, full_retry_at = NULL WHERE id = ?1
                 , .{ id, entry.url, entry.canonical_url, entry.title, entry.author, entry.published_at, entry.updated_at, entry.content_blocks_json, entry.content_text, entry.content_hash });
                 try db.run("INSERT INTO events (at, type, subject_id) VALUES (?1, 'entry.updated', ?2)", .{ now, id });
                 result.updated += 1;
@@ -761,7 +905,8 @@ pub const Db = struct {
 
     const summary_columns =
         \\SELECT e.id, e.feed_id, COALESCE(f.title_override, f.title), e.title, e.url, e.sort_at,
-        \\  s.read_at IS NOT NULL, s.starred_at IS NOT NULL
+        \\  s.read_at IS NOT NULL, s.starred_at IS NOT NULL,
+        \\  CASE WHEN ?8 THEN substr(e.content_text, 1, 200) END
         \\FROM entries e JOIN feeds f ON f.id = e.feed_id LEFT JOIN entry_state s ON s.entry_id = e.id
     ;
 
@@ -776,6 +921,7 @@ pub const Db = struct {
             .date = try formatDate(arena, sqlite3_column_int64(stmt, 5)),
             .read = sqlite3_column_int64(stmt, 6) != 0,
             .starred = sqlite3_column_int64(stmt, 7) != 0,
+            .summary = try columnOptionalText(stmt, 8, arena),
         };
     }
 
@@ -802,6 +948,7 @@ pub const Db = struct {
             if (filter.before) |c| c.id else null,
             filter.limit,
             filter.since,
+            filter.with_summary,
         });
         defer _ = sqlite3_finalize(stmt);
         var rows: std.ArrayList(EntrySummary) = .empty;
@@ -841,8 +988,9 @@ pub const Db = struct {
     /// ordering is not the default. Each word is quoted, so input cannot use FTS5
     /// query syntax and cannot produce a syntax error.
     ///
-    /// Only the most recent 2,000 matches are considered. Snippets are costly, so
-    /// the query narrows to the final rows first and builds snippets for those alone.
+    /// Only the 2,000 most recently stored entries that match and pass the filters
+    /// are considered. Snippets are costly, so the query narrows to the final rows
+    /// first and builds snippets for those alone.
     pub fn search(db: *Db, arena: std.mem.Allocator, words_text: []const u8, options: SearchOptions) Error![]const EntrySummary {
         var match: std.ArrayList(u8) = .empty;
         var words = std.mem.tokenizeAny(u8, words_text, " \t\r\n");
@@ -904,12 +1052,14 @@ pub const Db = struct {
     fn searchText(db: *Db, arena: std.mem.Allocator, match: []const u8, options: SearchOptions) Error![]const EntrySummary {
         const stmt = try db.prepare(
             \\WITH matches AS (
-            \\  SELECT rowid AS id FROM entries_fts WHERE entries_fts MATCH ?1 ORDER BY rowid DESC LIMIT 2000
-            \\), chosen AS (
-            \\  SELECT e.id FROM matches m JOIN entries e ON e.id = m.id
+            \\  SELECT e.id, e.sort_at FROM entries_fts
+            \\  CROSS JOIN entries e ON e.id = entries_fts.rowid
             \\  LEFT JOIN entry_state s ON s.entry_id = e.id
-            \\  WHERE (?3 = 0 OR s.read_at IS NULL) AND (?4 IS NULL OR e.sort_at >= ?4) AND s.hidden_at IS NULL
-            \\  ORDER BY e.sort_at DESC, e.id DESC LIMIT ?2
+            \\  WHERE entries_fts MATCH ?1 AND (?3 = 0 OR s.read_at IS NULL)
+            \\    AND (?4 IS NULL OR e.sort_at >= ?4) AND s.hidden_at IS NULL
+            \\  ORDER BY entries_fts.rowid DESC LIMIT 2000
+            \\), chosen AS (
+            \\  SELECT id FROM matches ORDER BY sort_at DESC, id DESC LIMIT ?2
             \\)
             \\SELECT e.id, e.feed_id, COALESCE(f.title_override, f.title), e.title, e.url, e.sort_at,
             \\  s.read_at IS NOT NULL, s.starred_at IS NOT NULL,
@@ -924,6 +1074,7 @@ pub const Db = struct {
         while (sqlite3_step(stmt) == SQLITE_ROW) {
             var row = try readSummary(stmt, arena);
             row.snippet = try columnOptionalText(stmt, 8, arena);
+            row.summary = null;
             try rows.append(arena, row);
         }
         return rows.items;
@@ -941,6 +1092,9 @@ pub const Db = struct {
         }
         if (marks.starred) |starred| {
             try db.run("UPDATE entry_state SET starred_at = ?2 WHERE entry_id = ?1", .{ id, if (starred) now else null });
+        }
+        if (marks.hidden) |hidden| {
+            try db.run("UPDATE entry_state SET hidden_at = ?2 WHERE entry_id = ?1", .{ id, if (hidden) now else null });
         }
         return true;
     }
@@ -1063,6 +1217,197 @@ test "only raw bodies past the newest for each feed are stale" {
     try testing.expectEqualStrings("a4", (try db.lastRawHash(a, first)).?);
     try testing.expectEqualStrings("b0", (try db.lastRawHash(a, second)).?);
     try testing.expectEqual(0, (try db.takeStaleRaw(a, 2)).len);
+}
+
+test "full text replaces content, and a publisher's edit asks for it again" {
+    var db: Db = try .open(":memory:", .writer);
+    defer db.close();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const feed_id = try db.addFeed("https://example.com/feed", false, 1);
+    _ = try db.ingest(feed_id, &.{sample("1", "One", "h1")}, 2000);
+
+    const due = try db.dueFullText(a, 0, 1000, 10, 5000);
+    try testing.expectEqual(1, due.len);
+    try db.saveFullText(due[0].id, "[]", "the whole article about gardens", 3000);
+    try testing.expectEqual(0, (try db.dueFullText(a, 0, 1000, 10, 5000)).len);
+    try testing.expectEqual(1, (try db.search(a, "gardens", .{})).len);
+
+    // The same feed text again must not undo the article.
+    _ = try db.ingest(feed_id, &.{sample("1", "One", "h1")}, 4000);
+    try testing.expectEqual(1, (try db.search(a, "gardens", .{})).len);
+
+    _ = try db.ingest(feed_id, &.{sample("1", "One", "h2")}, 5000);
+    try testing.expectEqual(1, (try db.dueFullText(a, 0, 1000, 10, 5000)).len);
+    try testing.expectEqual(0, (try db.dueFullText(a, 0, 5, 10, 5000)).len);
+    try testing.expectEqual(0, (try db.dueFullText(a, 999999, 1000, 10, 5000)).len);
+}
+
+test "an enclosure size beyond SQLite's range is stored, not fatal" {
+    var db: Db = try .open(":memory:", .writer);
+    defer db.close();
+    const feed_id = try db.addFeed("https://example.com/feed", false, 1);
+    var entry = sample("1", "One", "h1");
+    entry.enclosures = &.{.{ .url = "https://example.com/a", .mime_type = null, .bytes = std.math.maxInt(u64) }};
+    try testing.expectEqual(1, (try db.ingest(feed_id, &.{entry}, 2000)).new);
+}
+
+test "a body another feed still needs is kept" {
+    var db: Db = try .open(":memory:", .writer);
+    defer db.close();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const first = try db.addFeed("https://example.com/a", false, 1);
+    const second = try db.addFeed("https://example.com/b", false, 1);
+    try db.logFetch(.{ .feed_id = first, .started_at = 1, .duration_ms = 1, .raw_sha256 = "shared" });
+    try db.logFetch(.{ .feed_id = first, .started_at = 1, .duration_ms = 1, .raw_sha256 = "newer" });
+    try db.logFetch(.{ .feed_id = second, .started_at = 1, .duration_ms = 1, .raw_sha256 = "shared" });
+
+    try testing.expectEqual(0, (try db.takeStaleRaw(a, 1)).len);
+    try testing.expectEqualStrings("shared", (try db.lastRawHash(a, second)).?);
+}
+
+test "query output stops growing at its byte limit" {
+    var db: Db = try .open(":memory:", .sandbox);
+    defer db.close();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const sql = "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 100) SELECT printf('%.*c', 1000000, 'x') FROM n";
+    const json = try db.query(arena.allocator(), sql, 100);
+    try testing.expect(json.len < Db.query_max_bytes + 4096);
+    try testing.expect(std.mem.endsWith(u8, json, "\"truncated\":true}"));
+}
+
+test "one huge value cannot be built, or returned past the byte limit" {
+    var db: Db = try .open(":memory:", .sandbox);
+    defer db.close();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const too_long = try db.query(a, "SELECT hex(zeroblob(100000000))", 10);
+    try testing.expect(std.mem.indexOf(u8, too_long, "too big") != null);
+
+    const over_budget = try db.query(a, "SELECT hex(zeroblob(4000000))", 10);
+    try testing.expect(over_budget.len < 4096);
+    try testing.expect(std.mem.endsWith(u8, over_budget, "\"truncated\":true}"));
+}
+
+test "a failed body is tracked for pruning, but is not the last good body" {
+    var db: Db = try .open(":memory:", .writer);
+    defer db.close();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const feed_id = try db.addFeed("https://example.com/a", false, 1);
+    try db.logFetch(.{ .feed_id = feed_id, .started_at = 1, .duration_ms = 1, .raw_sha256 = "good" });
+    try db.logFetch(.{ .feed_id = feed_id, .started_at = 1, .duration_ms = 1, .raw_sha256 = "bad", .err = "NotAFeed" });
+
+    try testing.expectEqualStrings("good", (try db.lastRawHash(a, feed_id)).?);
+    const stale = try db.takeStaleRaw(a, 1);
+    try testing.expectEqual(1, stale.len);
+    try testing.expectEqualStrings("good", stale[0]);
+}
+
+test "a hidden entry leaves lists and search until shown again" {
+    var db: Db = try .open(":memory:", .writer);
+    defer db.close();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const feed_id = try db.addFeed("https://example.com/feed", false, 1);
+    _ = try db.ingest(feed_id, &.{sample("1", "One", "h1")}, 2000);
+    const id = (try db.listEntries(a, .{}))[0].id;
+
+    try testing.expect(try db.mark(id, .{ .hidden = true }, 3000));
+    try testing.expectEqual(0, (try db.listEntries(a, .{})).len);
+    try testing.expectEqual(0, (try db.stats(5)).unread);
+    try testing.expectEqual(0, (try db.feeds(a))[0].unread);
+    try testing.expectEqual(0, (try db.search(a, "parser", .{})).len);
+    try testing.expect(try db.mark(id, .{ .hidden = false }, 3000));
+    try testing.expectEqual(1, (try db.listEntries(a, .{})).len);
+}
+
+test "search filters apply before the window of recent matches" {
+    var db: Db = try .open(":memory:", .writer);
+    defer db.close();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const feed_id = try db.addFeed("https://example.com/feed", false, 1);
+    _ = try db.ingest(feed_id, &.{sample("old", "Old", "h")}, 2000);
+    const unread = (try db.listEntries(a, .{}))[0].id;
+
+    var rows: std.ArrayList(NewEntry) = .empty;
+    for (0..2100) |i| try rows.append(a, sample(try std.fmt.allocPrint(a, "n{d}", .{i}), "New", "h"));
+    _ = try db.ingest(feed_id, rows.items, 2000);
+    const stmt = try db.prepare("INSERT INTO entry_state (entry_id, read_at) SELECT id, 1 FROM entries WHERE id != ?1", .{unread});
+    defer _ = sqlite3_finalize(stmt);
+    _ = sqlite3_step(stmt);
+
+    const found = try db.search(a, "zig", .{ .unread_only = true });
+    try testing.expectEqual(1, found.len);
+    try testing.expectEqual(unread, found[0].id);
+}
+
+test "long entries are settled, and short ones keep waiting" {
+    var db: Db = try .open(":memory:", .writer);
+    defer db.close();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const feed_id = try db.addFeed("https://example.com/feed", false, 1);
+    var long = sample("long", "Long", "h1");
+    long.content_text = "a long enough body";
+    var short = sample("short", "Short", "h2");
+    short.content_text = "short";
+    _ = try db.ingest(feed_id, &.{ long, short }, 2000);
+
+    try db.skipLongEntries(0, 10, 3000);
+    const due = try db.dueFullText(a, 0, 1000, 10, 3000);
+    try testing.expectEqual(1, due.len);
+    try testing.expectEqualStrings("Short", due[0].title.?);
+}
+
+test "a retry waits for its time, and an edit starts over" {
+    var db: Db = try .open(":memory:", .writer);
+    defer db.close();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const feed_id = try db.addFeed("https://example.com/feed", false, 1);
+    _ = try db.ingest(feed_id, &.{sample("1", "One", "h1")}, 2000);
+    const id = (try db.dueFullText(a, 0, 1000, 10, 3000))[0].id;
+
+    try db.retryFullText(id, 2, 9000, 3000);
+    try testing.expectEqual(0, (try db.dueFullText(a, 0, 1000, 10, 8999)).len);
+    try testing.expectEqual(2, (try db.dueFullText(a, 0, 1000, 10, 9000))[0].attempts);
+
+    _ = try db.ingest(feed_id, &.{sample("1", "One", "h2")}, 3000);
+    try testing.expectEqual(0, (try db.dueFullText(a, 0, 1000, 10, 3000))[0].attempts);
+}
+
+test "an old database is upgraded in place" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const path = "/tmp/rss_-migrate-test.db";
+    defer inline for (.{ path, path ++ "-wal", path ++ "-shm" }) |name| {
+        _ = std.c.unlink(name);
+    };
+    {
+        var handle: ?*Handle = null;
+        try testing.expectEqual(0, sqlite3_open(path, &handle));
+        var old: Db = .{ .handle = handle.? };
+        defer old.close();
+        try old.exec(migrations[0]);
+        try old.run("INSERT INTO feeds (url, created_at) VALUES ('https://example.com/', 1)", .{});
+    }
+    var db: Db = try .open(path, .writer);
+    defer db.close();
+    try testing.expectEqual(1, (try db.stats(5)).feeds);
+    try testing.expectEqual(0, (try db.dueFullText(arena.allocator(), 0, 1000, 10, 5)).len);
 }
 
 test "due feeds and removal" {

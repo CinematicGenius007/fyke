@@ -72,6 +72,10 @@ for line in open(dump_path):
 stats = collections.Counter(); problems = collections.Counter(); samples = {}
 for name, row in ours.items():
     if row["format"].startswith("json"): continue
+    # ElementTree expands internal entities, so a downloaded bomb would hang this check.
+    if b"<!ENTITY" in open(os.path.join(corpus, name), "rb").read():
+        stats["declares entities, skipped by oracle"] += 1
+        continue
     try:
         root = ET.parse(os.path.join(corpus, name)).getroot()
     except (ET.ParseError, ValueError):

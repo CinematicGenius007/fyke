@@ -2,6 +2,7 @@
 //! socket, as newline-delimited JSON-RPC 2.0. See docs/api.md ("Socket protocol").
 
 const std = @import("std");
+const fetch = @import("fetch.zig");
 const ops = @import("ops.zig");
 const service = @import("service.zig");
 const store = @import("store.zig");
@@ -16,6 +17,11 @@ const subscribe_poll_ms = 5000;
 
 pub const socket_name = "rssd.sock";
 
+pub const Options = struct {
+    /// Log to `rssd.log` in place of stderr, for a daemon started in the background.
+    log_to_file: bool = false,
+};
+
 const code_parse = -32700;
 const code_invalid_request = -32600;
 const code_unknown_method = -32601;
@@ -23,7 +29,15 @@ const code_invalid_params = -32602;
 const code_failed = -32000;
 const code_tier_denied = -32001;
 
-pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem.Allocator) !void {
+/// Sends this process's stderr to `rssd.log`, emptied first. Only the lock holder
+/// may do this, or a client that lost the race to start a daemon would erase the log.
+fn redirectLog(io: Io, home: Io.Dir) !void {
+    var log = try home.createFile(io, "rssd.log", .{});
+    defer log.close(io);
+    if (std.c.dup2(log.handle, std.posix.STDERR_FILENO) < 0) return error.LogUnavailable;
+}
+
+pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem.Allocator, options: Options) !void {
     const cwd = Io.Dir.cwd();
     try cwd.createDirPath(io, home_path);
     // Feed choices, notes and API references are private, so the whole directory is.
@@ -36,6 +50,7 @@ pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem
     var lock_file = try home.createFile(io, "rssd.lock", .{ .truncate = false });
     defer lock_file.close(io);
     if (!try lock_file.tryLock(io, .exclusive)) return error.AlreadyRunning;
+    if (options.log_to_file) try redirectLog(io, home);
 
     const socket_path = try std.fmt.allocPrint(arena, "{s}/{s}", .{ home_path, socket_name });
     home.deleteFile(io, socket_name) catch {}; // Left behind by a crash.
@@ -47,7 +62,7 @@ pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem
         .home = home,
         .config = try readConfig(arena, io, home),
         .started_at = Io.Clock.real.now(io).toMilliseconds(),
-        .client = .{ .allocator = gpa, .io = io },
+        .client = .{ .allocator = gpa, .io = fetch.withCancelableConnect(io) },
         .writer = try .open(db_path, .writer),
         .reader = try .open(db_path, .reader),
         .sandbox = try .open(db_path, .sandbox),
@@ -62,6 +77,8 @@ pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem
     var group: Io.Group = .init;
     for (0..s.config.workers) |_| try group.concurrent(io, service.workerLoop, .{&s});
     try group.concurrent(io, service.schedulerLoop, .{&s});
+    s.full_text.store(s.config.full_text, .monotonic);
+    if (s.config.auto_poll) try group.concurrent(io, service.fullTextLoop, .{&s});
     try group.concurrent(io, acceptLoop, .{ &s, &server });
     std.debug.print("rssd: listening on {s}\n", .{socket_path});
 
@@ -81,7 +98,7 @@ fn readConfig(arena: std.mem.Allocator, io: Io, home: Io.Dir) !service.Config {
         error.FileNotFound => return .{},
         else => return err,
     };
-    return std.json.parseFromSliceLeaky(service.Config, arena, text, .{ .ignore_unknown_fields = true });
+    return std.json.parseFromSliceLeaky(service.Config, arena, text, .{ .ignore_unknown_fields = true }) catch error.InvalidConfig;
 }
 
 fn acceptLoop(s: *Service, server: *Io.net.Server) Io.Cancelable!void {
@@ -122,7 +139,7 @@ fn serve(s: *Service, stream: Io.net.Stream) Io.Cancelable!void {
         var line: Io.Writer.Allocating = .init(arena);
         const length = in.streamDelimiterLimit(&line.writer, '\n', .limited(max_request)) catch return;
         // Without a newline, the stream ended or the request is too long.
-        if (in.peekByte() catch return != '\n') return;
+        if ((in.peekByte() catch return) != '\n') return;
         in.toss(1);
         if (length == 0) continue;
 
@@ -147,7 +164,7 @@ fn handle(s: *Service, arena: std.mem.Allocator, line: []const u8, out: *Io.Writ
     if (std.mem.eql(u8, method, "connection.restrict")) return restrict(out, id, params, tier);
     if (std.mem.eql(u8, method, "events.subscribe")) {
         if (!tier.allows(.read)) return writeError(out, id, code_tier_denied, "TierDenied");
-        return subscribe(s, arena, out, id, params);
+        return subscribe(s, out, id, params);
     }
 
     var result: Io.Writer.Allocating = .init(arena);
@@ -179,7 +196,7 @@ fn writeError(out: *Io.Writer, id: std.json.Value, code: i32, kind: []const u8) 
 /// Turns this connection into a one-way stream of events, starting after
 /// `since_seq`. Clients use a second connection for requests, and reconnect from
 /// their last seen sequence number, so they miss nothing.
-fn subscribe(s: *Service, arena: std.mem.Allocator, out: *Io.Writer, id: std.json.Value, params: std.json.Value) !void {
+fn subscribe(s: *Service, out: *Io.Writer, id: std.json.Value, params: std.json.Value) !void {
     var seq: i64 = 0;
     if (params == .object) {
         if (params.object.get("since_seq")) |value| {
@@ -188,7 +205,6 @@ fn subscribe(s: *Service, arena: std.mem.Allocator, out: *Io.Writer, id: std.jso
     }
     try out.print("{{\"jsonrpc\":\"2.0\",\"id\":{f},\"result\":{{\"subscribed\":true}}}}\n", .{std.json.fmt(id, .{})});
     try out.flush();
-    _ = arena;
 
     while (true) {
         var batch_state: std.heap.ArenaAllocator = .init(s.gpa);

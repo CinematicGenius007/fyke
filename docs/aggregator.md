@@ -1,5 +1,7 @@
 # AI aggregator
 
+Status: design. None of this is built yet, apart from its tables in the schema. See the [roadmap](roadmap.md).
+
 The aggregation logic is deliberately undecided, so the design treats it as **configuration you can experiment with**, not code you commit to. This document proposes a default to start from.
 
 The aggregator is optional. It only reads entries and writes artifacts, so turning it off changes nothing else.
@@ -16,7 +18,7 @@ Turn "2,000 unread items" into "the 12 things that happened and why they matter 
 
 | Stage | Input to output | Uses a model? | Notes |
 |---|---|---|---|
-| **Dedupe** | Entries to unique entries | No | Same `canonical_url`, or `simhash` within 3 bits. Part of ingest, always on |
+| **Dedupe** | Entries to unique entries | No | Same `canonical_url`, or `simhash` within 3 bits. Ingest stores `canonical_url` today, and nothing compares it across feeds yet |
 | **Enrich** | Entry to summary, topics, embedding | Small or local | Once per entry, cached, skipped for short entries |
 | **Cluster** | Entries to stories | No | See below |
 | **Rank** | Stories to ordered stories | No | See below |
@@ -137,4 +139,3 @@ Answer these by using it, not in advance:
 - Should summaries be precomputed for everything, or on open?
 - Does the clustering threshold need to vary by topic?
 - Which feedback signals are honest? Dwell time may be noise.
-- Do we need full-text fetching for summary-only feeds? It improves everything downstream but adds a scraper.

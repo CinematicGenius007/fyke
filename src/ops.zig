@@ -1,8 +1,8 @@
 //! The operation registry: the one API of the system. See docs/api.md.
 //!
 //! Each operation is one struct. The socket dispatches on `name`, the CLI reuses
-//! `Params` and `Result` as its wire types, and the MCP server will generate its
-//! tools from the same declarations, so that the surfaces cannot drift apart.
+//! `Params` and `Result` as its wire types, and the MCP server generates its tools
+//! from the same declarations, so that the surfaces cannot drift apart.
 
 const std = @import("std");
 const core = @import("core");
@@ -35,8 +35,15 @@ pub const RawJson = struct {
 
 const Ok = struct { ok: bool = true };
 
+/// Longer than any feed has existed, and small enough that the arithmetic cannot overflow.
+const max_since_days = 100 * 366;
+
 fn sinceMillis(s: *const Service, days: ?i64) ?i64 {
-    return s.now() - (days orelse return null) * 24 * 3600 * 1000;
+    return cutoffMillis(s.now(), days orelse return null);
+}
+
+fn cutoffMillis(now: i64, days: i64) i64 {
+    return now - std.math.clamp(days, 0, max_since_days) * 24 * 3600 * 1000;
 }
 
 pub const FeedsList = struct {
@@ -60,15 +67,99 @@ pub const FeedsAdd = struct {
     pub const docs = .{
         .url = "Feed URL, or a site URL to search for a feed.",
         .allow_private_network = "Permit private addresses. Leave false unless the user asked.",
+        .title = "Name to show instead of the feed's own title.",
+        .folder = "Name of a top-level folder, created if missing.",
     };
-    pub const Params = struct { url: []const u8, allow_private_network: bool = false };
+    pub const Params = struct {
+        url: []const u8,
+        allow_private_network: bool = false,
+        title: ?[]const u8 = null,
+        folder: ?[]const u8 = null,
+    };
     pub const Result = RefreshResult;
 
     pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
-        const added = try pipeline.subscribe(s.context(), arena, p.url, p.allow_private_network);
+        const added = try pipeline.subscribe(s.context(), arena, p.url, p.allow_private_network, .{ .title = p.title, .folder = p.folder });
         s.eventsChanged();
         s.wake.set(s.io);
         return .from(added.id, added.outcome);
+    }
+};
+
+pub const FeedsPreview = struct {
+    pub const name = "feeds.preview";
+    // It subscribes to nothing, but it does fetch any address it is given.
+    pub const tier: Tier = .manage;
+    pub const description = "Find the feeds behind a site or feed URL, with their latest titles, without subscribing.";
+    pub const docs = .{
+        .url = "Feed URL, or a site URL to search for feeds.",
+        .allow_private_network = "Permit private addresses. Leave false unless the user asked.",
+    };
+    pub const Params = struct { url: []const u8, allow_private_network: bool = false };
+    pub const Result = struct { items: []const pipeline.Candidate };
+
+    pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
+        return .{ .items = try pipeline.preview(s.context(), arena, p.url, p.allow_private_network) };
+    }
+};
+
+pub const ConfigGet = struct {
+    pub const name = "config.get";
+    pub const tier: Tier = .read;
+    pub const description = "Read the settings a client can change.";
+    pub const agent_visible = false;
+    pub const Params = struct {};
+    pub const Result = struct { full_text: bool };
+
+    pub fn run(s: *Service, _: std.mem.Allocator, _: Params) !Result {
+        return .{ .full_text = s.full_text.load(.monotonic) };
+    }
+};
+
+pub const ConfigSet = struct {
+    pub const name = "config.set";
+    pub const tier: Tier = .manage;
+    pub const description = "Change a setting, now and for later runs.";
+    pub const agent_visible = false;
+    pub const Params = struct { full_text: ?bool = null };
+    pub const Result = Ok;
+
+    pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
+        const enabled = p.full_text orelse return .{};
+        try saveSetting(s, arena, "full_text", .{ .bool = enabled });
+        s.full_text.store(enabled, .monotonic);
+        s.full_text_wake.set(s.io);
+        return .{};
+    }
+
+    /// Other keys in the file are the owner's, so they survive untouched.
+    fn saveSetting(s: *Service, arena: std.mem.Allocator, key: []const u8, value: std.json.Value) !void {
+        s.config_lock.lockUncancelable(s.io);
+        defer s.config_lock.unlock(s.io);
+        const text = s.home.readFileAlloc(s.io, "config.json", arena, .limited(1 << 20)) catch |err| switch (err) {
+            error.FileNotFound => "{}",
+            else => return err,
+        };
+        var root = try std.json.parseFromSliceLeaky(std.json.Value, arena, text, .{});
+        if (root != .object) return error.InvalidConfig;
+        try root.object.put(arena, key, value);
+        const out = try std.fmt.allocPrint(arena, "{f}\n", .{std.json.fmt(root, .{ .whitespace = .indent_2 })});
+        try s.home.writeFile(s.io, .{ .sub_path = "config.json.tmp", .data = out });
+        try s.home.rename("config.json.tmp", s.home, "config.json", s.io);
+    }
+};
+
+pub const FoldersList = struct {
+    pub const name = "folders.list";
+    pub const tier: Tier = .read;
+    pub const description = "List folders.";
+    pub const Params = struct {};
+    pub const Result = struct { items: []const store.FolderRow };
+
+    pub fn run(s: *Service, arena: std.mem.Allocator, _: Params) !Result {
+        const reader = s.lockReader();
+        defer s.unlockReader();
+        return .{ .items = try reader.folders(arena) };
     }
 };
 
@@ -157,10 +248,15 @@ pub const FeedsRemove = struct {
     pub const Params = struct { id: i64 };
     pub const Result = Ok;
 
-    pub fn run(s: *Service, _: std.mem.Allocator, p: Params) !Result {
+    pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
         const writer = s.lockWriter();
-        defer s.unlockWriter();
-        if (!try writer.removeFeed(p.id)) return error.NoSuchFeed;
+        const hashes = removed: {
+            defer s.unlockWriter();
+            const hashes = try writer.rawHashesOnlyFor(arena, p.id);
+            if (!try writer.removeFeed(p.id)) return error.NoSuchFeed;
+            break :removed hashes;
+        };
+        for (hashes) |hash| service.deleteRaw(s, arena, hash);
         return .{};
     }
 };
@@ -176,6 +272,7 @@ pub const EntriesList = struct {
         .since_days = "Only entries from the last N days.",
         .limit = "Page size, up to 1000.",
         .before = "The next_cursor from a previous page.",
+        .with_summary = "Include the start of each entry's text.",
     };
     pub const Params = struct {
         feed_id: ?i64 = null,
@@ -184,6 +281,7 @@ pub const EntriesList = struct {
         since_days: ?i64 = null,
         limit: i64 = 50,
         before: ?[]const u8 = null,
+        with_summary: bool = false,
     };
     pub const Result = struct { items: []const store.EntrySummary, next_cursor: ?[]const u8 };
 
@@ -198,6 +296,7 @@ pub const EntriesList = struct {
             .limit = limit,
             .since = sinceMillis(s, p.since_days),
             .before = if (p.before) |text| try parseCursor(text) else null,
+            .with_summary = p.with_summary,
         });
         var cursor: ?[]const u8 = null;
         if (rows.len == limit) {
@@ -306,20 +405,43 @@ pub const EntriesSearch = struct {
 pub const EntriesMark = struct {
     pub const name = "entries.mark";
     pub const tier: Tier = .annotate;
-    pub const description = "Set or clear the read and starred state of an entry.";
+    pub const description = "Set or clear the read, starred and hidden state of an entry. Hidden entries leave lists and search.";
     pub const docs = .{
         .id = "Entry id.",
         .read = "True for read, false for unread.",
         .starred = "True to star, false to unstar.",
+        .hidden = "True to hide, false to show again.",
     };
-    pub const Params = struct { id: i64, read: ?bool = null, starred: ?bool = null };
+    pub const Params = struct { id: i64, read: ?bool = null, starred: ?bool = null, hidden: ?bool = null };
     pub const Result = Ok;
 
     pub fn run(s: *Service, _: std.mem.Allocator, p: Params) !Result {
         const writer = s.lockWriter();
         defer s.unlockWriter();
-        if (!try writer.mark(p.id, .{ .read = p.read, .starred = p.starred }, s.now())) return error.NoSuchEntry;
+        if (!try writer.mark(p.id, .{ .read = p.read, .starred = p.starred, .hidden = p.hidden }, s.now())) return error.NoSuchEntry;
         return .{};
+    }
+};
+
+pub const EntriesFetchFull = struct {
+    pub const name = "entries.fetch_full";
+    pub const tier: Tier = .annotate;
+    pub const description = "Fetch an entry's article from its web page, replacing a short feed summary. This happens by itself for recent entries. Status is done, skipped, failed, or later when the site could not be reached.";
+    pub const docs = .{ .id = "Entry id." };
+    pub const Params = struct { id: i64 };
+    pub const Result = struct { status: []const u8 };
+
+    pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
+        const reader = s.lockReader();
+        const row = reader.fullTextJob(arena, p.id) catch |err| {
+            s.unlockReader();
+            return err;
+        };
+        s.unlockReader();
+        const job = row orelse return error.NoSuchEntry;
+        const status = try service.fetchFullText(s, arena, job);
+        s.eventsChanged();
+        return .{ .status = status };
     }
 };
 
@@ -447,7 +569,7 @@ pub const SchemaDescribe = struct {
     pub const Result = struct { schema: []const u8 };
 
     pub fn run(_: *Service, _: std.mem.Allocator, _: Params) !Result {
-        return .{ .schema = @embedFile("schema") };
+        return .{ .schema = @embedFile("schema") ++ "\n" ++ @embedFile("schema2") ++ "\n" ++ @embedFile("schema3") ++ "\n" ++ @embedFile("schema4") ++ "\n" ++ @embedFile("schema5") };
     }
 };
 
@@ -534,10 +656,12 @@ pub const DaemonHousekeep = struct {
 };
 
 pub const all = .{
-    FeedsList,       FeedsAdd,       FeedsRefresh,  FeedsRefreshAll, FeedsQueue, FeedsRemove,
-    EntriesList,     EntriesGet,     EntriesSearch, EntriesMark,     OpmlImport, OpmlExport,
-    StatsGet,        SchemaDescribe, DbQuery,       EventsSince,     OpsList,    DaemonStop,
-    DaemonHousekeep,
+    FeedsPreview,  FoldersList, ConfigGet,        ConfigSet,
+    FeedsList,     FeedsAdd,    FeedsRefresh,     FeedsRefreshAll,
+    FeedsQueue,    FeedsRemove, EntriesList,      EntriesGet,
+    EntriesSearch, EntriesMark, EntriesFetchFull, OpmlImport,
+    OpmlExport,    StatsGet,    SchemaDescribe,   DbQuery,
+    EventsSince,   OpsList,     DaemonStop,       DaemonHousekeep,
 };
 
 pub const DispatchError = error{ UnknownMethod, TierDenied, InvalidParams };
@@ -554,6 +678,13 @@ pub fn dispatch(s: *Service, arena: std.mem.Allocator, method: []const u8, param
         }
     }
     return error.UnknownMethod;
+}
+
+test "any age parameter gives a sane cutoff" {
+    const now = 1_800_000_000_000;
+    try std.testing.expectEqual(now - 24 * 3600 * 1000, cutoffMillis(now, 1));
+    try std.testing.expectEqual(now, cutoffMillis(now, std.math.minInt(i64)));
+    try std.testing.expectEqual(cutoffMillis(now, max_since_days), cutoffMillis(now, std.math.maxInt(i64)));
 }
 
 test "tiers are ordered" {

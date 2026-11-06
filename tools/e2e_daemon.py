@@ -4,7 +4,7 @@ OPML, recovery from a crash, and background polling.
 
 Usage: e2e_daemon.py <path-to-rss>
 """
-import http.server, json, os, shutil, signal, socket, socketserver, sqlite3, stat, subprocess, sys, tempfile, threading, time
+import collections, http.server, json, os, shutil, signal, socket, socketserver, sqlite3, stat, subprocess, sys, tempfile, threading, time
 
 RSS = os.path.abspath(sys.argv[1])
 home = tempfile.mkdtemp(prefix="rss-d-", dir="/tmp")  # Short, for the socket path limit.
@@ -12,7 +12,12 @@ env = dict(os.environ, RSS_HOME=home)
 requests = []
 posts = {"count": 1}
 
+malformed = {"on": False, "count": 0}
+
 def feed_body():
+    if malformed["on"]:
+        malformed["count"] += 1
+        return f"not a feed {malformed['count']}".encode()
     items = "".join(f"<item><title>Post {i}</title><guid>{i}</guid><description>word{i}</description></item>" for i in range(posts["count"]))
     return f'<rss version="2.0"><channel><title>Live</title>{items}</channel></rss>'.encode()
 
@@ -140,6 +145,110 @@ sub.s.settimeout(5)
 event = json.loads(sub.f.readline())
 check("new entries arrive live", event["params"]["type"] == "entry.new" and event["params"]["seq"] > seq, event)
 
+# Full text
+state_page = {"robots": "", "article": True}
+long_page = "<html><body><nav>NAV-TEXT</nav><article><h1>Full Post</h1>" + "".join(f"<p>Extracted paragraph {i} with plenty of words in it to look like an article.</p>" for i in range(30)) + "</article><footer>FOOT-TEXT</footer></body></html>"
+class Pages(http.server.BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.0"
+    def log_message(self, *args): pass
+    def do_GET(self):
+        requests.append(self.path)
+        if self.path == "/feed":
+            body = f"""<rss version="2.0"><channel><title>Summaries</title>
+<item><title>Full Post</title><guid>f1</guid><link>{page_base}/posts/1</link><pubDate>Fri, 06 Nov 2026 09:30:00 GMT</pubDate><description>Only a summary.</description></item>
+<item><title>Blocked</title><guid>f2</guid><link>{page_base}/private/2</link><description>Only a summary.</description></item>
+<item><title>Not a page</title><guid>f3</guid><link>{page_base}/file.pdf</link><description>Only a summary.</description></item>
+<item><title>Thin</title><guid>f4</guid><link>{page_base}/thin</link><description>Only a summary.</description></item>
+</channel></rss>""".encode(); kind = "application/rss+xml"
+        elif self.path == "/robots.txt":
+            body = b"User-agent: *\nDisallow: /private\n"; kind = "text/plain"
+        elif self.path == "/file.pdf":
+            body = b"%PDF"; kind = "application/pdf"
+        elif self.path == "/thin":
+            body = b"<html><body><p>Nothing much.</p></body></html>"; kind = "text/html"
+        else:
+            body = long_page.encode(); kind = "text/html; charset=utf-8"
+        self.send_response(200); self.send_header("Content-Type", kind); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+pages = Server(("127.0.0.1", 0), Pages)
+threading.Thread(target=pages.serve_forever, daemon=True).start()
+page_base = f"http://127.0.0.1:{pages.server_address[1]}"
+out = json.loads(rss("feeds", "--json").stdout)
+add = Raw().call("feeds.add", url=page_base + "/feed", allow_private_network=True)
+check("summary feed added", add["result"]["new"] == 4, add)
+
+# Choosing a feed before subscribing
+class Site(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def do_GET(self):
+        host = f"http://127.0.0.1:{self.server.server_address[1]}"
+        one = lambda name: f'<rss version="2.0"><channel><title>{name}</title><link>{host}/</link><item><title>{name} post</title><guid>{name}</guid></item></channel></rss>'
+        bodies = {
+            "/": f'<html><head><link rel="alternate" type="application/rss+xml" href="/all.xml"><link rel="alternate" type="application/rss+xml" href="/science.xml"><link rel="alternate" type="application/rss+xml" href="/broken.xml"></head></html>',
+            "/all.xml": one("All"), "/science.xml": one("Science"), "/empty": "<html><body>No feed here</body></html>",
+        }
+        body = bodies.get(self.path)
+        if body is None:
+            self.send_response(404); self.send_header("Content-Length", "0"); self.end_headers(); return
+        data = body.encode(); kind = "application/rss+xml" if self.path.endswith(".xml") else "text/html"
+        self.send_response(200); self.send_header("Content-Type", kind); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
+site = Server(("127.0.0.1", 0), Site)
+threading.Thread(target=site.serve_forever, daemon=True).start()
+site_base = f"http://127.0.0.1:{site.server_address[1]}"
+feeds_before = len(json.loads(rss("feeds", "--json").stdout)["items"])
+r = Raw().call("feeds.preview", url=site_base + "/", allow_private_network=True)
+found = r["result"]["items"]
+check("preview lists every working feed on a site", [f["title"] for f in found] == ["All", "Science"], r)
+check("preview shows latest titles", found[0]["latest"] == ["All post"], found)
+check("preview subscribes to nothing", len(json.loads(rss("feeds", "--json").stdout)["items"]) == feeds_before)
+r = Raw().call("feeds.preview", url=site_base + "/all.xml", allow_private_network=True)
+check("preview of a feed address finds that feed", [f["title"] for f in r["result"]["items"]] == ["All"], r)
+r = Raw().call("feeds.preview", url=site_base + "/empty", allow_private_network=True)
+check("preview of a site with no feed is empty", r["result"]["items"] == [], r)
+r = Raw().call("feeds.preview", url=site_base + "/")
+check("preview refuses private addresses by default", "error" in r, r)
+t2 = Raw(); t2.call("connection.restrict", tier="annotate")
+r = t2.call("feeds.preview", url=site_base + "/", allow_private_network=True)
+check("preview needs the manage tier", r["error"]["code"] == -32001, r)
+r = Raw().call("feeds.add", url=site_base + "/science.xml", allow_private_network=True, title="My Science", folder="Reading")
+added = next(f for f in json.loads(rss("feeds", "--json").stdout)["items"] if f["id"] == r["result"]["id"])
+check("add keeps the chosen name", added["title"] == "My Science", added)
+folders = Raw().call("folders.list")["result"]["items"]
+check("add creates the folder", [f["name"] for f in folders if f["id"] == added["folder_id"]] == ["Reading"], folders)
+Raw().call("feeds.remove", id=r["result"]["id"])
+
+# Settings a client can change
+r = Raw().call("config.set", full_text=False)
+check("config.set answers", r["result"]["ok"] is True, r)
+check("config.get reads it back", Raw().call("config.get")["result"]["full_text"] is False)
+saved = json.load(open(os.path.join(home, "config.json")))
+check("setting is saved, other keys kept", saved["full_text"] is False and len(saved) > 1, saved)
+Raw().call("config.set", full_text=True)
+t3 = Raw(); t3.call("connection.restrict", tier="annotate")
+check("config.set needs the manage tier", t3.call("config.set", full_text=False)["error"]["code"] == -32001)
+rows = json.loads(rss("query", "SELECT id, title FROM entries WHERE title IN ('Full Post','Blocked','Not a page','Thin')").stdout)["rows"]
+ids = {title: entry for entry, title in rows}
+c2 = Raw()
+requests.clear()
+r = c2.call("entries.fetch_full", id=ids["Full Post"])
+check("article is fetched", r["result"]["status"] == "done", r)
+check("robots.txt is asked first", requests[:2] == ["/robots.txt", "/posts/1"], requests)
+body = c2.call("entries.get", id=ids["Full Post"], format="text")["result"]["body"]
+check("the article replaced the summary", "Extracted paragraph 29" in body and "Only a summary" not in body, body[:200])
+check("page furniture is gone", "NAV-TEXT" not in body and "FOOT-TEXT" not in body)
+check("the repeated title is gone", not body.startswith("Full Post"), body[:60])
+check("search finds the article", any(i["id"] == ids["Full Post"] for i in json.loads(rss("search", "Extracted", "--json").stdout)["items"]))
+requests.clear()
+r = c2.call("entries.fetch_full", id=ids["Blocked"])
+check("robots.txt is obeyed", r["result"]["status"] == "skipped" and "/private/2" not in requests, (r, requests))
+check("robots.txt is cached", "/robots.txt" not in requests, requests)
+check("a PDF is skipped", c2.call("entries.fetch_full", id=ids["Not a page"])["result"]["status"] == "skipped")
+check("a page with no article is skipped", c2.call("entries.fetch_full", id=ids["Thin"])["result"]["status"] == "skipped")
+body = c2.call("entries.get", id=ids["Thin"], format="text")["result"]["body"]
+check("and the summary stays", body == "Only a summary.", body)
+for feed_row in json.loads(rss("feeds", "--json").stdout)["items"]:
+    if feed_row["title"] == "Summaries": rss("remove", str(feed_row["id"]))
+pages.shutdown()
+
 # Clients at once
 errors = []
 def hammer():
@@ -223,6 +332,90 @@ rss("status")
 check("daemon polls on its own", wait_for(lambda: json.loads(rss("status", "--json").stdout)["entries"] == 41), requests)
 count = len(requests)
 check("and keeps polling", wait_for(lambda: len(requests) > count + 1, 15), requests)
+
+entry = json.loads(rss("list", "--json", "--limit", "1").stdout)["items"][0]["id"]
+rss("mark", str(entry), "--hide")
+check("a hidden entry leaves the list", entry not in [e["id"] for e in json.loads(rss("list", "--json", "--limit", "100").stdout)["items"]])
+rss("mark", str(entry), "--unhide")
+check("and returns", entry in [e["id"] for e in json.loads(rss("list", "--json", "--limit", "100").stdout)["items"]])
+
+extreme = Raw()
+check("an extreme age does not stop the daemon", "result" in extreme.call("entries.list", since_days=2**63 - 1))
+check("nor does a negative one", "result" in extreme.call("entries.search", query="word", since_days=-2**63))
+check("a huge value cannot be built by a query", "too big" in json.dumps(extreme.call("db.query", sql="SELECT hex(zeroblob(100000000))")))
+
+silent = socket.socket(); silent.bind(("127.0.0.1", 0)); silent.listen(1)
+started = time.time()
+stalled = rss("add", f"http://127.0.0.1:{silent.getsockname()[1]}/feed", "--allow-private", ok=False)
+check("a host that accepts and then stalls ends at the deadline", stalled.returncode != 0 and time.time() - started < 35, time.time() - started)
+silent.close()
+
+malformed["on"] = True
+feed_id = json.loads(rss("feeds", "--json").stdout)["items"][0]["id"]
+for _ in range(25): rss("refresh", str(feed_id))
+malformed["on"] = False
+extreme.call("daemon.housekeep")
+raw_files = sum(len(names) for _, _, names in os.walk(home + "/raw"))
+check("bad bodies stay within retention", raw_files <= 40, raw_files)
+
+with open(home + "/rssd.log", "a") as log: log.write("marker\n")
+check("a second daemon refuses to start", rss("daemon", "--log", ok=False).returncode != 0)
+check("and leaves the running daemon's log alone", "marker" in open(home + "/rssd.log").read())
+
+# Full text after failures: this part needs the background loop
+flaky = {"up": False, "hits": collections.Counter()}
+ARTICLE = "<html><body><article>" + "".join(f"<p>Recovered paragraph {i} with enough words to count as an article body.</p>" for i in range(40)) + "</article></body></html>"
+class Flaky(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def do_GET(self):
+        flaky["hits"][self.path] += 1
+        host = f"http://127.0.0.1:{self.server.server_address[1]}"
+        if self.path == "/feed.xml":
+            items = "".join(f"<item><title>{t}</title><guid>{t}</guid><link>{host}{p}</link><description>Short.</description></item>" for t, p in (("Flaky", "/flaky"), ("Gone", "/gone")))
+            status, kind, body = 200, "application/rss+xml", f'<rss version="2.0"><channel><title>Flaky</title>{items}</channel></rss>'
+        elif self.path == "/flaky" and flaky["up"]: status, kind, body = 200, "text/html", ARTICLE
+        elif self.path == "/flaky": status, kind, body = 503, "text/html", ""
+        else: status, kind, body = 404, "text/plain", ""
+        data = body.encode()
+        self.send_response(status); self.send_header("Content-Type", kind); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
+flaky_server = Server(("127.0.0.1", 0), Flaky)
+threading.Thread(target=flaky_server.serve_forever, daemon=True).start()
+flaky_base = f"http://127.0.0.1:{flaky_server.server_address[1]}"
+
+def full_row(title):
+    return json.loads(rss("query", f"SELECT full_status, full_attempts, full_retry_at FROM entries WHERE title = '{title}'").stdout)["rows"][0]
+
+rss("add", flaky_base + "/feed.xml", "--allow-private")
+check("a 503 is tried", wait_for(lambda: flaky["hits"]["/flaky"] == 1, 15), flaky["hits"])
+check("and waits for a retry, with no status", wait_for(lambda: full_row("Flaky")[:2] == [None, 1]), full_row("Flaky"))
+check("with a time set", full_row("Flaky")[2] is not None)
+later = Raw().call("entries.fetch_full", id=json.loads(rss("query", "SELECT id FROM entries WHERE title = 'Flaky'").stdout)["rows"][0][0])
+check("asking by hand reports later", later["result"]["status"] == "later", later)
+check("and leaves the entry waiting", full_row("Flaky")[0] is None)
+
+rss("daemon", "stop")
+db = sqlite3.connect(home + "/rss.db"); db.execute("update entries set full_retry_at = 0 where title in ('Flaky', 'Gone')"); db.commit(); db.close()
+flaky["up"] = True
+rss("status")
+check("the retry fetches the article", wait_for(lambda: full_row("Flaky")[0] == "done", 15), full_row("Flaky"))
+check("a 404 is final", wait_for(lambda: full_row("Gone")[0] == "failed", 15), full_row("Gone"))
+check("and is not tried again", flaky["hits"]["/gone"] == 1, flaky["hits"])
+
+dead = socket.socket(); dead.bind(("127.0.0.1", 0)); dead_port = dead.getsockname()[1]; dead.close()
+outage_items = "".join(f"<item><title>Dead {i}</title><guid>d{i}</guid><link>http://127.0.0.1:{dead_port + i}/a</link><description>Short.</description></item>" for i in range(6))
+class Outage(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def do_GET(self):
+        data = f'<rss version="2.0"><channel><title>Dead links</title>{outage_items}</channel></rss>'.encode()
+        self.send_response(200); self.send_header("Content-Type", "application/rss+xml"); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
+outage_server = Server(("127.0.0.1", 0), Outage)
+threading.Thread(target=outage_server.serve_forever, daemon=True).start()
+rss("add", f"http://127.0.0.1:{outage_server.server_address[1]}/feed.xml", "--allow-private")
+time.sleep(8)
+rows = json.loads(rss("query", "SELECT full_status, full_attempts FROM entries WHERE title LIKE 'Dead %'").stdout)["rows"]
+check("an outage settles nothing", all(status is None for status, _ in rows), rows)
+check("and costs at most the two tries before it was noticed", sum(tries for _, tries in rows) <= 2, rows)
+
 rss("daemon", "stop")
 
 server.shutdown(); shutil.rmtree(home)

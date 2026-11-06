@@ -5,6 +5,7 @@ const std = @import("std");
 const core = @import("core");
 const client_module = @import("client.zig");
 const daemon = @import("daemon.zig");
+const launchd = @import("launchd.zig");
 const mcp = @import("mcp.zig");
 const ops = @import("ops.zig");
 const tui = @import("tui.zig");
@@ -22,7 +23,7 @@ const usage =
     \\  list [--feed N] [--unread] [--starred] [--limit N] [--before CURSOR] [--json]
     \\  show <id> [--format markdown|text|blocks] [--json]
     \\  search <words> [--limit N] [--json]
-    \\  mark <id> [--read] [--unread] [--star] [--unstar]
+    \\  mark <id> [--read] [--unread] [--star] [--unstar] [--hide] [--unhide]
     \\  import <file.opml> [--allow-private]
     \\  export                         print subscriptions as OPML
     \\  query <sql>                    run one read-only SQL statement
@@ -32,6 +33,7 @@ const usage =
     \\  tui                            read in the terminal
     \\  mcp [--tier read|annotate|manage]   MCP server on stdio, for agents
     \\  daemon [stop]                  run in the foreground, or stop it
+    \\  service install|uninstall|status   run the daemon from login, on macOS
     \\
     \\Clients start the daemon when needed.
     \\Data lives in $RSS_HOME, by default ~/.local/share/rss_
@@ -123,7 +125,7 @@ pub fn main(init: std.process.Init) !u8 {
     const args: Args = .{ .items = argv[2..] };
 
     if (std.mem.eql(u8, command, "daemon") and args.positional() == null) {
-        daemon.run(init.gpa, io, home_path, arena) catch |err| {
+        daemon.run(init.gpa, io, home_path, arena, .{ .log_to_file = args.has("--log") }) catch |err| {
             std.debug.print("rss: daemon: {s}\n", .{@errorName(err)});
             return 1;
         };
@@ -151,6 +153,13 @@ pub fn main(init: std.process.Init) !u8 {
             return 1;
         };
         return 0;
+    }
+
+    if (std.mem.eql(u8, command, "service")) {
+        return serviceCommand(connector, init.environ_map, args, out) catch |err| {
+            std.debug.print("rss: service: {s}\n", .{@errorName(err)});
+            return 1;
+        };
     }
 
     const commands = [_]struct { []const u8, *const fn (App, Args) anyerror!void }{
@@ -189,6 +198,24 @@ pub fn main(init: std.process.Init) !u8 {
     }
     try out.writeAll(usage);
     return 2;
+}
+
+fn serviceCommand(connector: client_module.Connector, environ: *const std.process.Environ.Map, args: Args, out: *Io.Writer) !u8 {
+    const user_home = environ.get("HOME") orelse return error.NoHomeDirectory;
+    const action = args.positional() orelse "";
+    if (std.mem.eql(u8, action, "install")) {
+        try launchd.install(connector, user_home);
+        try out.writeAll("installed: the daemon now runs from login\n");
+    } else if (std.mem.eql(u8, action, "uninstall")) {
+        try launchd.uninstall(connector, user_home);
+        try out.writeAll("uninstalled\n");
+    } else if (std.mem.eql(u8, action, "status")) {
+        try out.writeAll(if (try launchd.isInstalled(connector, user_home)) "installed\n" else "not installed\n");
+    } else {
+        try out.writeAll(usage);
+        return 2;
+    }
+    return 0;
 }
 
 fn homeDirectory(arena: std.mem.Allocator, environ: *const std.process.Environ.Map) ![]const u8 {
@@ -300,7 +327,9 @@ fn mark(app: App, args: Args) !void {
     if (args.has("--unread")) params.read = false;
     if (args.has("--star")) params.starred = true;
     if (args.has("--unstar")) params.starred = false;
-    if (params.read == null and params.starred == null) return error.Usage;
+    if (args.has("--hide")) params.hidden = true;
+    if (args.has("--unhide")) params.hidden = false;
+    if (params.read == null and params.starred == null and params.hidden == null) return error.Usage;
     _ = try app.client.call(ops.EntriesMark, params);
 }
 
@@ -347,6 +376,7 @@ fn daemonCommand(app: App, args: Args) !void {
 }
 
 test {
+    _ = launchd;
     _ = @import("pipeline.zig");
     _ = @import("store.zig");
     _ = mcp;

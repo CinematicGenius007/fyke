@@ -219,6 +219,36 @@ fn writeTextNode(w: *std.Io.Writer, node: Node) std.Io.Writer.Error!void {
     }
 }
 
+/// Passes text through with a quote marker at the start of each line, so that a
+/// quote of any length needs no buffer.
+const QuoteWriter = struct {
+    out: *std.Io.Writer,
+    at_line_start: bool = true,
+    interface: std.Io.Writer = .{ .vtable = &.{ .drain = drain }, .buffer = &.{} },
+
+    fn drain(w: *std.Io.Writer, data: []const []const u8, splat: usize) std.Io.Writer.Error!usize {
+        const q: *QuoteWriter = @alignCast(@fieldParentPtr("interface", w));
+        var written: usize = 0;
+        for (data[0 .. data.len - 1]) |bytes| {
+            try q.put(bytes);
+            written += bytes.len;
+        }
+        for (0..splat) |_| {
+            try q.put(data[data.len - 1]);
+            written += data[data.len - 1].len;
+        }
+        return written;
+    }
+
+    fn put(q: *QuoteWriter, bytes: []const u8) std.Io.Writer.Error!void {
+        for (bytes) |c| {
+            if (q.at_line_start) try q.out.writeAll("> ");
+            q.at_line_start = c == '\n';
+            try q.out.writeByte(c);
+        }
+    }
+};
+
 /// Markdown, which is what models read best and what the CLI prints.
 pub fn writeMarkdown(w: *std.Io.Writer, nodes: []const Node) std.Io.Writer.Error!void {
     for (nodes, 0..) |node, i| {
@@ -241,17 +271,8 @@ fn writeMarkdownBlock(w: *std.Io.Writer, node: Node, indent: usize) std.Io.Write
         .embed => try w.print("[Embedded media]({s})", .{node.url}),
         .hr => try w.writeAll("---"),
         .quote => {
-            // Quoted blocks are rendered to a buffer so that each line gets its marker.
-            var buffer: [16 * 1024]u8 = undefined;
-            var quoted: std.Io.Writer = .fixed(&buffer);
-            writeMarkdown(&quoted, node.children) catch {};
-            var lines = std.mem.splitScalar(u8, quoted.buffered(), '\n');
-            var first = true;
-            while (lines.next()) |line| {
-                if (!first) try w.writeByte('\n');
-                first = false;
-                try w.print("> {s}", .{line});
-            }
+            var quoted: QuoteWriter = .{ .out = w };
+            try writeMarkdown(&quoted.interface, node.children);
         },
         .list => {
             for (node.children, 0..) |item, i| {
@@ -374,4 +395,18 @@ test "Markdown" {
     var w: std.Io.Writer = .fixed(&buffer);
     try writeMarkdown(&w, &nodes);
     try testing.expectEqualStrings("# T\n\n**b** [l](u)", w.buffered());
+}
+
+test "a long quote keeps every line, each with its marker" {
+    const text: [40_000]u8 = @splat('x');
+    const child = [_]Node{.{ .kind = .text, .value = &text }};
+    const paragraph = [_]Node{.{ .kind = .p, .children = &child }};
+    const two = [_]Node{ paragraph[0], paragraph[0] };
+    const quote = [_]Node{.{ .kind = .quote, .children = &two }};
+    var out: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer out.deinit();
+    try writeMarkdown(&out.writer, &quote);
+    try std.testing.expect(out.written().len > 2 * text.len);
+    var lines = std.mem.splitScalar(u8, out.written(), '\n');
+    while (lines.next()) |line| try std.testing.expect(std.mem.startsWith(u8, line, ">"));
 }
