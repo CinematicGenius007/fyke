@@ -7,6 +7,25 @@ import SwiftUI
 enum Place: Hashable {
     case briefing, all, starred
     case feed(Int64)
+    case folder(Int64)
+}
+
+/// What the sidebar is renaming in place.
+enum Renaming: Equatable {
+    case feed(Int64)
+    case folder(Int64)
+}
+
+enum Confirmation: Identifiable {
+    case deleteFolder(Folder)
+    case removeFeed(Feed)
+
+    var id: String {
+        switch self {
+        case .deleteFolder(let folder): "folder\(folder.id)"
+        case .removeFeed(let feed): "feed\(feed.id)"
+        }
+    }
 }
 
 struct Article {
@@ -30,6 +49,13 @@ final class AppModel {
     var updatedAt: Date?
     var showingAddFeed = false
     var showingType = false
+    var showingShortcuts = false
+    var confirmation: Confirmation?
+    var renaming: Renaming?
+    /// The folder a feed added from a folder's menu goes to.
+    var addFeedFolder: Int64?
+    /// The remote page showing in place of the reader.
+    var web: WebState?
     var fullTextStatus: String?
     var settingsTab = SettingsView.Tab(rawValue: ProcessInfo.processInfo.environment["RSS_TAB"] ?? "") ?? .General
 
@@ -44,15 +70,56 @@ final class AppModel {
         case .all: "All"
         case .starred: "Starred"
         case .feed(let id): feeds.first { $0.id == id }?.name ?? "Feed"
+        case .folder(let id): folders.first { $0.id == id }?.name ?? "Folder"
         }
     }
 
     var placeUnread: Int64 {
-        if case .feed(let id) = place { return feeds.first { $0.id == id }?.unread ?? 0 }
-        return totalUnread
+        switch place {
+        case .feed(let id): feeds.first { $0.id == id }?.unread ?? 0
+        case .folder(let id): feedsInside(id).reduce(0) { $0 + $1.unread }
+        default: totalUnread
+        }
+    }
+
+    var totalStarred: Int64 { feeds.reduce(0) { $0 + $1.starred } }
+
+    func childFolders(of parent: Int64?) -> [Folder] { folders.filter { $0.parentId == parent } }
+
+    /// Every folder inside this one, at any depth.
+    func foldersInside(_ id: Int64) -> [Folder] {
+        childFolders(of: id).flatMap { [$0] + foldersInside($0.id) }
+    }
+
+    /// Feeds in a folder and in every folder inside it.
+    func feedsInside(_ id: Int64) -> [Feed] {
+        let ids = Set([id] + foldersInside(id).map(\.id))
+        return feeds.filter { $0.folderId.map(ids.contains) ?? false }
+    }
+
+    /// Folders with their depth, in the order the sidebar shows them.
+    func folderOutline(parent: Int64? = nil, depth: Int = 0) -> [(folder: Folder, depth: Int)] {
+        childFolders(of: parent).flatMap { [($0, depth)] + folderOutline(parent: $0.id, depth: depth + 1) }
+    }
+
+    /// The daemon outlives the app, so after an update it can be an older one, and
+    /// nothing else would replace it. Stopping it is safe: the next call starts ours.
+    private func replaceOutdatedDaemon() async {
+        func current() async -> Bool {
+            let stats: Stats? = try? await Daemon.shared.call("stats.get")
+            return (stats?.apiVersion ?? 0) >= Daemon.apiVersion
+        }
+        guard await !current() else { return }
+        let _: Ok? = try? await Daemon.shared.call("daemon.stop")
+        for _ in 0..<50 {
+            try? await Task.sleep(for: .milliseconds(100))
+            if await current() { return }
+        }
     }
 
     func start() async {
+        await replaceOutdatedDaemon()
+        await Prefs.shared.start()
         do {
             let stats: Stats = try await Daemon.shared.call("stats.get")
             await reload()
@@ -78,6 +145,11 @@ final class AppModel {
             try? await Task.sleep(for: .milliseconds(300))
             if let row = entries.dropFirst().first { await open(row.id) }
         case "briefing": go(to: .briefing)
+        case "shortcuts": showingShortcuts = true
+        case "web":
+            if let url = URL(string: ProcessInfo.processInfo.environment["RSS_ADDRESS"] ?? "") { web = WebState(address: url) }
+        case "delete-folder":
+            if let folder = folders.first { confirmation = .deleteFolder(folder) }
         case "search":
             search.show()
             search.query = ProcessInfo.processInfo.environment["RSS_QUERY"] ?? ""
@@ -114,6 +186,7 @@ final class AppModel {
 
     private struct ListParams: Encodable, Sendable {
         var feedId: Int64?
+        var folderId: Int64?
         var unreadOnly: Bool
         var starredOnly: Bool
         var limit: Int
@@ -124,6 +197,7 @@ final class AppModel {
     private var listParams: ListParams {
         var params = ListParams(unreadOnly: unreadOnly, starredOnly: place == .starred, limit: 100)
         if case .feed(let id) = place { params.feedId = id }
+        if case .folder(let id) = place { params.folderId = id }
         return params
     }
 
@@ -157,6 +231,7 @@ final class AppModel {
 
     func go(to place: Place) {
         self.place = place
+        web = nil
         article = nil
         selectedId = nil
         entries = []
@@ -189,6 +264,7 @@ final class AppModel {
     func open(_ id: Int64) async {
         selectedId = id
         fullTextStatus = nil
+        web = nil
         do {
             let entry: Entry = try await Daemon.shared.call("entries.get", GetParams(id: id))
             let blocks = try JSONDecoder().decode([Block].self, from: Data(entry.body.utf8))
@@ -238,9 +314,10 @@ final class AppModel {
         Task { await setRead(id, !read) }
     }
 
-    func toggleStar() {
-        guard let id = currentId else { return }
-        let starred = !(article?.entry.starred ?? entries.first { $0.id == id }?.starred ?? false)
+    func toggleStar(_ row: Int64? = nil) {
+        guard let id = row ?? currentId else { return }
+        let current = article?.entry.id == id ? article?.entry.starred : entries.first { $0.id == id }?.starred
+        let starred = !(current ?? false)
         applyStar(id, starred)
         Task {
             do {
@@ -249,6 +326,7 @@ final class AppModel {
                 applyStar(id, !starred)
                 problem = error.localizedDescription
             }
+            await refreshCounts()
         }
     }
 
@@ -260,11 +338,13 @@ final class AppModel {
         if article != nil || usesPanes { Task { await open(entries[next].id) } }
     }
 
-    /// Feeds show list and reader side by side. All and Starred replace the
-    /// timeline with the reader.
+    /// Feeds and folders show list and reader side by side. All and Starred replace
+    /// the timeline with the reader.
     var usesPanes: Bool {
-        if case .feed = place { return true }
-        return false
+        switch place {
+        case .feed, .folder: true
+        default: false
+        }
     }
 
     func openSelected() {
@@ -272,8 +352,14 @@ final class AppModel {
     }
 
     func back() {
-        if !usesPanes { article = nil }
+        if web != nil {
+            closeWeb()
+        } else if !usesPanes {
+            article = nil
+        }
     }
+
+    func closeWeb() { web = nil }
 
     func nextUnread() {
         let start = (entries.firstIndex { $0.id == selectedId } ?? -1) + 1
@@ -313,9 +399,137 @@ final class AppModel {
         }
     }
 
+    private var pageAddress: String? { article?.entry.url ?? entries.first { $0.id == selectedId }?.url }
+
+    /// Opens the article's page where the settings say links go.
     func openPage() {
-        guard let text = article?.entry.url ?? entries.first(where: { $0.id == selectedId })?.url else { return }
-        Links.open(text)
+        if let text = pageAddress, let url = URL(string: text) { openLink(url) }
+    }
+
+    func openInBrowser() {
+        if let text = pageAddress { Links.open(text) }
+    }
+
+    /// Command-click always means the browser. Feed content chooses these addresses,
+    /// and the check in `Links` applies on both routes.
+    func openLink(_ url: URL) {
+        guard Links.isSafe(url) else { return }
+        if Prefs.shared.ui.openLinks == "browser" || NSEvent.modifierFlags.contains(.command) {
+            NSWorkspace.shared.open(url)
+        } else {
+            web = WebState(address: url)
+        }
+    }
+
+    // MARK: Folders and feeds
+
+    private struct FolderAddParams: Encodable, Sendable { let name: String; var parentId: Int64? }
+    private struct FolderRenameParams: Encodable, Sendable { let id: Int64; let name: String }
+    private struct FolderMoveParams: Encodable, Sendable { let id: Int64; var parentId: Int64? }
+    private struct FolderRemoveParams: Encodable, Sendable { let id: Int64; let deleteContents: Bool }
+    private struct FeedUpdateParams: Encodable, Sendable {
+        let id: Int64
+        var title: String?
+        var folderId: Int64?
+        var topLevel = false
+    }
+    private struct MarkAllParams: Encodable, Sendable { var feedId: Int64?; var folderId: Int64? }
+
+    /// Runs a change to subscriptions, then shows the result. The daemon names its
+    /// refusals, and only the one a person can cause needs words.
+    private func change(_ work: @escaping () async throws -> Void) {
+        Task {
+            do {
+                try await work()
+            } catch {
+                let text = error.localizedDescription
+                problem = text.contains("FolderExists") ? "A folder with that name is already there" : text
+            }
+            await reload()
+        }
+    }
+
+    /// Makes a folder and starts renaming it, so that naming is one step.
+    func newFolder(in parent: Int64?, holding feed: Int64? = nil) {
+        let taken = Set(childFolders(of: parent).map(\.name))
+        let name = (["New folder"] + (2...99).map { "New folder \($0)" }).first { !taken.contains($0) } ?? "New folder"
+        Task {
+            do {
+                let made: IdResult = try await Daemon.shared.call("folders.add", FolderAddParams(name: name, parentId: parent))
+                if let parent { Prefs.shared.ui.collapsedFolders.removeAll { $0 == parent } }
+                if let feed { let _: Ok = try await Daemon.shared.call("feeds.update", FeedUpdateParams(id: feed, folderId: made.id)) }
+                await reload()
+                renaming = .folder(made.id)
+            } catch {
+                problem = error.localizedDescription
+            }
+        }
+    }
+
+    /// Makes a folder with a name already chosen.
+    func addFolder(_ name: String) async -> Int64? {
+        do {
+            let made: IdResult = try await Daemon.shared.call("folders.add", FolderAddParams(name: name))
+            await reload()
+            return made.id
+        } catch {
+            problem = error.localizedDescription
+            return nil
+        }
+    }
+
+    func newFolderHolding(_ feed: Int64) { newFolder(in: nil, holding: feed) }
+
+    func renameFolder(_ id: Int64, to name: String) {
+        renaming = nil
+        change { let _: Ok = try await Daemon.shared.call("folders.rename", FolderRenameParams(id: id, name: name)) }
+    }
+
+    func moveFolder(_ id: Int64, to parent: Int64?) {
+        change { let _: Ok = try await Daemon.shared.call("folders.move", FolderMoveParams(id: id, parentId: parent)) }
+    }
+
+    func removeFolder(_ id: Int64, deleteContents: Bool) {
+        if place == .folder(id) || (deleteContents && leavesPlace(with: id)) { go(to: .all) }
+        change { let _: Ok = try await Daemon.shared.call("folders.remove", FolderRemoveParams(id: id, deleteContents: deleteContents)) }
+    }
+
+    private func leavesPlace(with folder: Int64) -> Bool {
+        if case .feed(let feed) = place { return feedsInside(folder).contains { $0.id == feed } }
+        if case .folder(let inner) = place { return foldersInside(folder).contains { $0.id == inner } }
+        return false
+    }
+
+    func renameFeed(_ id: Int64, to name: String) {
+        renaming = nil
+        change { let _: Ok = try await Daemon.shared.call("feeds.update", FeedUpdateParams(id: id, title: name)) }
+    }
+
+    func moveFeed(_ id: Int64, to folder: Int64?) {
+        change {
+            let _: Ok = try await Daemon.shared.call("feeds.update", FeedUpdateParams(id: id, folderId: folder, topLevel: folder == nil))
+        }
+    }
+
+    func removeFeed(_ id: Int64) {
+        if place == .feed(id) { go(to: .all) }
+        change { let _: Ok = try await Daemon.shared.call("feeds.remove", IdParams(id: id)) }
+    }
+
+    func refreshFeed(_ id: Int64) {
+        change { let _: AddResult = try await Daemon.shared.callSlow("feeds.refresh", IdParams(id: id)) }
+    }
+
+    func markAllRead(feed: Int64? = nil, folder: Int64? = nil) {
+        change { let _: Ok = try await Daemon.shared.call("entries.mark_all", MarkAllParams(feedId: feed, folderId: folder)) }
+    }
+
+    func toggleFolder(_ id: Int64) {
+        if Prefs.shared.ui.collapsedFolders.contains(id) {
+            Prefs.shared.ui.collapsedFolders.removeAll { $0 == id }
+        } else {
+            Prefs.shared.ui.collapsedFolders.append(id)
+        }
     }
 }
 

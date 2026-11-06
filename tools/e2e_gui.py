@@ -63,6 +63,38 @@ play("selection stops at both ends", "cmd+f needle up up down down down down ret
 play("Esc closes without opening", "cmd+f needle esc return", [])
 play("keys reach the list again after Esc", "cmd+f needle esc down return", ["Needle one"])
 play("nothing found opens nothing", "cmd+f qqzzxx return", [])
+play("? shows shortcuts and swallows keys until closed", "? j return ? cmd+f needle return", ["Needle one"])
+play("Esc closes shortcuts", "? esc cmd+f needle return", ["Needle one"])
+
+# Themes. Clicks use window coordinates, which hold at the default window size.
+DUSK = {"id": "dusk", "name": "Dusk", "base": "dark", "tokens": {"ground": "#1C1B29"}, "fonts": {"reading": "Georgia"}}
+BUILT_IN_SAVE, CUSTOM_SAVE, CUSTOM_BACK, LIGHT_TILE = "click:1206,196", "click:1188,248", "click:1290,248", "click:1170,80"
+
+
+def themes(name, start, keys, check):
+    global passed
+    path = pathlib.Path(home) / "config.json"
+    config = json.loads(path.read_text())
+    config["ui"] = start
+    path.write_text(json.dumps(config))
+    subprocess.run([str(app / "Reader")], env=dict(env, RSS_KEYS="t wait " + keys + " wait", RSS_SCREEN="feed"), capture_output=True, timeout=60)
+    ui = json.loads(path.read_text())["ui"]
+    if not check(ui):
+        print(f"FAIL {name}: {ui}")
+        rss("daemon", "stop"); shutil.rmtree(home); sys.exit(1)
+    print(f"ok   {name}")
+    passed += 1
+
+
+on_dusk = {"theme": "dusk", "follow_system": False, "fonts": {"reading": "Inter"}, "themes": [DUSK]}
+themes("a temporary font saves to its theme", on_dusk, CUSTOM_SAVE,
+       lambda ui: ui["fonts"] == {} and ui["themes"][0]["fonts"]["reading"] == "Inter")
+themes("a temporary font can be dropped", on_dusk, CUSTOM_BACK,
+       lambda ui: ui["fonts"] == {} and ui["themes"][0]["fonts"]["reading"] == "Georgia")
+themes("switching theme clears a temporary font", on_dusk, LIGHT_TILE,
+       lambda ui: ui["theme"] == "light" and ui["fonts"] == {} and ui["themes"][0]["fonts"]["reading"] == "Georgia")
+themes("a built-in saves as a new theme instead", {"theme": "light", "follow_system": False, "fonts": {"reading": "Inter"}}, BUILT_IN_SAVE + " wait Mine return",
+       lambda ui: ui["theme"] == "mine" and ui["fonts"] == {} and ui["themes"][0]["base"] == "light" and ui["themes"][0]["fonts"]["reading"] == "Inter")
 
 rss("daemon", "stop")
 shutil.rmtree(home)

@@ -29,6 +29,9 @@ struct ReaderApp: App {
                 Button("All") { model.go(to: .all) }.keyboardShortcut("2")
                 Button("Starred") { model.go(to: .starred) }.keyboardShortcut("3")
             }
+            CommandGroup(replacing: .help) {
+                Button("Keyboard Shortcuts") { model.showingShortcuts = true }
+            }
         }
 
         Settings {
@@ -56,27 +59,32 @@ struct BorderlessTitle: NSViewRepresentable {
     func updateNSView(_ view: NSView, context: Context) {}
 }
 
-/// Applies the chosen theme and reading font to everything inside.
+/// Applies the active theme to everything inside.
 struct Themed<Content: View>: View {
     @ViewBuilder var content: Content
-    @AppStorage(Keys.theme) private var theme = "light"
-    @AppStorage(Keys.followSystem) private var followSystem = true
-    @AppStorage(Keys.readingFont) private var readingFont = Tokens.fontReading
     @Environment(\.colorScheme) private var systemScheme
 
-    private var palette: Palette {
-        followSystem ? (systemScheme == .dark ? .dark : .light) : .named(theme)
-    }
+    private var prefs: Prefs { .shared }
 
     var body: some View {
-        content
+        let palette = Palette.resolved(prefs.activeTheme)
+        let fonts = prefs.currentFonts
+        FloatHost { content }
             .environment(\.palette, palette)
-            .environment(\.readingFamily, Fonts.resolve(readingFont))
+            .environment(\.readingFamily, Fonts.resolve(fonts.reading ?? Tokens.fontReading))
+            .environment(\.titleFamily, Fonts.resolve(fonts.title ?? Tokens.fontReading))
             .background(palette.ground)
             .foregroundStyle(palette.ink)
             .tint(palette.unread)
             // With no override, colorScheme above keeps reporting the system's.
-            .preferredColorScheme(followSystem ? nil : (palette.isDark ? .dark : .light))
+            .preferredColorScheme(prefs.ui.followSystem ? nil : (palette.isDark ? .dark : .light))
+            .onChange(of: systemScheme, initial: true) { _, scheme in
+                if prefs.ui.followSystem { prefs.systemIsDark = scheme == .dark }
+            }
+            // While a theme is forced, colorScheme reports that theme, not the system.
+            .onChange(of: prefs.ui.followSystem) { _, following in
+                if following { prefs.systemIsDark = UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark" }
+            }
     }
 }
 
@@ -88,7 +96,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let path = ProcessInfo.processInfo.environment["RSS_SNAPSHOT"] else { return }
         let delay = Double(ProcessInfo.processInfo.environment["RSS_SNAPSHOT_DELAY"] ?? "") ?? 2.5
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            guard let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }), let view = window.contentView,
+            // Settings is the smaller window, and it may not have become key.
+            let wanted = ProcessInfo.processInfo.environment["RSS_SCREEN"] == "settings" ? NSApp.windows.first { $0.isVisible && $0.frame.width < 1000 } : nil
+            guard let window = wanted ?? NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }), let view = window.contentView,
                 let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)
             else { exit(1) }
             view.cacheDisplay(in: view.bounds, to: bitmap)
@@ -100,7 +110,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 /// `RSS_KEYS` plays key presses into the window once it settles, then quits, for
 /// tools/e2e_gui.py. Steps are separated by spaces: `cmd+f`, `up`, `down`, `return`,
-/// `esc`, or text to type. The events take the same path as real ones from there on.
+/// `esc`, `wait`, `click:X,Y`, `rclick:X,Y`, or text to type. Coordinates count from the
+/// window's top left. The events take the same path as real ones from there on.
 private enum KeyReplay {
     private static let settleSeconds = 2.5
     private static let stepSeconds = 0.5
@@ -116,7 +127,11 @@ private enum KeyReplay {
     }
 
     private static func play(_ steps: ArraySlice<String>) {
-        guard let step = steps.first else { exit(0) }
+        // With a snapshot requested, that is what ends the run.
+        guard let step = steps.first else {
+            if ProcessInfo.processInfo.environment["RSS_SNAPSHOT"] == nil { exit(0) }
+            return
+        }
         send(step)
         DispatchQueue.main.asyncAfter(deadline: .now() + stepSeconds) { play(steps.dropFirst()) }
     }
@@ -128,7 +143,23 @@ private enum KeyReplay {
         case "down": press(String(UnicodeScalar(NSDownArrowFunctionKey)!), code: 125)
         case "return": press("\r", code: 36)
         case "esc": press("\u{1B}", code: 53)
+        case "wait": break
+        case _ where step.hasPrefix("click:"): mouse(step.dropFirst(6), down: .leftMouseDown, up: .leftMouseUp)
+        case _ where step.hasPrefix("rclick:"): mouse(step.dropFirst(7), down: .rightMouseDown, up: .rightMouseUp)
         default: step.forEach { press(String($0), code: 0) }
+        }
+    }
+
+    /// Posted, not sent, so that they pass through the event queue and become
+    /// `NSApp.currentEvent`, as real clicks do.
+    private static func mouse(_ point: Substring, down: NSEvent.EventType, up: NSEvent.EventType) {
+        let parts = point.split(separator: ",").compactMap { Double($0) }
+        guard parts.count == 2, let window = NSApp.keyWindow, let height = window.contentView?.bounds.height else { return }
+        for type in [down, up] {
+            let event = NSEvent.mouseEvent(
+                with: type, location: NSPoint(x: parts[0], y: height - parts[1]), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+            if let event { NSApp.postEvent(event, atStart: false) }
         }
     }
 

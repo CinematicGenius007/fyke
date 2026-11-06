@@ -106,8 +106,8 @@ struct SearchPanel: View {
                 footer
             }
             .frame(width: 640)
-            .background(ground, in: RoundedRectangle(cornerRadius: Tokens.radiusSheet))
-            .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSheet).stroke(p.control))
+            .background(ground, in: RoundedRectangle(cornerRadius: Radii.sheet))
+            .overlay(RoundedRectangle(cornerRadius: Radii.sheet).stroke(p.control))
             .padding(.top, 96)
         }
         .onAppear { focused = true }
@@ -116,7 +116,7 @@ struct SearchPanel: View {
     private var queryRow: some View {
         @Bindable var search = search
         return HStack(spacing: 12) {
-            Image(systemName: "magnifyingglass").font(.system(size: 16)).foregroundStyle(p.muted)
+            Icon(glyph: .search, color: p.muted)
             TextField("", text: $search.query, prompt: Text("Search your feeds").foregroundStyle(p.muted))
                 .textFieldStyle(.plain)
                 .font(.ui(20))
@@ -173,7 +173,7 @@ struct SearchPanel: View {
                 }
                 .padding(8)
             }
-            .scrollIndicators(.never)
+            .themedScrollbar()
             .frame(height: height)
             .onChange(of: search.selection) { _, index in
                 guard search.results.indices.contains(index) else { return }
@@ -202,7 +202,7 @@ struct SearchPanel: View {
             }
             .padding(.horizontal, 12).padding(.vertical, 10)
             .frame(height: Self.rowHeight)
-            .background(selected ? p.selected : .clear, in: RoundedRectangle(cornerRadius: Tokens.radiusControl))
+            .background(selected ? p.selected : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -246,9 +246,9 @@ struct SearchPanel: View {
     }
 }
 
-/// One line in the reading font, as result titles and the empty message use it.
+/// One line in the title font, as result titles and the empty message use it.
 private struct ReadingText: View {
-    @Environment(\.readingFamily) private var family
+    @Environment(\.titleFamily) private var family
     @Environment(\.palette) private var p
     let text: String
     let size: CGFloat

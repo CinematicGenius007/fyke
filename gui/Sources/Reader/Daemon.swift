@@ -86,6 +86,8 @@ struct Event: Decodable, Sendable {
 /// Calls that touch the network get their own, so they cannot delay the rest.
 final class Daemon: @unchecked Sendable {
     static let shared = Daemon()
+    /// `api_version` in src/ops.zig.
+    static let apiVersion: Int64 = 2
 
     let home: URL
     private var socketPath: String { home.appending(path: "rssd.sock").path }
@@ -108,7 +110,7 @@ final class Daemon: @unchecked Sendable {
         if let path = ProcessInfo.processInfo.environment["RSS_HOME"] {
             home = URL(filePath: path)
         } else {
-            home = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".local/share/rss_")
+            home = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".rss_")
         }
     }
 

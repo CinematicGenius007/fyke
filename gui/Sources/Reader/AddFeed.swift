@@ -30,7 +30,7 @@ struct AddFeedSheet: View {
     @State private var phase = Phase.idle
     @State private var chosen: Set<String> = []
     @State private var name = ""
-    @State private var folder = ""
+    @State private var folder: Int64?
     @State private var adding = false
     @State private var lookup: Task<Void, Never>?
 
@@ -41,13 +41,16 @@ struct AddFeedSheet: View {
     private var form: some View {
         SheetBody(
             address: $address, phase: phase, chosen: $chosen, name: $name, folder: $folder, adding: adding,
-            folders: model.folders.map(\.name),
+            folders: model.folderOutline(),
             onLookup: look, onCancel: { dismiss() }, onSubscribe: subscribe,
+            onNewFolder: { name in Task { folder = await model.addFolder(name) ?? folder } },
             onImport: { dismiss(); OPML.importFile(model) }
         )
         .frame(width: 560)
         .onChange(of: address) { _, _ in scheduleLookup() }
         .onAppear {
+            folder = model.addFeedFolder
+            model.addFeedFolder = nil
             address = AddFeedDraft.shared.address
             AddFeedDraft.shared.address = ""
             if address.isEmpty, let text = NSPasteboard.general.string(forType: .string), text.hasPrefix("http"), !text.contains(where: \.isWhitespace) {
@@ -101,8 +104,8 @@ struct AddFeedSheet: View {
                 for candidate in picked {
                     // A chosen name only makes sense when adding one feed.
                     let title = picked.count == 1 && name != candidate.title && !name.isEmpty ? name : nil
-                    let _: AddResult = try await Daemon.shared.callSlow(
-                        "feeds.add", AddParams(url: candidate.url, title: title, folder: folder.isEmpty ? nil : folder))
+                    let added: AddResult = try await Daemon.shared.callSlow("feeds.add", AddParams(url: candidate.url, title: title))
+                    if let folder { model.moveFeed(added.id, to: folder) }
                 }
                 await model.reload()
                 dismiss()
@@ -119,22 +122,26 @@ private struct SheetBody: View {
     let phase: AddFeedSheet.Phase
     @Binding var chosen: Set<String>
     @Binding var name: String
-    @Binding var folder: String
+    @Binding var folder: Int64?
     let adding: Bool
-    let folders: [String]
+    let folders: [(folder: Folder, depth: Int)]
+    @Environment(FloatLayer.self) private var layer
+    @State private var folderFrame = CGRect.zero
     let onLookup: () -> Void
     let onCancel: () -> Void
     let onSubscribe: () -> Void
+    let onNewFolder: (String) -> Void
     let onImport: () -> Void
 
     @Environment(\.palette) private var p
     @Environment(\.readingFamily) private var family
+    @Environment(\.titleFamily) private var titleFamily
     @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Add a feed")
-                .font(.custom(family, fixedSize: 26).weight(.semibold)).tracking(-0.26)
+                .font(.custom(titleFamily, fixedSize: 26).weight(.semibold)).tracking(-0.26)
                 .padding(.bottom, 16)
             TextField("", text: $address)
                 .textFieldStyle(.plain).font(.ui(15)).focused($focused)
@@ -207,7 +214,7 @@ private struct SheetBody: View {
                 row("Name") {
                     TextField("", text: $name).textFieldStyle(.plain).font(.ui(14))
                         .padding(.horizontal, 10).frame(height: 32)
-                        .overlay(RoundedRectangle(cornerRadius: Tokens.radiusControl).stroke(p.control))
+                        .overlay(RoundedRectangle(cornerRadius: Radii.control).stroke(p.control))
                 }
                 folderRow
             }
@@ -217,33 +224,20 @@ private struct SheetBody: View {
 
     private var folderRow: some View {
         row("Folder") {
-            Menu {
-                Button("None") { folder = "" }
-                ForEach(folders, id: \.self) { name in Button(name) { folder = name } }
-                Divider()
-                Button("New Folder…", action: newFolder)
-            } label: {
-                HStack {
-                    Text(folder.isEmpty ? "None" : folder).font(.ui(14)).foregroundStyle(p.ink)
-                    Spacer()
-                    Text("⌄").foregroundStyle(p.ink)
-                }
-                .padding(.horizontal, 10).frame(height: 32)
-                .overlay(RoundedRectangle(cornerRadius: Tokens.radiusControl).stroke(p.control))
-                .contentShape(Rectangle())
-            }
-            .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
+            SelectBox(
+                selection: $folder,
+                options: [SelectOption(value: nil, label: "None")]
+                    + folders.map { SelectOption(value: $0.folder.id, label: $0.folder.name, indent: CGFloat($0.depth) * 16) },
+                width: 448, height: 32,
+                action: ("New folder", newFolder))
+            .floatFrame($folderFrame)
         }
     }
 
     private func newFolder() {
-        let alert = NSAlert()
-        alert.messageText = "New folder"
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Create")
-        alert.addButton(withTitle: "Cancel")
-        if alert.runModal() == .alertFirstButtonReturn, !field.stringValue.isEmpty { folder = field.stringValue }
+        layer.show(at: folderFrame) {
+            NamePanel(title: "New folder", name: "", action: "Create", done: onNewFolder)
+        }
     }
 
     private func row(_ label: String, @ViewBuilder content: () -> some View) -> some View {
@@ -262,7 +256,7 @@ private struct SheetBody: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 5).fill(on ? p.unread : .clear)
                     RoundedRectangle(cornerRadius: 5).stroke(on ? p.unread : p.control)
-                    if on { Text("✓").font(.ui(12)).foregroundStyle(p.onAccent) }
+                    if on { Icon(glyph: .check, size: 13, color: p.onAccent) }
                 }
                 .frame(width: 18, height: 18)
                 VStack(alignment: .leading, spacing: 0) {

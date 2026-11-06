@@ -14,6 +14,7 @@ struct Feed: Decodable, Identifiable, Sendable, Equatable {
     let unread: Int64
     let entries: Int64
     let folderId: Int64?
+    let starred: Int64
 
     var name: String { title ?? URL(string: url)?.host() ?? url }
 }
@@ -65,6 +66,8 @@ struct Entry: Decodable, Sendable {
 }
 
 struct Stats: Decodable, Sendable {
+    /// Missing from daemons older than the field.
+    let apiVersion: Int64?
     let feeds: Int64
     let unread: Int64
     let lastEventSeq: Int64
@@ -86,6 +89,31 @@ struct AddResult: Decodable, Sendable {
 }
 
 struct Ok: Decodable, Sendable {}
+struct IdResult: Decodable, Sendable { let id: Int64 }
+
+struct ArticleUse: Decodable, Sendable {
+    let entries: Int64
+    let feeds: Int64
+    let textBytes: Int64
+    let searchBytes: Int64
+    let otherBytes: Int64
+    let removable: Int64
+    let removableBytes: Int64
+}
+
+struct StorageUse: Decodable, Sendable {
+    let articles: ArticleUse
+    let databaseBytes: Int64
+    let rawBytes: Int64
+    let rawFiles: Int64
+    let logBytes: Int64
+    let settingsBytes: Int64
+}
+
+struct FreeResult: Decodable, Sendable {
+    let trimmed: Int64
+    let copiesRemoved: Int64
+}
 struct StatusResult: Decodable, Sendable { let status: String }
 
 /// One node of the content model. See src/blocks.zig. Feed HTML never reaches the

@@ -20,7 +20,7 @@ Status: milestones 1 to 6 are implemented: parser, HTML to blocks, fetcher, SQLi
 - New capabilities are added to the operation registry, never to one surface alone.
 - SQL lives only in the `store` module.
 - `xml`, `html`, `feed` and other pure modules perform no I/O.
-- HTML is converted to blocks at ingest. Surfaces render blocks, never raw HTML.
+- HTML is converted to blocks at ingest. Surfaces render blocks, never raw HTML. The GUI's web viewer loads addresses only, and feed content never reaches it: [decision 0002](docs/decisions/0002-web-viewer.md).
 - AI output goes in `artifacts` with citations, never in `entries`.
 - No RSS, feed-reader or agent-framework dependencies in the core. Boundary: [docs/architecture.md](docs/architecture.md#what-from-scratch-means).
 - This project also exists to teach. Explain non-obvious decisions, and prefer the design that teaches over the shortcut that hides.
@@ -66,7 +66,7 @@ python3 tools/bundle_app.py                 # builds zig-out/rss_.app; --install
 python3 tools/gen_tokens.py                 # gui/tokens.css to Tokens.swift
 ```
 
-Colors, fonts and radii are designed in the Paper file. Export them to `gui/tokens.css`, regenerate, and never edit `Tokens.swift`. The reading default must be a font in `gui/Fonts`, which `gen_tokens.py` checks. Anything else is chosen in Settings, on the machine that has it. `RSS_KEYS` plays key presses and quits, as `tools/e2e_gui.py` shows. `RSS_SNAPSHOT=out.png` makes the app save its window and quit, with `RSS_SCREEN` choosing a screen and `-theme dark -followSystem NO` a theme. Use `RSS_HOME` so that checks never touch real data.
+Colors, fonts and radii are designed in the Paper file. Export them to `gui/tokens.css`, regenerate, and never edit `Tokens.swift`. The reading default must be a font in `gui/Fonts`, which `gen_tokens.py` checks. Anything else is chosen in Settings, on the machine that has it, and is stored in `config.json` under `ui`. `RSS_KEYS` plays key presses and clicks and quits, as `tools/e2e_gui.py` shows. `RSS_SNAPSHOT=out.png` makes the app save its window and quit, with `RSS_SCREEN` choosing a screen and `-theme dark -followSystem NO` a theme. Use `RSS_HOME` so that checks never touch real data.
 
 A new capability is a struct in `src/ops.zig`. Add it to `all`, and the socket and MCP serve it. Give it `docs` for its parameters, or `agent_visible = false`.
 

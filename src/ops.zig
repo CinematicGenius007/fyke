@@ -37,14 +37,14 @@ const Ok = struct { ok: bool = true };
 
 /// Longer than any feed has existed, and small enough that the arithmetic cannot overflow.
 const max_since_days = 100 * 366;
+const cutoffMillis = service.cutoffMillis;
 
 fn sinceMillis(s: *const Service, days: ?i64) ?i64 {
     return cutoffMillis(s.now(), days orelse return null);
 }
 
-fn cutoffMillis(now: i64, days: i64) i64 {
-    return now - std.math.clamp(days, 0, max_since_days) * 24 * 3600 * 1000;
-}
+/// Raised when an operation's parameters or results change in a way clients rely on.
+pub const api_version = 2;
 
 pub const FeedsList = struct {
     pub const name = "feeds.list";
@@ -103,16 +103,36 @@ pub const FeedsPreview = struct {
     }
 };
 
+/// config.json is the owner's to edit, so each read goes to the file. The daemon's
+/// own settings follow an edit, and `ui` is kept for clients, which give it meaning.
 pub const ConfigGet = struct {
     pub const name = "config.get";
     pub const tier: Tier = .read;
     pub const description = "Read the settings a client can change.";
     pub const agent_visible = false;
     pub const Params = struct {};
-    pub const Result = struct { full_text: bool };
+    pub const Result = struct {
+        full_text: bool,
+        remove_read_after_days: i64,
+        ui: ?std.json.Value,
+        config_error: ?[]const u8,
+    };
 
-    pub fn run(s: *Service, _: std.mem.Allocator, _: Params) !Result {
-        return .{ .full_text = s.full_text.load(.monotonic) };
+    pub fn run(s: *Service, arena: std.mem.Allocator, _: Params) !Result {
+        var ui: ?std.json.Value = null;
+        var problem: ?[]const u8 = null;
+        const text = try service.readConfigFile(s, arena);
+        if (std.json.parseFromSliceLeaky(service.Config, arena, text, .{ .ignore_unknown_fields = true })) |values| {
+            service.applyConfig(s, values);
+            const root = try std.json.parseFromSliceLeaky(std.json.Value, arena, text, .{});
+            ui = root.object.get("ui");
+        } else |err| problem = @errorName(err);
+        return .{
+            .full_text = s.full_text.load(.monotonic),
+            .remove_read_after_days = s.remove_read_after_days.load(.monotonic),
+            .ui = ui,
+            .config_error = problem,
+        };
     }
 };
 
@@ -121,19 +141,26 @@ pub const ConfigSet = struct {
     pub const tier: Tier = .manage;
     pub const description = "Change a setting, now and for later runs.";
     pub const agent_visible = false;
-    pub const Params = struct { full_text: ?bool = null };
+    pub const Params = struct {
+        full_text: ?bool = null,
+        remove_read_after_days: ?i64 = null,
+        ui: ?std.json.Value = null,
+    };
     pub const Result = Ok;
 
     pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
-        const enabled = p.full_text orelse return .{};
-        try saveSetting(s, arena, "full_text", .{ .bool = enabled });
-        s.full_text.store(enabled, .monotonic);
-        s.full_text_wake.set(s.io);
+        try save(s, arena, p);
+        if (p.full_text) |enabled| {
+            s.full_text.store(enabled, .monotonic);
+            s.full_text_wake.set(s.io);
+        }
+        if (p.remove_read_after_days) |days| s.remove_read_after_days.store(days, .monotonic);
         return .{};
     }
 
-    /// Other keys in the file are the owner's, so they survive untouched.
-    fn saveSetting(s: *Service, arena: std.mem.Allocator, key: []const u8, value: std.json.Value) !void {
+    /// Other keys in the file are the owner's, so they survive untouched. A file that
+    /// does not parse is refused rather than replaced, because it holds an edit.
+    fn save(s: *Service, arena: std.mem.Allocator, p: Params) !void {
         s.config_lock.lockUncancelable(s.io);
         defer s.config_lock.unlock(s.io);
         const text = s.home.readFileAlloc(s.io, "config.json", arena, .limited(1 << 20)) catch |err| switch (err) {
@@ -142,7 +169,10 @@ pub const ConfigSet = struct {
         };
         var root = try std.json.parseFromSliceLeaky(std.json.Value, arena, text, .{});
         if (root != .object) return error.InvalidConfig;
-        try root.object.put(arena, key, value);
+        _ = try std.json.parseFromSliceLeaky(service.Config, arena, text, .{ .ignore_unknown_fields = true });
+        if (p.full_text) |enabled| try root.object.put(arena, "full_text", .{ .bool = enabled });
+        if (p.remove_read_after_days) |days| try root.object.put(arena, "remove_read_after_days", .{ .integer = days });
+        if (p.ui) |ui| try root.object.put(arena, "ui", ui);
         const out = try std.fmt.allocPrint(arena, "{f}\n", .{std.json.fmt(root, .{ .whitespace = .indent_2 })});
         try s.home.writeFile(s.io, .{ .sub_path = "config.json.tmp", .data = out });
         try s.home.rename("config.json.tmp", s.home, "config.json", s.io);
@@ -160,6 +190,136 @@ pub const FoldersList = struct {
         const reader = s.lockReader();
         defer s.unlockReader();
         return .{ .items = try reader.folders(arena) };
+    }
+};
+
+pub const FoldersAdd = struct {
+    pub const name = "folders.add";
+    pub const tier: Tier = .manage;
+    pub const description = "Create a folder, or find the one already using that name.";
+    pub const docs = .{ .name = "Folder name.", .parent_id = "Folder to create it in. Omit for the top level." };
+    pub const Params = struct { name: []const u8, parent_id: ?i64 = null };
+    pub const Result = struct { id: i64 };
+
+    pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
+        const trimmed = std.mem.trim(u8, p.name, " ");
+        if (trimmed.len == 0) return error.InvalidName;
+        const writer = s.lockWriter();
+        defer s.unlockWriter();
+        if (p.parent_id) |parent| {
+            if (try writer.folderInfo(arena, parent) == null) return error.NoSuchFolder;
+        }
+        return .{ .id = try writer.ensureFolder(p.parent_id, trimmed) };
+    }
+};
+
+pub const FoldersRename = struct {
+    pub const name = "folders.rename";
+    pub const tier: Tier = .manage;
+    pub const description = "Rename a folder.";
+    pub const docs = .{ .id = "Folder id.", .name = "New name." };
+    pub const Params = struct { id: i64, name: []const u8 };
+    pub const Result = Ok;
+
+    pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
+        const trimmed = std.mem.trim(u8, p.name, " ");
+        if (trimmed.len == 0) return error.InvalidName;
+        const writer = s.lockWriter();
+        defer s.unlockWriter();
+        const current = try writer.folderInfo(arena, p.id) orelse return error.NoSuchFolder;
+        if (try writer.folderNameTaken(current.parent_id, trimmed, p.id)) return error.FolderExists;
+        try writer.renameFolder(p.id, trimmed);
+        return .{};
+    }
+};
+
+pub const FoldersMove = struct {
+    pub const name = "folders.move";
+    pub const tier: Tier = .manage;
+    pub const description = "Move a folder inside another, or to the top level.";
+    pub const docs = .{ .id = "Folder id.", .parent_id = "New parent. Omit for the top level." };
+    pub const Params = struct { id: i64, parent_id: ?i64 = null };
+    pub const Result = Ok;
+
+    pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
+        const writer = s.lockWriter();
+        defer s.unlockWriter();
+        const current = try writer.folderInfo(arena, p.id) orelse return error.NoSuchFolder;
+        if (p.parent_id) |parent| {
+            if (try writer.folderInfo(arena, parent) == null) return error.NoSuchFolder;
+            if (try writer.folderIsWithin(parent, p.id)) return error.FolderCycle;
+        }
+        if (try writer.folderNameTaken(p.parent_id, current.name, p.id)) return error.FolderExists;
+        try writer.moveFolder(p.id, p.parent_id);
+        return .{};
+    }
+};
+
+pub const FoldersRemove = struct {
+    pub const name = "folders.remove";
+    pub const tier: Tier = .manage;
+    pub const description = "Delete a folder. What it holds moves to its parent, unless delete_contents is true, which removes its subfolders and feeds, with their entries.";
+    pub const docs = .{ .id = "Folder id.", .delete_contents = "Also delete every subfolder and feed inside, and their entries." };
+    pub const Params = struct { id: i64, delete_contents: bool = false };
+    pub const Result = Ok;
+
+    pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
+        var hashes: std.ArrayList([]const u8) = .empty;
+        {
+            const writer = s.lockWriter();
+            defer s.unlockWriter();
+            const current = try writer.folderInfo(arena, p.id) orelse return error.NoSuchFolder;
+            if (p.delete_contents) {
+                // All or nothing: a half-done delete would lose the names of raw files.
+                try writer.begin();
+                errdefer writer.rollback();
+                for (try writer.feedsInFolder(arena, p.id)) |feed| {
+                    try hashes.appendSlice(arena, try writer.rawHashesOnlyFor(arena, feed));
+                    _ = try writer.removeFeed(feed);
+                }
+                try writer.deleteFolder(p.id);
+                try writer.commit();
+            } else {
+                if (try writer.folderChildClashes(p.id, current.parent_id)) return error.FolderExists;
+                try writer.dissolveFolder(p.id, current.parent_id);
+            }
+        }
+        for (hashes.items) |hash| service.deleteRaw(s, arena, hash);
+        return .{};
+    }
+};
+
+pub const FeedsUpdate = struct {
+    pub const name = "feeds.update";
+    pub const tier: Tier = .manage;
+    pub const description = "Rename a feed, or move it to a folder.";
+    pub const docs = .{
+        .id = "Feed id.",
+        .title = "New name. Empty goes back to the feed's own title.",
+        .folder_id = "Folder to move it to.",
+        .top_level = "True to move it out of any folder.",
+    };
+    pub const Params = struct { id: i64, title: ?[]const u8 = null, folder_id: ?i64 = null, top_level: bool = false };
+    pub const Result = Ok;
+
+    pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
+        const writer = s.lockWriter();
+        defer s.unlockWriter();
+        // Checked first, so that a refused call changes nothing.
+        if (!p.top_level) {
+            if (p.folder_id) |folder| {
+                if (try writer.folderInfo(arena, folder) == null) return error.NoSuchFolder;
+            }
+        }
+        if (p.title) |title| {
+            if (!try writer.setFeedTitle(p.id, std.mem.trim(u8, title, " "))) return error.NoSuchFeed;
+        }
+        if (p.top_level) {
+            if (!try writer.setFeedFolder(p.id, null)) return error.NoSuchFeed;
+        } else if (p.folder_id) |folder| {
+            if (!try writer.setFeedFolder(p.id, folder)) return error.NoSuchFeed;
+        }
+        return .{};
     }
 };
 
@@ -267,6 +427,7 @@ pub const EntriesList = struct {
     pub const description = "List entries, newest first, with their titles and links but not their bodies. Use entries_get for a body.";
     pub const docs = .{
         .feed_id = "Only this feed.",
+        .folder_id = "Only feeds in this folder and the folders inside it.",
         .unread_only = "Only entries not yet read.",
         .starred_only = "Only starred entries.",
         .since_days = "Only entries from the last N days.",
@@ -276,6 +437,7 @@ pub const EntriesList = struct {
     };
     pub const Params = struct {
         feed_id: ?i64 = null,
+        folder_id: ?i64 = null,
         unread_only: bool = false,
         starred_only: bool = false,
         since_days: ?i64 = null,
@@ -291,6 +453,7 @@ pub const EntriesList = struct {
         defer s.unlockReader();
         const rows = try reader.listEntries(arena, .{
             .feed_id = p.feed_id,
+            .folder_id = p.folder_id,
             .unread_only = p.unread_only,
             .starred_only = p.starred_only,
             .limit = limit,
@@ -423,6 +586,22 @@ pub const EntriesMark = struct {
     }
 };
 
+pub const EntriesMarkAll = struct {
+    pub const name = "entries.mark_all";
+    pub const tier: Tier = .annotate;
+    pub const description = "Mark as read every entry in a feed or a folder, or in all feeds when given neither.";
+    pub const docs = .{ .feed_id = "Only this feed.", .folder_id = "Only feeds in this folder and the folders inside it." };
+    pub const Params = struct { feed_id: ?i64 = null, folder_id: ?i64 = null };
+    pub const Result = Ok;
+
+    pub fn run(s: *Service, _: std.mem.Allocator, p: Params) !Result {
+        const writer = s.lockWriter();
+        defer s.unlockWriter();
+        _ = try writer.markAllRead(p.feed_id, p.folder_id, s.now());
+        return .{};
+    }
+};
+
 pub const EntriesFetchFull = struct {
     pub const name = "entries.fetch_full";
     pub const tier: Tier = .annotate;
@@ -530,6 +709,8 @@ pub const StatsGet = struct {
     pub const description = "Counts, queue depth and daemon uptime.";
     pub const Params = struct {};
     pub const Result = struct {
+        /// Clients compare this, because a daemon outlives the app that started it.
+        api_version: i64 = api_version,
         feeds: i64,
         entries: i64,
         unread: i64,
@@ -558,6 +739,99 @@ pub const StatsGet = struct {
             .in_flight = s.inFlight(),
             .uptime_seconds = @divTrunc(now - s.started_at, 1000),
         };
+    }
+};
+
+pub const StorageGet = struct {
+    pub const name = "storage.get";
+    pub const tier: Tier = .read;
+    pub const description = "Disk space used by the data directory, by kind.";
+    pub const agent_visible = false;
+    pub const Params = struct { older_than_days: i64 = 90 };
+    pub const Result = struct {
+        articles: store.Db.ArticleUse,
+        database_bytes: i64,
+        raw_bytes: i64,
+        raw_files: i64,
+        log_bytes: i64,
+        settings_bytes: i64,
+    };
+
+    pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
+        const before = cutoffMillis(s.now(), @max(p.older_than_days, service.min_trim_days));
+        // A scan of every page, so it uses the connection that normal reads do not.
+        const articles = articles: {
+            s.sandbox_lock.lockUncancelable(s.io);
+            defer s.sandbox_lock.unlock(s.io);
+            break :articles try s.sandbox.articleUse(before);
+        };
+        const raw = rawUse(s, arena);
+        return .{
+            .articles = articles,
+            .database_bytes = fileSize(s, "rss.db") + fileSize(s, "rss.db-wal") + fileSize(s, "rss.db-shm"),
+            .raw_bytes = raw.bytes,
+            .raw_files = raw.files,
+            .log_bytes = fileSize(s, "rssd.log"),
+            .settings_bytes = fileSize(s, "config.json"),
+        };
+    }
+
+    fn fileSize(s: *Service, path: []const u8) i64 {
+        const stat = s.home.statFile(s.io, path, .{}) catch return 0;
+        return @intCast(stat.size);
+    }
+
+    /// Bodies live two levels down, as raw/ab/abcd….gz.
+    fn rawUse(s: *Service, arena: std.mem.Allocator) struct { bytes: i64 = 0, files: i64 = 0 } {
+        var total: @typeInfo(@TypeOf(rawUse)).@"fn".return_type.? = .{};
+        var raw = s.home.openDir(s.io, "raw", .{ .iterate = true }) catch return total;
+        defer raw.close(s.io);
+        var shards = raw.iterate();
+        while (shards.next(s.io) catch null) |shard| {
+            if (shard.kind != .directory) continue;
+            const shard_name = arena.dupe(u8, shard.name) catch return total;
+            var bodies = raw.openDir(s.io, shard_name, .{ .iterate = true }) catch continue;
+            defer bodies.close(s.io);
+            var files = bodies.iterate();
+            while (files.next(s.io) catch null) |file| {
+                const stat = bodies.statFile(s.io, file.name, .{}) catch continue;
+                total.bytes += @intCast(stat.size);
+                total.files += 1;
+            }
+        }
+        return total;
+    }
+};
+
+pub const StorageFree = struct {
+    pub const name = "storage.free";
+    pub const tier: Tier = .manage;
+    pub const description = "Reclaim disk space: trim old read articles, drop older feed copies, or both.";
+    pub const agent_visible = false;
+    pub const Params = struct { trim_older_than_days: ?i64 = null, feed_copies: bool = false };
+    pub const Result = struct { trimmed: usize, copies_removed: usize };
+
+    pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
+        var trimmed: usize = 0;
+        const stale = stale: {
+            const writer = s.lockWriter();
+            defer s.unlockWriter();
+            if (p.trim_older_than_days) |days| {
+                trimmed = try writer.trimEntries(cutoffMillis(s.now(), @max(days, service.min_trim_days)));
+            }
+            // The newest copy stays, because it is what a replay would start from.
+            break :stale if (p.feed_copies) try writer.takeStaleRaw(arena, 1) else &.{};
+        };
+        // Files go first: nothing names them now, and compacting needs disk space.
+        for (stale) |hash| service.deleteRaw(s, arena, hash);
+
+        // Rewrites the whole file under the writer lock, so only when it can gain.
+        if (trimmed != 0 or stale.len != 0) {
+            const writer = s.lockWriter();
+            defer s.unlockWriter();
+            writer.compact() catch |err| std.debug.print("compacting: {s}\n", .{@errorName(err)});
+        }
+        return .{ .trimmed = trimmed, .copies_removed = stale.len };
     }
 };
 
@@ -656,12 +930,14 @@ pub const DaemonHousekeep = struct {
 };
 
 pub const all = .{
-    FeedsPreview,  FoldersList, ConfigGet,        ConfigSet,
-    FeedsList,     FeedsAdd,    FeedsRefresh,     FeedsRefreshAll,
-    FeedsQueue,    FeedsRemove, EntriesList,      EntriesGet,
-    EntriesSearch, EntriesMark, EntriesFetchFull, OpmlImport,
-    OpmlExport,    StatsGet,    SchemaDescribe,   DbQuery,
-    EventsSince,   OpsList,     DaemonStop,       DaemonHousekeep,
+    FeedsPreview,     FoldersList,   ConfigGet,      ConfigSet,
+    FoldersAdd,       FoldersRename, FoldersMove,    FoldersRemove,
+    FeedsList,        FeedsAdd,      FeedsUpdate,    FeedsRefresh,
+    FeedsRefreshAll,  FeedsQueue,    FeedsRemove,    EntriesList,
+    EntriesGet,       EntriesSearch, EntriesMark,    EntriesMarkAll,
+    EntriesFetchFull, OpmlImport,    OpmlExport,     StatsGet,
+    StorageGet,       StorageFree,   SchemaDescribe, DbQuery,
+    EventsSince,      OpsList,       DaemonStop,     DaemonHousekeep,
 };
 
 pub const DispatchError = error{ UnknownMethod, TierDenied, InvalidParams };

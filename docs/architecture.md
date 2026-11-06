@@ -22,7 +22,7 @@ Three rules define the design:
 
 1. **One writer.** Only `rss daemon` writes to the database. No locking problems, no client can corrupt state, and it is the only place invariants are enforced.
 2. **One API.** Every capability is an entry in the [operation registry](api.md). The GUI, TUI, CLI and MCP server are adapters over it, so they cannot drift apart, and anything you can do by hand an agent can do, subject to [permission tiers](api.md#permission-tiers).
-3. **One content format.** HTML is converted once at ingest into [blocks](#content-model). Each surface then renders blocks. No surface needs an HTML engine.
+3. **One content format.** HTML is converted once at ingest into [blocks](#content-model). Each surface then renders blocks, so showing an article needs no HTML engine. The GUI can also show an article's own web page, which is a separate path that feed content never takes. See [the decision](decisions/0002-web-viewer.md).
 
 The third rule is what makes a non-web GUI and a TUI practical. Rendering arbitrary HTML is the hardest problem a reader could take on, and this design removes it.
 
@@ -32,18 +32,55 @@ Polling must run while no UI is open, and several clients (GUI plus an agent) ne
 
 ## On-disk layout
 
-Everything lives under `$RSS_HOME`, default `~/.local/share/rss_`. Backing up is copying this folder.
+Everything lives under `$RSS_HOME`, default `~/.rss_`. Backing up is copying this folder.
+
+Data at `~/.local/share/rss_`, the location of earlier versions, moves to `~/.rss_` the first time any `rss` command runs without `RSS_HOME`. One rename moves it, and a link stays at the old path for older binaries and launch agents. If both locations hold data, `~/.rss_` is used and the old folder is left alone. If they are on different volumes, the data stays and `~/.rss_` becomes a link to it.
 
 ```text
 rss.db            SQLite database (WAL mode)
 raw/ab/abcd….gz   Fetched feed bodies, by SHA-256
 rssd.sock         API socket, mode 0600
 rssd.log          Log of a daemon started in the background, replaced at each start
-config.json       Settings
+config.json       All settings, including the GUI's under `ui`
 interests.md      Your stated interests, plain text, used for ranking (planned)
 ```
 
+`config.json` is written only by the daemon, through `config.set`, and is safe to edit by hand. Each `config.get` and each hourly housekeeping reads the file, so `full_text` and `remove_read_after_days` follow an edit, and the GUI watches the file and folder, so everything under `ui` follows at once. `workers`, `per_host`, `auto_poll` and `min_poll_seconds` apply at the next start. A file that does not parse is left in place and reported: the daemon uses defaults if it is starting, the GUI keeps its last good settings and saves nothing until the file is fixed, and `config.set` refuses rather than overwrite the edit. Other keys in the file survive a write.
+
+```json
+{
+  "full_text": true,
+  "remove_read_after_days": 90,
+  "ui": {
+    "theme": "dusk",
+    "follow_system": true,
+    "day_theme": "light",
+    "night_theme": "dusk",
+    "text_size": 20,
+    "open_links": "app",
+    "scrollbars": "scrolling",
+    "fonts": { "reading": "Georgia" },
+    "themes": [
+      {
+        "id": "dusk",
+        "name": "Dusk",
+        "base": "dark",
+        "tokens": { "ground": "#1C1B29", "unread": "#F2A65A" },
+        "fonts": { "title": "Newsreader" },
+        "radii": { "control": 4 }
+      }
+    ]
+  }
+}
+```
+
+A theme holds colors, fonts and radii. Light, Dark, Newsprint and Terminal are built in and read-only, so they always match the design. A theme in `themes` stores only what differs from its `base`, and removing a key restores the base's value. `ui.fonts` is a temporary layer on top of the active theme: it survives a restart, and clears when the active theme changes, including when following the system moves from day to night.
+
 Keeping raw bodies means a parser bug is fixable after the fact: fix it, reparse history. Retention is the last 20 distinct bodies per feed, counting bodies that failed to parse.
+
+Removing old read articles, by hand or through `remove_read_after_days`, empties their text and keeps the row. The row's identity and `content_hash` are what stop a feed that still lists the article from bringing it back as unread. Age counts from when an article was read and first seen, never from when it was published, so an old post read today is safe. Starred articles are never trimmed, and neither is anything read or first seen in the last 30 days.
+
+The app compares `api_version` from `stats.get` with its own at launch. A daemon outlives the app that started it, so after an update it can be older, and then the app stops it and starts its own. A newer daemon is left running.
 
 ## Concurrency
 
@@ -118,7 +155,7 @@ The cleaner allowlists known structure and discards the rest, which makes saniti
 
 Inline types: `text`, `em`, `strong`, `code`, `link`, `br`. Block types: `p`, `h`, `code`, `img`, `quote`, `list`, `table`, `hr`, `embed` (a link to a video or similar).
 
-Renderers: native text views in the GUI, ANSI in the TUI, Markdown for agents. Models get Markdown because it is compact and they read it well. Original HTML stays recoverable from `raw/`, and "open in browser" is always available.
+Renderers: native text views in the GUI, ANSI in the TUI, Markdown for agents. Models get Markdown because it is compact and they read it well. Original HTML stays recoverable from `raw/`, and an article's page can open in the app or in a browser.
 
 ## Data model
 
@@ -167,6 +204,7 @@ Feeds are untrusted input from the internet, and this app hands that input to AI
 | Resource exhaustion | Limits on body size, nesting depth, entries per feed, decompressed size |
 | SSRF via feed URL or redirect | `http(s)` only. On every redirect hop, the address of the connected socket is checked before any request is sent, so DNS rebinding cannot pass the check. A TLS handshake with a private host can still occur before refusal. `allow_private_network` is a per-feed opt-in |
 | Scripts in content | Impossible by construction: blocks have no script type |
+| Remote pages in the GUI | A feed chooses the address, and the page runs its own script, in WebKit's sandboxed process. `http(s)` only on every navigation, private addresses refused by host name for navigation and for everything a page loads, no script message handler, an in-memory data store per visit, and no downloads, new windows, camera or microphone. Host name checks do not stop DNS rebinding, unlike the fetcher's socket check. Feed HTML is never loaded. See [the decision](decisions/0002-web-viewer.md) |
 | Tracking | Remote images load on request, known pixels are stripped, click-tracking params removed |
 | Other local users | Socket and data directory are owner-only, set explicitly because a new socket defaults to `0755`. No TCP port by default |
 | Agents causing requests | `entries.fetch_full` is in the annotate tier, so such an agent can make the daemon fetch a URL that a feed chose. It goes through the same address check and asks `robots.txt` first. `feeds.preview` and `feeds.add`, which take any URL, need the manage tier |
@@ -199,7 +237,7 @@ Assumed boundary, open to tightening:
 | Date, URL, encoding handling | HTTP/1.1 and gzip from the standard library, behind our `fetch` interface |
 | Fetch policy, scheduler, pipeline | SQLite (C library) |
 | JSON-RPC, MCP server, ACP client | OS windowing and text rendering |
-| TUI renderer, GUI app | Models themselves |
+| TUI renderer, GUI app | Models themselves, and WebKit for remote pages in the GUI |
 | Dedupe, clustering, ranking | |
 
 No RSS library, no feed-reader code, no agent framework in the core. Replacing the standard HTTP client with our own would be a good later exercise, and the `fetch` interface leaves room for it.

@@ -23,9 +23,21 @@ pub const Config = struct {
     /// Fetch articles from their pages when a feed gives only a summary.
     full_text: bool = true,
     min_poll_seconds: i64 = 15 * 60,
+    /// Bodies of read entries older than this are trimmed. Zero keeps them.
+    remove_read_after_days: i64 = 0,
 };
 
 const housekeeping_interval_ms = 3600 * 1000;
+
+const max_cutoff_days = 100 * 366;
+/// Below this age a body can still be wanted for full-text work on the entry, and
+/// reading it again is likely.
+pub const min_trim_days = 30;
+
+/// Any number of days gives a sane moment, whether from a request or config.json.
+pub fn cutoffMillis(now: i64, days: i64) i64 {
+    return now - std.math.clamp(days, 0, max_cutoff_days) * 24 * 3600 * 1000;
+}
 
 /// A feed body shorter than this is treated as a summary.
 const short_text_length = 1500;
@@ -149,6 +161,8 @@ pub const Service = struct {
     stop_requested: std.atomic.Value(bool) = .init(false),
     /// Starts from `config.full_text`, and `config.set` changes it while running.
     full_text: std.atomic.Value(bool) = .init(true),
+    /// Starts from `config.remove_read_after_days`, and follows config.json.
+    remove_read_after_days: std.atomic.Value(i64) = .init(0),
     /// The main thread waits on this.
     stop: Io.Event = .unset,
 
@@ -363,16 +377,41 @@ fn fetchJob(s: *Service, id: i64) !void {
     };
 }
 
+pub fn readConfigFile(s: *Service, arena: std.mem.Allocator) ![]const u8 {
+    s.config_lock.lockUncancelable(s.io);
+    defer s.config_lock.unlock(s.io);
+    return s.home.readFileAlloc(s.io, "config.json", arena, .limited(1 << 20)) catch |err| switch (err) {
+        error.FileNotFound => "{}",
+        else => return err,
+    };
+}
+
+/// Takes up the settings that apply while running.
+pub fn applyConfig(s: *Service, values: Config) void {
+    if (s.full_text.swap(values.full_text, .monotonic) != values.full_text) s.full_text_wake.set(s.io);
+    s.remove_read_after_days.store(values.remove_read_after_days, .monotonic);
+}
+
+/// A daemon can run for days with no client asking, so it reads the file itself.
+fn followConfig(s: *Service, arena: std.mem.Allocator) void {
+    const text = readConfigFile(s, arena) catch return;
+    const values = std.json.parseFromSliceLeaky(Config, arena, text, .{ .ignore_unknown_fields = true }) catch return;
+    applyConfig(s, values);
+}
+
 /// Keeps storage bounded: old raw bodies, events and fetch logs.
 pub fn housekeep(s: *Service) !void {
     var arena_state: std.heap.ArenaAllocator = .init(s.gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
+    followConfig(s, arena);
 
     const writer = s.lockWriter();
     const stale = stale: {
         defer s.unlockWriter();
         try writer.prune(s.now());
+        const days = s.remove_read_after_days.load(.monotonic);
+        if (days > 0) _ = try writer.trimEntries(cutoffMillis(s.now(), @max(days, min_trim_days)));
         break :stale try writer.takeStaleRaw(arena, raw_bodies_kept);
     };
     for (stale) |hash| deleteRaw(s, arena, hash);

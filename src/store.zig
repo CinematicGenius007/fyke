@@ -70,6 +70,7 @@ pub const Feed = struct {
     folder_id: ?i64,
     skip_hours: i64,
     skip_days: i64,
+    starred: i64,
 };
 
 pub const EntrySummary = struct {
@@ -168,6 +169,8 @@ pub const FeedUpdate = struct {
 
 pub const Filter = struct {
     feed_id: ?i64 = null,
+    /// This folder and every folder inside it.
+    folder_id: ?i64 = null,
     unread_only: bool = false,
     starred_only: bool = false,
     limit: i64 = 50,
@@ -396,7 +399,9 @@ pub const Db = struct {
         \\  (SELECT count(*) FROM entries e LEFT JOIN entry_state s ON s.entry_id = e.id
         \\     WHERE e.feed_id = f.id AND s.read_at IS NULL AND s.hidden_at IS NULL),
         \\  (SELECT count(*) FROM entries e WHERE e.feed_id = f.id),
-        \\  f.folder_id, f.skip_hours, f.skip_days
+        \\  f.folder_id, f.skip_hours, f.skip_days,
+        \\  (SELECT count(*) FROM entry_state s JOIN entries e ON e.id = s.entry_id
+        \\     WHERE s.starred_at IS NOT NULL AND e.feed_id = f.id)
         \\FROM feeds f
     ;
 
@@ -421,6 +426,7 @@ pub const Db = struct {
             .folder_id = columnOptionalInt(stmt, 16),
             .skip_hours = sqlite3_column_int64(stmt, 17),
             .skip_days = sqlite3_column_int64(stmt, 18),
+            .starred = sqlite3_column_int64(stmt, 19),
         };
     }
 
@@ -609,6 +615,159 @@ pub const Db = struct {
             });
         }
         return rows.items;
+    }
+
+    /// Whether a sibling already uses this name. The constraint cannot answer this at
+    /// the top level, because SQL's UNIQUE treats NULL parents as different.
+    pub fn folderNameTaken(db: *Db, parent_id: ?i64, name: []const u8, except: ?i64) Error!bool {
+        const stmt = try db.prepare("SELECT 1 FROM folders WHERE parent_id IS ?1 AND name = ?2 AND id IS NOT ?3", .{ parent_id, name, except });
+        defer _ = sqlite3_finalize(stmt);
+        return sqlite3_step(stmt) == SQLITE_ROW;
+    }
+
+    pub const FolderInfo = struct { parent_id: ?i64, name: []const u8 };
+
+    pub fn folderInfo(db: *Db, arena: std.mem.Allocator, id: i64) Error!?FolderInfo {
+        const stmt = try db.prepare("SELECT parent_id, name FROM folders WHERE id = ?1", .{id});
+        defer _ = sqlite3_finalize(stmt);
+        if (sqlite3_step(stmt) != SQLITE_ROW) return null;
+        return .{ .parent_id = columnOptionalInt(stmt, 0), .name = try columnText(stmt, 1, arena) };
+    }
+
+    pub fn renameFolder(db: *Db, id: i64, name: []const u8) Error!void {
+        try db.run("UPDATE folders SET name = ?2 WHERE id = ?1", .{ id, name });
+    }
+
+    pub fn moveFolder(db: *Db, id: i64, parent_id: ?i64) Error!void {
+        try db.run("UPDATE folders SET parent_id = ?2 WHERE id = ?1", .{ id, parent_id });
+    }
+
+    /// True when `id` is `ancestor` or sits anywhere inside it.
+    pub fn folderIsWithin(db: *Db, id: i64, ancestor: i64) Error!bool {
+        const stmt = try db.prepare(comptime folderTree("?1") ++ " WHERE id = ?2", .{ ancestor, id });
+        defer _ = sqlite3_finalize(stmt);
+        return sqlite3_step(stmt) == SQLITE_ROW;
+    }
+
+    /// Names of the folders that would clash if this folder's children moved up.
+    pub fn folderChildClashes(db: *Db, id: i64, parent_id: ?i64) Error!bool {
+        const stmt = try db.prepare(
+            \\SELECT 1 FROM folders child JOIN folders sibling ON sibling.name = child.name
+            \\WHERE child.parent_id = ?1 AND sibling.parent_id IS ?2 AND sibling.id != ?1
+        , .{ id, parent_id });
+        defer _ = sqlite3_finalize(stmt);
+        return sqlite3_step(stmt) == SQLITE_ROW;
+    }
+
+    /// Deletes one folder and hands what it held to its parent.
+    pub fn dissolveFolder(db: *Db, id: i64, parent_id: ?i64) Error!void {
+        try db.begin();
+        errdefer db.rollback();
+        // A child may share this folder's name, and moves up beside it before it goes.
+        try db.run("UPDATE folders SET name = 'removing ' || id || ' ' || name WHERE id = ?1", .{id});
+        try db.run("UPDATE feeds SET folder_id = ?2 WHERE folder_id = ?1", .{ id, parent_id });
+        try db.run("UPDATE folders SET parent_id = ?2 WHERE parent_id = ?1", .{ id, parent_id });
+        try db.run("DELETE FROM folders WHERE id = ?1", .{id});
+        try db.commit();
+    }
+
+    /// Subfolders go with it through the foreign key.
+    pub fn deleteFolder(db: *Db, id: i64) Error!void {
+        try db.run("DELETE FROM folders WHERE id = ?1", .{id});
+    }
+
+    /// Feeds in a folder and in every folder inside it.
+    pub fn feedsInFolder(db: *Db, arena: std.mem.Allocator, id: i64) Error![]const i64 {
+        const stmt = try db.prepare("SELECT id FROM feeds WHERE folder_id IN (" ++ comptime folderTree("?1") ++ ")", .{id});
+        defer _ = sqlite3_finalize(stmt);
+        var rows: std.ArrayList(i64) = .empty;
+        while (sqlite3_step(stmt) == SQLITE_ROW) try rows.append(arena, sqlite3_column_int64(stmt, 0));
+        return rows.items;
+    }
+
+    /// An empty title goes back to the one the feed gives.
+    pub fn setFeedTitle(db: *Db, id: i64, title: []const u8) Error!bool {
+        try db.run("UPDATE feeds SET title_override = NULLIF(?2, '') WHERE id = ?1", .{ id, title });
+        return sqlite3_changes(db.handle) != 0;
+    }
+
+    pub fn setFeedFolder(db: *Db, id: i64, folder_id: ?i64) Error!bool {
+        try db.run("UPDATE feeds SET folder_id = ?2 WHERE id = ?1", .{ id, folder_id });
+        return sqlite3_changes(db.handle) != 0;
+    }
+
+    /// Marks read everything in one feed, one folder tree, or, with neither, all feeds.
+    pub fn markAllRead(db: *Db, feed_id: ?i64, folder_id: ?i64, now: i64) Error!usize {
+        try db.run(
+            \\INSERT INTO entry_state (entry_id, read_at)
+            \\SELECT e.id, ?3 FROM entries e JOIN feeds f ON f.id = e.feed_id
+            \\WHERE (?1 IS NULL OR e.feed_id = ?1) AND (?2 IS NULL OR f.folder_id IN (
+        ++ comptime folderTree("?2") ++
+            \\))
+            \\ON CONFLICT (entry_id) DO UPDATE SET read_at = COALESCE(read_at, excluded.read_at)
+        , .{ feed_id, folder_id, now });
+        return @intCast(sqlite3_changes(db.handle));
+    }
+
+    pub const ArticleUse = struct {
+        entries: i64,
+        feeds: i64,
+        text_bytes: i64,
+        search_bytes: i64,
+        other_bytes: i64,
+        removable: i64,
+        removable_bytes: i64,
+    };
+
+    /// What the database holds, by table, from SQLite's own page accounting. Reads
+    /// every page, so this runs on request, never on a timer.
+    pub fn articleUse(db: *Db, before: i64) Error!ArticleUse {
+        const pages = try db.prepare(
+            \\SELECT COALESCE(sum(CASE WHEN name = 'entries' THEN pgsize END), 0),
+            \\  COALESCE(sum(CASE WHEN name LIKE 'entries_fts%' THEN pgsize END), 0),
+            \\  COALESCE(sum(pgsize), 0)
+            \\FROM dbstat
+        , .{});
+        defer _ = sqlite3_finalize(pages);
+        if (sqlite3_step(pages) != SQLITE_ROW) return error.Sqlite;
+        const text = sqlite3_column_int64(pages, 0);
+        const search_bytes = sqlite3_column_int64(pages, 1);
+        const total = sqlite3_column_int64(pages, 2);
+
+        const stmt = try db.prepare("SELECT (SELECT count(*) FROM entries), (SELECT count(*) FROM feeds), " ++
+            "count(*), COALESCE(sum(length(e.content_blocks_json) + length(e.content_text)), 0) " ++
+            trimmable_entries, .{before});
+        defer _ = sqlite3_finalize(stmt);
+        if (sqlite3_step(stmt) != SQLITE_ROW) return error.Sqlite;
+        return .{
+            .entries = sqlite3_column_int64(stmt, 0),
+            .feeds = sqlite3_column_int64(stmt, 1),
+            .text_bytes = text,
+            .search_bytes = search_bytes,
+            .other_bytes = total - text - search_bytes,
+            .removable = sqlite3_column_int64(stmt, 2),
+            .removable_bytes = sqlite3_column_int64(stmt, 3),
+        };
+    }
+
+    const trimmable_entries =
+        \\FROM entries e JOIN entry_state s ON s.entry_id = e.id
+        \\WHERE s.read_at < ?1 AND e.first_seen_at < ?1 AND s.starred_at IS NULL AND e.content_text != ''
+    ;
+
+    /// Empties the bodies of entries read long ago and not starred. Age counts from
+    /// reading and from first sight, never from publishing, so an old post read today
+    /// is safe. The row and its content_hash stay, so a feed still listing the entry sees nothing new and it
+    /// cannot come back as unread.
+    pub fn trimEntries(db: *Db, before: i64) Error!usize {
+        try db.run("UPDATE entries SET content_blocks_json = '[]', content_text = '' WHERE id IN (SELECT e.id " ++
+            trimmable_entries ++ ")", .{before});
+        return @intCast(sqlite3_changes(db.handle));
+    }
+
+    /// Returns the file space of deleted pages to the disk.
+    pub fn compact(db: *Db) Error!void {
+        try db.exec("PRAGMA wal_checkpoint(TRUNCATE); VACUUM; PRAGMA wal_checkpoint(TRUNCATE);");
     }
 
     /// Finds or creates a folder. SQL's UNIQUE treats NULL parents as different,
@@ -903,6 +1062,12 @@ pub const Db = struct {
         return result;
     }
 
+    /// SQL for a folder's id and the ids of every folder inside it.
+    fn folderTree(comptime id: []const u8) []const u8 {
+        return "WITH RECURSIVE tree(id) AS (SELECT " ++ id ++
+            " UNION ALL SELECT f.id FROM folders f JOIN tree ON f.parent_id = tree.id) SELECT id FROM tree";
+    }
+
     const summary_columns =
         \\SELECT e.id, e.feed_id, COALESCE(f.title_override, f.title), e.title, e.url, e.sort_at,
         \\  s.read_at IS NOT NULL, s.starred_at IS NOT NULL,
@@ -938,6 +1103,9 @@ pub const Db = struct {
             \\   AND (?3 = 0 OR s.starred_at IS NOT NULL)
             \\   AND (?4 IS NULL OR (e.sort_at, e.id) < (?4, ?5))
             \\   AND (?7 IS NULL OR e.sort_at >= ?7)
+            \\   AND (?9 IS NULL OR f.folder_id IN (
+        ++ comptime folderTree("?9") ++
+            \\   ))
             \\   AND s.hidden_at IS NULL
             \\ ORDER BY e.sort_at DESC, e.id DESC LIMIT ?6
         , .{
@@ -949,6 +1117,7 @@ pub const Db = struct {
             filter.limit,
             filter.since,
             filter.with_summary,
+            filter.folder_id,
         });
         defer _ = sqlite3_finalize(stmt);
         var rows: std.ArrayList(EntrySummary) = .empty;

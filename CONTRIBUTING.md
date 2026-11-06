@@ -45,7 +45,7 @@ Some areas need more:
 - Only the daemon writes to the database, and SQL lives only in `store`.
 - A new capability is an operation in `src/ops.zig`, never a feature of one surface.
 - Modules listed as pure in the architecture document perform no I/O.
-- Surfaces render blocks, never raw HTML.
+- Surfaces render blocks, never raw HTML. The GUI's web viewer loads addresses, never feed content.
 - AI output goes in `artifacts`, with citations, never in `entries`.
 
 ## Comments and documents
