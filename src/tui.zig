@@ -122,6 +122,7 @@ const Reader = struct {
 };
 
 const PromptKind = enum { search, add };
+const max_prompt = 1024;
 
 const App = struct {
     gpa: std.mem.Allocator,
@@ -159,6 +160,14 @@ const App = struct {
     scratch: std.heap.ArenaAllocator,
     prompt: ?PromptKind = null,
     prompt_text: std.ArrayList(u8) = .empty,
+
+    /// Adding a feed can take as long as a slow site does, so it runs on a thread of
+    /// its own. That thread owns the buffers below while `adding` is true.
+    adding: std.atomic.Value(bool) = .init(false),
+    add_url: [max_prompt]u8 = undefined,
+    add_url_len: usize = 0,
+    add_result: [256]u8 = undefined,
+    add_result_len: usize = 0,
 
     stats: ?ops.StatsGet.Result = null,
     watching_fetches: bool = false,
@@ -700,7 +709,7 @@ const App = struct {
             .char => |ch| {
                 var buffer: [4]u8 = undefined;
                 const length = std.unicode.utf8Encode(ch, &buffer) catch return;
-                if (app.prompt_text.items.len + length <= 1024) app.prompt_text.appendSlice(app.gpa, buffer[0..length]) catch {};
+                if (app.prompt_text.items.len + length <= max_prompt) app.prompt_text.appendSlice(app.gpa, buffer[0..length]) catch {};
             },
             else => {},
         }
@@ -721,15 +730,31 @@ const App = struct {
                 app.focus = .entries;
                 app.say("{d} results", .{app.entries.items.len});
             },
-            .add => {
-                app.say("Adding...", .{});
-                app.draw() catch {};
-                const result = app.call(ops.FeedsAdd, app.scratch.allocator(), .{ .url = text }) orelse return;
-                app.say("Feed {d}: {d} new entries", .{ result.id, result.new });
-                app.loadFeeds();
-                app.loadEntries();
-            },
+            .add => app.startAdd(text),
         }
+    }
+
+    fn startAdd(app: *App, url: []const u8) void {
+        if (app.adding.load(.acquire)) {
+            app.say("Still adding the last feed", .{});
+            return;
+        }
+        @memcpy(app.add_url[0..url.len], url);
+        app.add_url_len = url.len;
+        app.adding.store(true, .release);
+        const thread = std.Thread.spawn(.{}, addThread, .{app}) catch {
+            app.adding.store(false, .release);
+            app.say("Could not start adding the feed", .{});
+            return;
+        };
+        thread.detach();
+        app.say("Adding...", .{});
+    }
+
+    fn finishAdd(app: *App) void {
+        app.say("{s}", .{app.add_result[0..app.add_result_len]});
+        app.loadFeeds();
+        app.loadEntries();
     }
 
     /// Applies what the daemon reported. Search results stay put, since a list that
@@ -1096,6 +1121,31 @@ fn writeAll(bytes: []const u8) void {
     }
 }
 
+/// Subscribes on a connection of its own, since `App.client` belongs to the main
+/// thread, then hands the outcome to the main loop.
+fn addThread(app: *App) void {
+    var scratch: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
+    defer scratch.deinit();
+    const text = addFeed(app, scratch.allocator()) catch |err| @errorName(err);
+    const length = @min(text.len, app.add_result.len);
+    @memcpy(app.add_result[0..length], text[0..length]);
+    app.add_result_len = length;
+    app.adding.store(false, .release);
+    wake('a');
+}
+
+fn addFeed(app: *App, arena: std.mem.Allocator) ![]const u8 {
+    var connector = app.connector;
+    connector.arena = arena;
+    const client = try arena.create(Client);
+    try connector.connect(client, true);
+    defer client.stream.close(app.io);
+    const result = client.call(ops.FeedsAdd, .{ .url = app.add_url[0..app.add_url_len] }) catch |err| {
+        return if (err == error.Reported) client.last_error else err;
+    };
+    return std.fmt.allocPrint(arena, "Feed {d}: {d} new entries", .{ result.id, result.new });
+}
+
 /// Holds a subscription open, and wakes the main loop when an event arrives. It
 /// shares nothing with the main thread except the sequence number.
 fn eventThread(app: *App) void {
@@ -1194,6 +1244,10 @@ pub fn run(gpa: std.mem.Allocator, connector: client_module.Connector) !void {
             for (reasons[0..@intCast(@max(count, 0))]) |reason| {
                 if (reason == 'e') app.live_pending = true;
                 if (reason == 'w') dirty = true;
+                if (reason == 'a') {
+                    app.finishAdd();
+                    dirty = true;
+                }
             }
         }
 

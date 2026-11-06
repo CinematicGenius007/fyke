@@ -240,6 +240,9 @@ t.keys("g", 0.1)
 t.keys(b"\x1b[<0;9999;9999M\x1b[<65;9999;9999M\x1b[<0;1;1M", 0.2)
 check("clicks outside anything are harmless", t.p.poll() is None)
 t.keys("\t", 0.1)
+t.keys("a", 0.2); t.keys("http://127.0.0.1:1/feed\r", 0.1)
+check("adding a feed runs in the background", "Adding" in t.text() or "Connection" in t.text(), t.text())
+check("and reports how it went", t.wait_for("Connection"), t.text())
 
 # Injection
 check("escape sequences in feeds do nothing", t.screen.title in ("", None) and b"\x1b]0;" not in t.raw, t.screen.title)
@@ -316,7 +319,6 @@ while sent < MONKEY:
     data = data.replace(b"r", b"").replace(b"R", b"").replace(b"o", b"").replace(b"\x03", b"")
     # Quitting would end the test, so quit keys are replaced outside of prompts.
     data = data.replace(b"q", b"h")
-    # "a" would start a real network fetch of random text.
     t.drain_write(data); sent += 1
     if sent % 200 == 0:
         columns, rows = rng.choice([(100, 30), (130, 40), (75, 24), (40, 12), (12, 3), (200, 60)])

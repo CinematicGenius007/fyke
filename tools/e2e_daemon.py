@@ -12,7 +12,12 @@ env = dict(os.environ, RSS_HOME=home)
 requests = []
 posts = {"count": 1}
 
+malformed = {"on": False, "count": 0}
+
 def feed_body():
+    if malformed["on"]:
+        malformed["count"] += 1
+        return f"not a feed {malformed['count']}".encode()
     items = "".join(f"<item><title>Post {i}</title><guid>{i}</guid><description>word{i}</description></item>" for i in range(posts["count"]))
     return f'<rss version="2.0"><channel><title>Live</title>{items}</channel></rss>'.encode()
 
@@ -327,6 +332,30 @@ rss("status")
 check("daemon polls on its own", wait_for(lambda: json.loads(rss("status", "--json").stdout)["entries"] == 41), requests)
 count = len(requests)
 check("and keeps polling", wait_for(lambda: len(requests) > count + 1, 15), requests)
+
+entry = json.loads(rss("list", "--json", "--limit", "1").stdout)["items"][0]["id"]
+rss("mark", str(entry), "--hide")
+check("a hidden entry leaves the list", entry not in [e["id"] for e in json.loads(rss("list", "--json", "--limit", "100").stdout)["items"]])
+rss("mark", str(entry), "--unhide")
+check("and returns", entry in [e["id"] for e in json.loads(rss("list", "--json", "--limit", "100").stdout)["items"]])
+
+extreme = Raw()
+check("an extreme age does not stop the daemon", "result" in extreme.call("entries.list", since_days=2**63 - 1))
+check("nor does a negative one", "result" in extreme.call("entries.search", query="word", since_days=-2**63))
+check("a huge value cannot be built by a query", "too big" in json.dumps(extreme.call("db.query", sql="SELECT hex(zeroblob(100000000))")))
+
+malformed["on"] = True
+feed_id = json.loads(rss("feeds", "--json").stdout)["items"][0]["id"]
+for _ in range(25): rss("refresh", str(feed_id))
+malformed["on"] = False
+extreme.call("daemon.housekeep")
+raw_files = sum(len(names) for _, _, names in os.walk(home + "/raw"))
+check("bad bodies stay within retention", raw_files <= 40, raw_files)
+
+with open(home + "/rssd.log", "a") as log: log.write("marker\n")
+check("a second daemon refuses to start", rss("daemon", "--log", ok=False).returncode != 0)
+check("and leaves the running daemon's log alone", "marker" in open(home + "/rssd.log").read())
+
 rss("daemon", "stop")
 
 server.shutdown(); shutil.rmtree(home)

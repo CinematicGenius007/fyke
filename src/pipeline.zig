@@ -189,12 +189,14 @@ pub fn refresh(c: Context, arena: std.mem.Allocator, row: store.Feed) !Outcome {
         .allow_private_network = row.allow_private_network,
     }) catch |err| {
         if (err == error.OutOfMemory) return err;
-        return failed(c, row, started, null, @errorName(err), null);
+        return failed(c, row, started, null, @errorName(err), null, null);
     };
     return apply(c, arena, row, response, started);
 }
 
-fn failed(c: Context, row: store.Feed, started: i64, status: ?u16, message: []const u8, retry_after: ?u32) !Outcome {
+/// `raw_sha256` names a body already saved for this attempt, so that housekeeping
+/// can find it. Without that, each bad body would stay on disk forever.
+pub fn failed(c: Context, row: store.Feed, started: i64, status: ?u16, message: []const u8, retry_after: ?u32, raw_sha256: ?[]const u8) !Outcome {
     const now = c.now();
     const count = row.error_count + 1;
     c.lock();
@@ -206,7 +208,7 @@ fn failed(c: Context, row: store.Feed, started: i64, status: ?u16, message: []co
         .error_count = count,
         .last_error = message,
     });
-    try c.db.logFetch(.{ .feed_id = row.id, .started_at = started, .duration_ms = now - started, .http_status = status, .err = message });
+    try c.db.logFetch(.{ .feed_id = row.id, .started_at = started, .duration_ms = now - started, .http_status = status, .raw_sha256 = raw_sha256, .err = message });
     return .{ .status = .failed, .message = message };
 }
 
@@ -230,6 +232,29 @@ pub fn adaptPollSeconds(posting_gap: ?i64, hint: ?u32, min_seconds: i64, current
     return std.math.clamp(wanted, @min(floor, max_poll_seconds), max_poll_seconds);
 }
 
+/// When to poll next after a success, outside the times the publisher asked us to skip.
+fn nextPollAt(now: i64, poll_seconds: i64, skip_hours: i64, skip_days: i64) i64 {
+    return afterSkipped(now + nextDelaySeconds(poll_seconds, 0, null, now) * 1000, skip_hours, skip_days);
+}
+
+/// Moves `at` forward to the start of the first UTC hour that `<skipHours>` and
+/// `<skipDays>` allow. Bit n of `skip_hours` is hour n, and bit n of `skip_days` is
+/// weekday n, counting from Sunday. A feed that skips everything keeps `at`, since
+/// polling it rarely is better than never.
+pub fn afterSkipped(at: i64, skip_hours: i64, skip_days: i64) i64 {
+    const hour_ms = 3600 * 1000;
+    var hour_index = @divFloor(at, hour_ms);
+    for (0..24 * 7) |step| {
+        const hour: u6 = @intCast(@mod(hour_index, 24));
+        // The first day of Unix time was a Thursday.
+        const weekday: u6 = @intCast(@mod(@divFloor(hour_index, 24) + 4, 7));
+        const skipped = (skip_hours >> hour) & 1 != 0 or (skip_days >> weekday) & 1 != 0;
+        if (!skipped) return if (step == 0) at else hour_index * hour_ms;
+        hour_index += 1;
+    }
+    return at;
+}
+
 fn apply(c: Context, arena: std.mem.Allocator, row: store.Feed, response: fetch.Response, started_in: i64) !Outcome {
     const now = c.now();
     const started = if (started_in == 0) now else started_in;
@@ -245,7 +270,7 @@ fn apply(c: Context, arena: std.mem.Allocator, row: store.Feed, response: fetch.
                 .url = if (response.moved_permanently) response.final_url else null,
                 .etag = response.etag,
                 .last_modified = response.last_modified,
-                .next_fetch_at = now + nextDelaySeconds(row.poll_seconds, 0, null, now) * 1000,
+                .next_fetch_at = nextPollAt(now, row.poll_seconds, row.skip_hours, row.skip_days),
                 .last_fetch_at = now,
                 .last_success_at = now,
                 .error_count = 0,
@@ -262,7 +287,7 @@ fn apply(c: Context, arena: std.mem.Allocator, row: store.Feed, response: fetch.
         },
         else => {
             const message = try std.fmt.allocPrint(arena, "HTTP {d}", .{response.status});
-            return failed(c, row, started, response.status, message, response.retry_after_seconds);
+            return failed(c, row, started, response.status, message, response.retry_after_seconds, null);
         },
     }
 
@@ -286,7 +311,7 @@ fn apply(c: Context, arena: std.mem.Allocator, row: store.Feed, response: fetch.
             .url = if (response.moved_permanently) response.final_url else null,
             .etag = response.etag,
             .last_modified = response.last_modified,
-            .next_fetch_at = now + nextDelaySeconds(row.poll_seconds, 0, null, now) * 1000,
+            .next_fetch_at = nextPollAt(now, row.poll_seconds, row.skip_hours, row.skip_days),
             .last_fetch_at = now,
             .last_success_at = now,
             .error_count = 0,
@@ -297,10 +322,15 @@ fn apply(c: Context, arena: std.mem.Allocator, row: store.Feed, response: fetch.
 
     try saveRaw(c, &hash, response.body);
 
-    const parsed = feed.parse(arena, response.body) catch |err| {
-        if (err == error.OutOfMemory) return err;
-        return failed(c, row, started, 200, @errorName(err), null);
+    return commit(c, arena, row, response, started, &hash) catch |err| {
+        return failed(c, row, started, 200, @errorName(err), null, &hash);
     };
+}
+
+/// Parses a saved body and stores what it holds.
+fn commit(c: Context, arena: std.mem.Allocator, row: store.Feed, response: fetch.Response, started: i64, hash: []const u8) !Outcome {
+    const now = c.now();
+    const parsed = try feed.parse(arena, response.body);
 
     // Parsing and conversion ran with no lock held. Only this part is serialized.
     const entries = try prepareEntries(arena, parsed, response.final_url);
@@ -319,7 +349,9 @@ fn apply(c: Context, arena: std.mem.Allocator, row: store.Feed, response: fetch.
         .etag = response.etag,
         .last_modified = response.last_modified,
         .poll_seconds = poll,
-        .next_fetch_at = now + nextDelaySeconds(poll, 0, null, now) * 1000,
+        .skip_hours = parsed.skip_hours,
+        .skip_days = parsed.skip_days,
+        .next_fetch_at = nextPollAt(now, poll, parsed.skip_hours, parsed.skip_days),
         .last_fetch_at = now,
         .last_success_at = now,
         .error_count = 0,
@@ -327,10 +359,10 @@ fn apply(c: Context, arena: std.mem.Allocator, row: store.Feed, response: fetch.
     try c.db.logFetch(.{
         .feed_id = row.id,
         .started_at = started,
-        .duration_ms = duration,
+        .duration_ms = now - started,
         .http_status = 200,
         .bytes = response.body.len,
-        .raw_sha256 = &hash,
+        .raw_sha256 = hash,
         .new_entries = result.new,
         .updated_entries = result.updated,
     });
@@ -461,6 +493,18 @@ test "polling adapts to posting rate, within limits" {
     try testing.expectEqual(3600, adaptPollSeconds(null, null, quarter_hour, 3600));
     try testing.expectEqual(7200, adaptPollSeconds(60, 7200, quarter_hour, 3600));
     try testing.expectEqual(86400, adaptPollSeconds(60, 999999, quarter_hour, 3600));
+}
+
+test "polls move out of skipped hours and days" {
+    const thursday_midnight = 0;
+    const hour = 3600 * 1000;
+    try testing.expectEqual(5, afterSkipped(5, 0, 0));
+    // Hours 0 and 1 are skipped, so the first free moment is 02:00.
+    try testing.expectEqual(2 * hour, afterSkipped(thursday_midnight + 5, 0b11, 0));
+    // Thursday is skipped, so the first free moment is Friday at 00:00.
+    try testing.expectEqual(24 * hour, afterSkipped(thursday_midnight + 5, 0, 1 << 4));
+    // Every hour is skipped, so the time stands.
+    try testing.expectEqual(5, afterSkipped(5, (1 << 24) - 1, 0));
 }
 
 test "jitter stays within a tenth" {

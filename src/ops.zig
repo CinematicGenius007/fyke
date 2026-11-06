@@ -1,8 +1,8 @@
 //! The operation registry: the one API of the system. See docs/api.md.
 //!
 //! Each operation is one struct. The socket dispatches on `name`, the CLI reuses
-//! `Params` and `Result` as its wire types, and the MCP server will generate its
-//! tools from the same declarations, so that the surfaces cannot drift apart.
+//! `Params` and `Result` as its wire types, and the MCP server generates its tools
+//! from the same declarations, so that the surfaces cannot drift apart.
 
 const std = @import("std");
 const core = @import("core");
@@ -35,8 +35,15 @@ pub const RawJson = struct {
 
 const Ok = struct { ok: bool = true };
 
+/// Longer than any feed has existed, and small enough that the arithmetic cannot overflow.
+const max_since_days = 100 * 366;
+
 fn sinceMillis(s: *const Service, days: ?i64) ?i64 {
-    return s.now() - (days orelse return null) * 24 * 3600 * 1000;
+    return cutoffMillis(s.now(), days orelse return null);
+}
+
+fn cutoffMillis(now: i64, days: i64) i64 {
+    return now - std.math.clamp(days, 0, max_since_days) * 24 * 3600 * 1000;
 }
 
 pub const FeedsList = struct {
@@ -127,6 +134,8 @@ pub const ConfigSet = struct {
 
     /// Other keys in the file are the owner's, so they survive untouched.
     fn saveSetting(s: *Service, arena: std.mem.Allocator, key: []const u8, value: std.json.Value) !void {
+        s.config_lock.lockUncancelable(s.io);
+        defer s.config_lock.unlock(s.io);
         const text = s.home.readFileAlloc(s.io, "config.json", arena, .limited(1 << 20)) catch |err| switch (err) {
             error.FileNotFound => "{}",
             else => return err,
@@ -287,17 +296,12 @@ pub const EntriesList = struct {
             .limit = limit,
             .since = sinceMillis(s, p.since_days),
             .before = if (p.before) |text| try parseCursor(text) else null,
+            .with_summary = p.with_summary,
         });
         var cursor: ?[]const u8 = null;
         if (rows.len == limit) {
             const last = rows[rows.len - 1];
             cursor = try std.fmt.allocPrint(arena, "{d}:{d}", .{ last.sort_at, last.id });
-        }
-        // Agents pay for every token, so they ask for summaries only when they want them.
-        if (!p.with_summary) {
-            const trimmed = try arena.dupe(store.EntrySummary, rows);
-            for (trimmed) |*row| row.summary = null;
-            return .{ .items = trimmed, .next_cursor = cursor };
         }
         return .{ .items = rows, .next_cursor = cursor };
     }
@@ -390,34 +394,31 @@ pub const EntriesSearch = struct {
     pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
         const reader = s.lockReader();
         defer s.unlockReader();
-        const rows = try reader.search(arena, p.query, .{
+        return .{ .items = try reader.search(arena, p.query, .{
             .limit = std.math.clamp(p.limit, 1, 1000),
             .unread_only = p.unread_only,
             .since = sinceMillis(s, p.since_days),
-        });
-        // Matches on a feed's name carry no snippet, and text matches already have one.
-        const trimmed = try arena.dupe(store.EntrySummary, rows);
-        for (trimmed) |*row| row.summary = null;
-        return .{ .items = trimmed };
+        }) };
     }
 };
 
 pub const EntriesMark = struct {
     pub const name = "entries.mark";
     pub const tier: Tier = .annotate;
-    pub const description = "Set or clear the read and starred state of an entry.";
+    pub const description = "Set or clear the read, starred and hidden state of an entry. Hidden entries leave lists and search.";
     pub const docs = .{
         .id = "Entry id.",
         .read = "True for read, false for unread.",
         .starred = "True to star, false to unstar.",
+        .hidden = "True to hide, false to show again.",
     };
-    pub const Params = struct { id: i64, read: ?bool = null, starred: ?bool = null };
+    pub const Params = struct { id: i64, read: ?bool = null, starred: ?bool = null, hidden: ?bool = null };
     pub const Result = Ok;
 
     pub fn run(s: *Service, _: std.mem.Allocator, p: Params) !Result {
         const writer = s.lockWriter();
         defer s.unlockWriter();
-        if (!try writer.mark(p.id, .{ .read = p.read, .starred = p.starred }, s.now())) return error.NoSuchEntry;
+        if (!try writer.mark(p.id, .{ .read = p.read, .starred = p.starred, .hidden = p.hidden }, s.now())) return error.NoSuchEntry;
         return .{};
     }
 };
@@ -568,7 +569,7 @@ pub const SchemaDescribe = struct {
     pub const Result = struct { schema: []const u8 };
 
     pub fn run(_: *Service, _: std.mem.Allocator, _: Params) !Result {
-        return .{ .schema = @embedFile("schema") ++ "\n" ++ @embedFile("schema2") };
+        return .{ .schema = @embedFile("schema") ++ "\n" ++ @embedFile("schema2") ++ "\n" ++ @embedFile("schema3") };
     }
 };
 
@@ -655,11 +656,12 @@ pub const DaemonHousekeep = struct {
 };
 
 pub const all = .{
-    FeedsPreview, FoldersList, ConfigGet, ConfigSet,
-    FeedsList,   FeedsAdd,        FeedsRefresh,   FeedsRefreshAll, FeedsQueue,       FeedsRemove,
-    EntriesList, EntriesGet,      EntriesSearch,  EntriesMark,     EntriesFetchFull, OpmlImport,
-    OpmlExport,  StatsGet,        SchemaDescribe, DbQuery,         EventsSince,      OpsList,
-    DaemonStop,  DaemonHousekeep,
+    FeedsPreview,  FoldersList, ConfigGet,        ConfigSet,
+    FeedsList,     FeedsAdd,    FeedsRefresh,     FeedsRefreshAll,
+    FeedsQueue,    FeedsRemove, EntriesList,      EntriesGet,
+    EntriesSearch, EntriesMark, EntriesFetchFull, OpmlImport,
+    OpmlExport,    StatsGet,    SchemaDescribe,   DbQuery,
+    EventsSince,   OpsList,     DaemonStop,       DaemonHousekeep,
 };
 
 pub const DispatchError = error{ UnknownMethod, TierDenied, InvalidParams };
@@ -676,6 +678,13 @@ pub fn dispatch(s: *Service, arena: std.mem.Allocator, method: []const u8, param
         }
     }
     return error.UnknownMethod;
+}
+
+test "any age parameter gives a sane cutoff" {
+    const now = 1_800_000_000_000;
+    try std.testing.expectEqual(now - 24 * 3600 * 1000, cutoffMillis(now, 1));
+    try std.testing.expectEqual(now, cutoffMillis(now, std.math.minInt(i64)));
+    try std.testing.expectEqual(cutoffMillis(now, max_since_days), cutoffMillis(now, std.math.maxInt(i64)));
 }
 
 test "tiers are ordered" {

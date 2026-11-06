@@ -545,7 +545,8 @@ pub fn toBlocks(arena: std.mem.Allocator, input: []const u8, options: Options) e
 /// Converts plain text to blocks: one paragraph per blank-line-separated section.
 pub fn textToBlocks(arena: std.mem.Allocator, text: []const u8) error{OutOfMemory}![]const Node {
     var nodes: std.ArrayList(Node) = .empty;
-    var sections = std.mem.splitSequence(u8, text, "\n\n");
+    const unix_text = try std.mem.replaceOwned(u8, arena, text, "\r\n", "\n");
+    var sections = std.mem.splitSequence(u8, unix_text, "\n\n");
     while (sections.next()) |section| {
         var clean: std.ArrayList(u8) = try .initCapacity(arena, section.len);
         for (section) |c| {
@@ -721,4 +722,10 @@ test "feed discovery" {
     try testing.expectEqual(2, found.len);
     try testing.expectEqualStrings("https://example.com/feed.xml", found[0]);
     try testing.expectEqualStrings("https://other.example/atom", found[1]);
+}
+
+test "a blank line with Windows line endings separates paragraphs" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    try std.testing.expectEqual(2, (try textToBlocks(arena.allocator(), "one\r\n\r\ntwo")).len);
 }

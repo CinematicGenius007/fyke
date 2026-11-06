@@ -377,10 +377,8 @@ fn templatesList(s: *Server, id: Value, era: Era) !void {
         "]", era, static_ttl_ms);
 }
 
-fn idValue(arena: std.mem.Allocator, text: []const u8) !?Value {
-    const id = std.fmt.parseInt(i64, text, 10) catch return null;
-    _ = arena;
-    return .{ .integer = id };
+fn idValue(text: []const u8) ?Value {
+    return .{ .integer = std.fmt.parseInt(i64, text, 10) catch return null };
 }
 
 fn resourcesRead(s: *Server, arena: std.mem.Allocator, id: Value, params: Value, era: Era) !void {
@@ -396,18 +394,18 @@ fn resourcesRead(s: *Server, arena: std.mem.Allocator, id: Value, params: Value,
         mime = "text/plain";
     } else if (std.mem.startsWith(u8, uri, "rss://entry/")) {
         method = "entries.get";
-        const entry = try idValue(arena, uri["rss://entry/".len..]) orelse return notFound(s, arena, id, uri);
+        const entry = idValue(uri["rss://entry/".len..]) orelse return notFound(s, id, uri);
         try arguments.put(arena, "id", entry);
     } else if (std.mem.startsWith(u8, uri, "rss://feed/")) {
         method = "entries.list";
-        const feed = try idValue(arena, uri["rss://feed/".len..]) orelse return notFound(s, arena, id, uri);
+        const feed = idValue(uri["rss://feed/".len..]) orelse return notFound(s, id, uri);
         try arguments.put(arena, "feed_id", feed);
-    } else return notFound(s, arena, id, uri);
+    } else return notFound(s, id, uri);
 
     const response = callDaemon(s, arena, method, .{ .object = arguments }) catch {
         return writeError(s.out, id, code_internal, "The daemon is unavailable");
     };
-    const result = response.result orelse return notFound(s, arena, id, uri);
+    const result = response.result orelse return notFound(s, id, uri);
 
     var text = result;
     if (std.mem.eql(u8, method, "schema.describe")) {
@@ -418,9 +416,8 @@ fn resourcesRead(s: *Server, arena: std.mem.Allocator, id: Value, params: Value,
     try reply(s, id, body, era, 0);
 }
 
-fn notFound(s: *Server, arena: std.mem.Allocator, id: Value, uri: []const u8) !void {
+fn notFound(s: *Server, id: Value, uri: []const u8) !void {
     try s.out.print("{{\"jsonrpc\":\"2.0\",\"id\":{f},\"error\":{{\"code\":{d},\"message\":\"Resource not found\",\"data\":{{\"uri\":{f}}}}}}}\n", .{ std.json.fmt(id, .{}), code_invalid_params, std.json.fmt(uri, .{}) });
-    _ = arena;
 }
 
 fn promptsList(s: *Server, arena: std.mem.Allocator, id: Value, era: Era) !void {
