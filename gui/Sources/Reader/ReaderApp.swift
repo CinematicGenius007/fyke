@@ -112,7 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// tools/e2e_gui.py. Steps are separated by spaces: `cmd+f`, `up`, `down`, `return`,
 /// `esc`, `wait`, `click:X,Y`, `rclick:X,Y`, or text to type. Coordinates count from the
 /// window's top left. The events take the same path as real ones from there on.
-private enum KeyReplay {
+@MainActor private enum KeyReplay {
     private static let settleSeconds = 2.5
     private static let stepSeconds = 0.5
 
