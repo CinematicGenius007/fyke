@@ -9,7 +9,9 @@ enum WebGuard {
     /// the host name only, so a public name resolving to a private address gets past
     /// it, which the daemon's fetcher can prevent and WebKit gives no way to.
     static func isPrivateHost(_ host: String) -> Bool {
-        let name = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        var name = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+        // `localhost.` is the same host, written as fully qualified.
+        if name.hasSuffix(".") { name.removeLast() }
         if name == "localhost" || name.hasSuffix(".localhost") || name.hasSuffix(".local") { return true }
         if name.contains(":") {
             return name == "::" || name == "::1" || name.hasPrefix("::ffff:")
@@ -34,9 +36,11 @@ enum WebGuard {
     ]
 
     static var blockRules: String {
-        let rules = privateHosts.map { host in
-            let pattern = (#"^https?://([^/]*@)?"# + host + "[:/?#]").replacingOccurrences(of: #"\"#, with: #"\\"#)
-            return #"{"trigger":{"url-filter":"\#(pattern)"},"action":{"type":"block"}}"#
+        let rules = [#"^https?://"#, #"^wss?://"#].flatMap { scheme in
+            privateHosts.map { host in
+                let pattern = (scheme + #"([^/]*@)?"# + host + #"\.?[:/?#]"#).replacingOccurrences(of: #"\"#, with: #"\\"#)
+                return #"{"trigger":{"url-filter":"\#(pattern)"},"action":{"type":"block"}}"#
+            }
         }
         return "[" + rules.joined(separator: ",") + "]"
     }

@@ -112,7 +112,8 @@ final class Prefs {
         didSet {
             guard ui != oldValue, !applying else { return }
             clearFontsIfThemeChanged()
-            scheduleSave()
+            // Until the file has been read, saving would replace it with defaults.
+            if readFile { scheduleSave() }
         }
     }
     /// What the system appearance is, for following it. Set by `Themed`.
@@ -127,6 +128,8 @@ final class Prefs {
     var fileProblem: String?
 
     private var applying = false
+    /// False until `ui` holds what config.json says, and while the file is broken.
+    private var readFile = false
     private var lastTheme = "light"
     private var pendingSave: Task<Void, Never>?
     private var folderWatcher: DispatchSourceFileSystemObject?
@@ -185,7 +188,10 @@ final class Prefs {
             fullText = reply.fullText
             removeReadAfterDays = reply.removeReadAfterDays
             fileProblem = reply.configError
-            guard reply.configError == nil else { return }
+            guard reply.configError == nil else {
+                readFile = false
+                return
+            }
             // A change waiting to be saved is newer than what the file held.
             guard pendingSave == nil else { return }
             if let settings = reply.ui {
@@ -195,8 +201,10 @@ final class Prefs {
                 try await save(settings)
                 apply(withLaunchArguments(settings))
             }
+            readFile = true
         } catch {
             fileProblem = error.localizedDescription
+            readFile = false
         }
     }
 

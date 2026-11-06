@@ -45,7 +45,7 @@ config.json       All settings, including the GUI's under `ui`
 interests.md      Your stated interests, plain text, used for ranking (planned)
 ```
 
-`config.json` is written only by the daemon, through `config.set`, and is safe to edit by hand. Each `config.get` reads the file, so `full_text`, `remove_read_after_days` and everything under `ui` follow an edit at once, and the GUI watches the folder to ask. `workers`, `per_host`, `auto_poll` and `min_poll_seconds` apply at the next start. A file that does not parse is left in place and reported: the daemon uses defaults if it is starting, the GUI keeps its last good settings, and `config.set` refuses rather than overwrite the edit. Other keys in the file survive a write.
+`config.json` is written only by the daemon, through `config.set`, and is safe to edit by hand. Each `config.get` and each hourly housekeeping reads the file, so `full_text` and `remove_read_after_days` follow an edit, and the GUI watches the file and folder, so everything under `ui` follows at once. `workers`, `per_host`, `auto_poll` and `min_poll_seconds` apply at the next start. A file that does not parse is left in place and reported: the daemon uses defaults if it is starting, the GUI keeps its last good settings and saves nothing until the file is fixed, and `config.set` refuses rather than overwrite the edit. Other keys in the file survive a write.
 
 ```json
 {
@@ -80,7 +80,7 @@ Keeping raw bodies means a parser bug is fixable after the fact: fix it, reparse
 
 Removing old read articles, by hand or through `remove_read_after_days`, empties their text and keeps the row. The row's identity and `content_hash` are what stop a feed that still lists the article from bringing it back as unread. Age counts from when an article was read and first seen, never from when it was published, so an old post read today is safe. Starred articles are never trimmed, and neither is anything read or first seen in the last 30 days.
 
-The app compares `api_version` from `stats.get` with its own at launch. A daemon outlives the app that started it, so after an update it can be older, and the app stops it and starts its own.
+The app compares `api_version` from `stats.get` with its own at launch. A daemon outlives the app that started it, so after an update it can be older, and then the app stops it and starts its own. A newer daemon is left running.
 
 ## Concurrency
 

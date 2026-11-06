@@ -107,7 +107,7 @@ final class AppModel {
     private func replaceOutdatedDaemon() async {
         func current() async -> Bool {
             let stats: Stats? = try? await Daemon.shared.call("stats.get")
-            return stats?.apiVersion == Daemon.apiVersion
+            return (stats?.apiVersion ?? 0) >= Daemon.apiVersion
         }
         guard await !current() else { return }
         let _: Ok? = try? await Daemon.shared.call("daemon.stop")

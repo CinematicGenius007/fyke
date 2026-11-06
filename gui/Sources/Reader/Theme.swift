@@ -159,8 +159,8 @@ enum Fonts {
     @MainActor private static let installed = Set(NSFontManager.shared.availableFontFamilies)
 
     /// A saved choice may have been uninstalled since.
-    @MainActor static func resolve(_ family: String) -> String {
-        installed.contains(family) ? family : Tokens.fontReading
+    @MainActor static func resolve(_ family: String, fallback: String = Tokens.fontReading) -> String {
+        installed.contains(family) ? family : fallback
     }
 
     static let choices = [Tokens.fontReading, "Source Serif 4", "Inter", Tokens.fontCode]
@@ -170,11 +170,11 @@ enum Fonts {
 
 extension Font {
     @MainActor static func ui(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        .custom(Fonts.resolve(Prefs.shared.currentFonts.ui ?? Tokens.fontUi), fixedSize: size).weight(weight)
+        .custom(Fonts.resolve(Prefs.shared.currentFonts.ui ?? Tokens.fontUi, fallback: Tokens.fontUi), fixedSize: size).weight(weight)
     }
 
     @MainActor static func code(_ size: CGFloat) -> Font {
-        .custom(Fonts.resolve(Prefs.shared.currentFonts.code ?? Tokens.fontCode), fixedSize: size)
+        .custom(Fonts.resolve(Prefs.shared.currentFonts.code ?? Tokens.fontCode, fallback: Tokens.fontCode), fixedSize: size)
     }
 }
 
