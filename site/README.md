@@ -6,7 +6,7 @@ The Weir website, built with Astro. It renders the documents in `../docs/` and d
 cd site
 pnpm install
 pnpm dev            # http://localhost:4321
-npm run build      # static files in dist/
+pnpm build          # static files in dist/
 ```
 
 Settings that depend on where the site is hosted come from the environment:
