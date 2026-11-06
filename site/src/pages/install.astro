@@ -1,0 +1,35 @@
+---
+import Base from "../layouts/Base.astro";
+import Terminal from "../components/Terminal.astro";
+import { site, url } from "../site";
+---
+<Base title="Install" current="install" description="Build Weir from source on a Mac: three lines in a terminal. Signed prebuilt releases are planned.">
+  <div class="wrap">
+    <div class="page solo">
+      <div class="prose">
+        <span class="kicker">Install · Section B</span>
+        <h1>Build it, and it is yours.</h1>
+        <p>{site.name} is built from source today. It takes a few minutes and one command. Signed prebuilt releases are <strong>planned</strong>, and until they exist this page will not offer a download.</p>
+
+        <h2 id="app">The Mac app</h2>
+        <p>You need a Mac, <a href="https://ziglang.org/download/">Zig {site.zig}</a> and Xcode’s command line tools (<code>xcode-select --install</code>).</p>
+        <Terminal />
+        <p>The last line builds the app and copies it to Applications. Run it again later to update: it replaces the app and keeps your feeds and settings, because the app holds no data. Your data lives in <code>{site.dataFolder}</code>.</p>
+
+        <h2 id="terminal">Terminal only</h2>
+        <p>The terminal reader, the command line and the MCP server need only Zig.</p>
+        <pre><code>zig build -Drelease
+./zig-out/bin/{site.cli} add https://ziglang.org/news/index.xml
+./zig-out/bin/{site.cli} list
+./zig-out/bin/{site.cli} tui</code></pre>
+
+        <h2 id="agents">Use it from an agent</h2>
+        <p>Any agent that speaks MCP can read your feeds through <code>{site.cli} mcp</code>, which connects to the same local daemon. It starts in the read tier, so an agent can search and read but cannot change anything unless you allow it. See <a href={url("docs/api/")}>the operations document</a> for the tiers.</p>
+
+        <h2 id="planned">Planned: prebuilt releases</h2>
+        <p><span class="tag planned">Planned</span> A signed archive you can download from GitHub and open, an update check that stays off until you turn it on, and a Homebrew formula. None of this exists yet. The <a href={url("roadmap/")}>roadmap</a> shows where it sits.</p>
+        <p class="small">Not sure how it went? The <a href={site.repo}>repository</a> has the source and an issue tracker.</p>
+      </div>
+    </div>
+  </div>
+</Base>

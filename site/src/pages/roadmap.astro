@@ -1,0 +1,16 @@
+---
+import { getEntry, render } from "astro:content";
+import Base from "../layouts/Base.astro";
+import Docs from "../components/Docs.astro";
+
+const entry = (await getEntry("docs", "roadmap"))!;
+const { Content } = await render(entry);
+---
+<Base title="Roadmap" current="roadmap" description="Weir's milestones: what is built, what is next, and what is planned.">
+  <div class="wrap">
+    <div class="page">
+      <Docs current="roadmap" />
+      <article class="prose"><Content /></article>
+    </div>
+  </div>
+</Base>

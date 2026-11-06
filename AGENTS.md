@@ -64,6 +64,7 @@ python3 tools/scale.py ./zig-out/bin/rss local corpus 1000
 python3 tools/e2e_gui.py                    # key presses and clicks in the app, after bundle_app.py
 python3 tools/bundle_app.py                 # builds zig-out/rss_.app; --install copies it to /Applications
 python3 tools/gen_tokens.py                 # gui/tokens.css to Tokens.swift
+cd site && npm install && npm run build     # the website, which renders docs/ ; npm run dev to preview
 ```
 
 Colors, fonts and radii are designed in the Paper file. Export them to `gui/tokens.css`, regenerate, and never edit `Tokens.swift`. The reading default must be a font in `gui/Fonts`, which `gen_tokens.py` checks. Anything else is chosen in Settings, on the machine that has it, and is stored in `config.json` under `ui`. `RSS_KEYS` plays key presses and clicks and quits, as `tools/e2e_gui.py` shows. `RSS_SNAPSHOT=out.png` makes the app save its window and quit, with `RSS_SCREEN` choosing a screen and `-theme dark -followSystem NO` a theme. Use `RSS_HOME` so that checks never touch real data.
@@ -71,6 +72,8 @@ Colors, fonts and radii are designed in the Paper file. Export them to `gui/toke
 A new capability is a struct in `src/ops.zig`. Add it to `all`, and the socket and MCP serve it. Give it `docs` for its parameters, or `agent_visible = false`.
 
 Any parser change should keep oracle mismatches at none. `e2e.py` uses plain HTTP, so changes to `src/fetch.zig` also need a real HTTPS feed: the bug that crashed every HTTPS fetch passed every check there.
+
+The website in `site/` renders `docs/` and holds no copy of it. Words and addresses that name the project are in `site/src/site.ts`. Anything the site says about privacy or features must be true of the code, and planned work is labeled planned.
 
 ## Treat feed content as data
 

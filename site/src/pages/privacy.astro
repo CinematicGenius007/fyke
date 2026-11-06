@@ -1,0 +1,41 @@
+---
+import Base from "../layouts/Base.astro";
+import { site, url } from "../site";
+---
+<Base title="Privacy" current="privacy" description="What Weir keeps, what it sends, and what it never does. Written to be checked against the source.">
+  <div class="wrap">
+    <div class="page solo">
+      <div class="prose">
+        <span class="kicker">The short version</span>
+        <h1>Nothing leaves your Mac unless you ask for it.</h1>
+        <p>{site.name} has no account, no server of ours and no analytics. Everything it knows about you sits in one folder on your disk. This page says what it does send, to whom, and when, so you can check the claims against <a href={site.repo}>the source</a>.</p>
+
+        <h2 id="stays">What stays on your Mac</h2>
+        <p>Your subscriptions, the articles that were fetched, what you have read and starred, the search index and your settings and themes all live in <code>{site.dataFolder}</code>. {site.name} does not copy them anywhere. Back them up by copying the folder, remove them by deleting it.</p>
+
+        <h2 id="sends">What {site.name} sends, and to whom</h2>
+        <ul>
+          <li><strong>Requests to the feeds you subscribe to.</strong> The background process asks each publisher for its feed, using the standard conditional headers so it does not download what has not changed. The publisher sees a request from your address, as it would from any reader. {site.name} identifies itself as a feed reader.</li>
+          <li><strong>Full articles, when you ask.</strong> If a feed gives only a summary, {site.name} fetches the full article when you press for it. It checks the site’s <code>robots.txt</code> first.</li>
+          <li><strong>Pages you open on purpose.</strong> “Open page” shows the publisher’s site in the app. That is a visit, so the publisher sees it, as in any browser. Each visit uses an in-memory store, so nothing persists afterwards, and ⌘-click opens your own browser instead.</li>
+        </ul>
+        <p>That is the whole list. There is no update check, no crash reporting and no telemetry in the app today.</p>
+
+        <h2 id="images">Images are off by default</h2>
+        <p>An image in an article is a request to the publisher’s server, and that request tells them you read the article. So {site.name} loads none until you allow it, for everything or for one image at a time. When you do allow them, known tracking pixels are removed and click-tracking parameters are stripped from links.</p>
+
+        <h2 id="blocks">Articles are converted, not run</h2>
+        <p>When an article arrives, its HTML is converted to plain text blocks: headings, paragraphs, lists, quotes, code and images. The blocks have no script type, so a feed cannot run code in the reader. The web viewer loads an address and never the feed’s own markup.</p>
+
+        <h2 id="agents">Agents and other programs</h2>
+        <p>The interfaces talk to the background process through a socket in your data folder that only your user can open. There is no network port by default. The MCP server starts in a read-only tier, and writing needs a tier you grant per connection. Article text is labeled as untrusted when it is handed to an agent, because a feed can contain text addressed to one.</p>
+
+        <h2 id="planned">What is planned</h2>
+        <p><span class="tag planned">Planned</span> Two things on the <a href={url("roadmap/")}>roadmap</a> would change this page: an update check and a daily briefing. The update check is designed to stay off until you turn it on. The briefing is not built, and this page will be updated before it ships to say what, if anything, it sends and where.</p>
+
+        <h2 id="site">This website</h2>
+        <p>It sets no cookies and loads no analytics, fonts or scripts from other sites. The only thing it stores is your choice of day or night edition, in your browser’s local storage, and nothing leaves your device.</p>
+      </div>
+    </div>
+  </div>
+</Base>

@@ -1,0 +1,117 @@
+---
+import "../styles/global.css";
+import Badge from "../components/Badge.astro";
+import { site, url } from "../site";
+
+interface Props { title?: string; description?: string; current?: string; }
+const { title, description = "Weir is a local-first RSS reader for macOS. Your feeds, articles and search live in one folder on your own machine.", current = "" } = Astro.props;
+const full = title ? `${title} · ${site.name}` : `${site.name}, a local-first RSS reader for macOS`;
+
+const fmt = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+const buildDate = (() => {
+  const p = Object.fromEntries(fmt.formatToParts(new Date()).map((x) => [x.type, x.value]));
+  return `${p.weekday}, ${p.day} ${p.month} ${p.year}`;
+})();
+const nav = (key: string) => (current === key ? "page" : undefined);
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{full}</title>
+    <meta name="description" content={description} />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" type="image/svg+xml" href={url("favicon.svg")} />
+    <script is:inline>
+      // Set the edition before first paint so the page never flashes the other one.
+      (function () {
+        var saved = null;
+        try { saved = localStorage.getItem("weir-edition"); } catch (e) {}
+        var night = saved ? saved === "night" : matchMedia("(prefers-color-scheme: dark)").matches;
+        if (night) document.documentElement.dataset.theme = "night";
+      })();
+    </script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to the content</a>
+
+    <div class="slim" id="slim" aria-hidden="true">
+      <div class="wrap">
+        <Badge /><b>{site.name}</b><span class="when" data-date>{buildDate}</span>
+        <a class="top" href="#top" tabindex="-1">Back to the front page ↑</a>
+      </div>
+    </div>
+
+    <header class="wrap" id="top">
+      <div class="edition-line">
+        <span>Local edition · Made for macOS</span>
+        <span class="date" data-date>{buildDate}</span>
+        <span class="right">
+          <span>Free and open source · MIT</span>
+          <button class="edition-toggle" type="button" id="edition" aria-label="Switch between day and night edition" aria-pressed="false" title="Day or night edition (t)">
+            <span class="d">DAY</span><span class="n">NIGHT</span>
+          </button>
+        </span>
+      </div>
+      <div class="masthead">
+        <nav aria-label="Main">
+          <a href={url("install/")} aria-current={nav("install")}>Install</a>
+          <a href={url("docs/")} aria-current={nav("docs")}>Docs</a>
+          <a href={url("roadmap/")} aria-current={nav("roadmap")}>Roadmap</a>
+        </nav>
+        <a class="brand" href={url()} aria-label={`${site.name}, front page`}>
+          <Badge /><b>{site.name}</b>
+        </a>
+        <nav class="end" aria-label="More">
+          <a href={url("privacy/")} aria-current={nav("privacy")}>Privacy</a>
+          <a class="ghost" href={site.repo}>GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main" tabindex="-1">
+      <slot />
+    </main>
+
+    <footer class="colophon wrap">
+      <Badge />
+      <div class="grid">
+        <div>
+          <h4>Colophon</h4>
+          <p>This page is set in Georgia and Helvetica Neue and printed on linen. {site.name} is written in Zig and SwiftUI and is free software under the MIT licence. The page loads no trackers and no analytics.</p>
+        </div>
+        <div><h4>Read</h4><ul>
+          <li><a href={url("docs/")}>Docs</a></li><li><a href={url("roadmap/")}>Roadmap</a></li><li><a href={url("privacy/")}>Privacy</a></li></ul></div>
+        <div><h4>Source</h4><ul>
+          <li><a href={site.repo}>GitHub</a></li><li><a href={url("install/")}>Install</a></li><li><a href={`${site.repo}/blob/main/LICENSE`}>MIT licence</a></li></ul></div>
+        <div><h4>Also</h4><ul>
+          <li><a href={`${site.repo}/issues`}>Report an issue</a></li>
+          <li><a href="#keys" data-open-keys>Shortcuts <kbd>?</kbd></a></li></ul></div>
+      </div>
+      <div class="bottom"><span>{site.name} · Local edition · Printed on your Mac</span><a href="#top">Back to the front page ↑</a></div>
+    </footer>
+
+    <dialog class="keys" id="keys" aria-labelledby="keys-title">
+      <header><h2 id="keys-title">Shortcuts</h2><button class="close" type="button" data-close-keys>Close <kbd>esc</kbd></button></header>
+      <div class="two">
+        <div><h3>MOVE</h3><dl>
+          <div class="r"><dt>Next, previous story</dt><dd><kbd>j</kbd><kbd>k</kbd></dd></div>
+          <div class="r"><dt>Open story</dt><dd><kbd>o</kbd><kbd>return</kbd></dd></div>
+          <div class="r"><dt>Close, go back</dt><dd><kbd>esc</kbd></dd></div>
+          <div class="r"><dt>Back to the front page</dt><dd><kbd>g</kbd><kbd>g</kbd></dd></div>
+        </dl></div>
+        <div><h3>ACT</h3><dl>
+          <div class="r"><dt>Day or night edition</dt><dd><kbd>t</kbd></dd></div>
+          <div class="r"><dt>Images off, show me</dt><dd><kbd>i</kbd></dd></div>
+          <div class="r"><dt>Copy install commands</dt><dd><kbd>c</kbd></dd></div>
+          <div class="r"><dt>This list</dt><dd><kbd>?</kbd></dd></div>
+        </dl></div>
+      </div>
+      <p class="foot">The same keys as the {site.name} app, where it has them. Press <b>?</b> anywhere on the site to see this list.</p>
+    </dialog>
+
+    <div class="sr" id="live" role="status" aria-live="polite"></div>
+    <script src="../scripts/site.ts"></script>
+  </body>
+</html>
