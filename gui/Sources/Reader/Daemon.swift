@@ -182,14 +182,12 @@ final class Daemon: @unchecked Sendable {
             throw RPCFailure(message: "Cannot find the rss program at \(path)")
         }
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
-        let logPath = home.appending(path: "rssd.log")
-        FileManager.default.createFile(atPath: logPath.path, contents: nil)
         let process = Process()
         process.executableURL = URL(filePath: path)
-        process.arguments = ["daemon"]
+        process.arguments = ["daemon", "--log"]
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = FileHandle.nullDevice
-        process.standardError = try FileHandle(forWritingTo: logPath)
+        process.standardError = FileHandle.nullDevice
         try process.run()
     }
 

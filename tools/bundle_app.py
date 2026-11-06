@@ -1,33 +1,72 @@
 #!/usr/bin/env python3
-"""Builds zig-out/rss_.app: the SwiftUI client, the rss binary and the fonts.
+"""Builds zig-out/rss_.app: the SwiftUI client, the rss binary, the fonts and the icon.
 
-    zig build -Drelease && python3 tools/bundle_app.py
+    python3 tools/bundle_app.py             builds the app
+    python3 tools/bundle_app.py --install   also copies it to /Applications
+
+The app holds no data. Feeds live in ~/.local/share/rss_ and settings in the user's
+preferences under the bundle identifier, so replacing the app keeps both.
 """
-import pathlib, plistlib, shutil, subprocess
+import pathlib, plistlib, shutil, subprocess, sys, tempfile
 
 root = pathlib.Path(__file__).resolve().parent.parent
-subprocess.run(["swift", "build", "-c", "release", "--package-path", root / "gui"], check=True)
+identifier = "local.rss_.app"
+version = "0.1"
+
+
+def run(*command):
+    subprocess.run(command, check=True, stdout=subprocess.DEVNULL)
+
+
+def make_icon(target):
+    with tempfile.TemporaryDirectory() as temp:
+        source = pathlib.Path(temp) / "icon.png"
+        run("swift", root / "tools/gen_icon.swift", root / "gui/Fonts", source)
+        iconset = pathlib.Path(temp) / "AppIcon.iconset"
+        iconset.mkdir()
+        for size in (16, 32, 128, 256, 512):
+            for scale, suffix in ((1, ""), (2, "@2x")):
+                pixels = str(size * scale)
+                run("sips", "-z", pixels, pixels, source, "--out", iconset / f"icon_{size}x{size}{suffix}.png")
+        run("iconutil", "-c", "icns", iconset, "-o", target)
+
+
+run("zig", "build", "-Drelease")
+run("swift", "build", "-c", "release", "--package-path", root / "gui")
 built = subprocess.run(["swift", "build", "-c", "release", "--package-path", root / "gui", "--show-bin-path"],
                        check=True, capture_output=True, text=True).stdout.strip()
 
 app = root / "zig-out/rss_.app"
 shutil.rmtree(app, ignore_errors=True)
 macos = app / "Contents/MacOS"
+resources = app / "Contents/Resources"
 macos.mkdir(parents=True)
+resources.mkdir()
 shutil.copy(pathlib.Path(built) / "Reader", macos / "Reader")
 shutil.copy(root / "zig-out/bin/rss", macos / "rss")
-shutil.copytree(root / "gui/Fonts", app / "Contents/Resources/Fonts")
+shutil.copytree(root / "gui/Fonts", resources / "Fonts")
+make_icon(resources / "AppIcon.icns")
 with open(app / "Contents/Info.plist", "wb") as out:
     plistlib.dump({
         "CFBundleName": "rss_",
         "CFBundleDisplayName": "rss_",
-        "CFBundleIdentifier": "local.rss_.app",
+        "CFBundleIdentifier": identifier,
         "CFBundleExecutable": "Reader",
+        "CFBundleIconFile": "AppIcon",
         "CFBundlePackageType": "APPL",
-        "CFBundleShortVersionString": "0.1",
+        "CFBundleShortVersionString": version,
+        "CFBundleVersion": version,
+        "LSApplicationCategoryType": "public.app-category.news",
         "LSMinimumSystemVersion": "15.0",
         "NSHighResolutionCapable": True,
     }, out)
-# Ad-hoc signed, so that macOS will run it on this machine.
-subprocess.run(["codesign", "--force", "--deep", "--sign", "-", app], check=True)
-print(app)
+# Ad-hoc signed, so that macOS will run it on the machine that built it.
+run("codesign", "--force", "--deep", "--sign", "-", app)
+
+if "--install" in sys.argv:
+    target = pathlib.Path("/Applications/rss_.app")
+    shutil.rmtree(target, ignore_errors=True)
+    shutil.copytree(app, target, symlinks=True)
+    print(target)
+else:
+    print(app)

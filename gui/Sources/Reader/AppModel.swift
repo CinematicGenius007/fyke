@@ -24,14 +24,14 @@ final class AppModel {
     var selectedId: Int64?
     var article: Article?
     var unreadOnly = false
-    var searchText = ""
-    var isSearching = false
+    let search = SearchModel()
     var hasLoaded = false
     var problem: String?
     var updatedAt: Date?
     var showingAddFeed = false
     var showingType = false
     var fullTextStatus: String?
+    var settingsTab = SettingsView.Tab(rawValue: ProcessInfo.processInfo.environment["RSS_TAB"] ?? "") ?? .General
 
     private var pendingReload: Task<Void, Never>?
 
@@ -78,6 +78,10 @@ final class AppModel {
             try? await Task.sleep(for: .milliseconds(300))
             if let row = entries.dropFirst().first { await open(row.id) }
         case "briefing": go(to: .briefing)
+        case "search":
+            search.show()
+            search.query = ProcessInfo.processInfo.environment["RSS_QUERY"] ?? ""
+            search.run()
         case "add":
             AddFeedDraft.shared.address = ProcessInfo.processInfo.environment["RSS_ADDRESS"] ?? ""
             showingAddFeed = true
@@ -117,11 +121,6 @@ final class AppModel {
         var withSummary = true
     }
 
-    private struct SearchParams: Encodable, Sendable {
-        var query: String
-        var limit = 100
-    }
-
     private var listParams: ListParams {
         var params = ListParams(unreadOnly: unreadOnly, starredOnly: place == .starred, limit: 100)
         if case .feed(let id) = place { params.feedId = id }
@@ -129,12 +128,6 @@ final class AppModel {
     }
 
     private func reloadEntries() async throws {
-        if !searchText.isEmpty {
-            let found: Items<EntrySummary> = try await Daemon.shared.call("entries.search", SearchParams(query: searchText))
-            entries = found.items
-            nextCursor = nil
-            return
-        }
         guard place != .briefing else {
             entries = []
             return
@@ -166,21 +159,15 @@ final class AppModel {
         self.place = place
         article = nil
         selectedId = nil
-        searchText = ""
-        isSearching = false
         entries = []
         Task { try? await reloadEntries() }
     }
 
-    func search(_ text: String) {
-        searchText = text
-        Task { try? await reloadEntries() }
-    }
-
-    func endSearch() {
-        isSearching = false
-        searchText = ""
-        Task { try? await reloadEntries() }
+    /// Opens a search result where the reader can show it, which Briefing cannot.
+    func openResult(_ id: Int64) {
+        search.close()
+        if place == .briefing { go(to: .all) }
+        Task { await open(id) }
     }
 
     func toggleUnreadOnly() {
@@ -214,10 +201,24 @@ final class AppModel {
     }
 
     private func setRead(_ id: Int64, _ read: Bool) async {
+        applyRead(id, read)
+        do {
+            let _: Ok = try await Daemon.shared.call("entries.mark", MarkParams(id: id, read: read))
+        } catch {
+            applyRead(id, !read)
+            problem = error.localizedDescription
+        }
+        await refreshCounts()
+    }
+
+    private func applyRead(_ id: Int64, _ read: Bool) {
         update(id) { $0.read = read }
         if article?.entry.id == id { article?.entry.read = read }
-        let _: Ok? = try? await Daemon.shared.call("entries.mark", MarkParams(id: id, read: read))
-        await refreshCounts()
+    }
+
+    private func applyStar(_ id: Int64, _ starred: Bool) {
+        update(id) { $0.starred = starred }
+        if article?.entry.id == id { article?.entry.starred = starred }
     }
 
     private func refreshCounts() async {
@@ -238,10 +239,14 @@ final class AppModel {
     func toggleStar() {
         guard let id = currentId else { return }
         let starred = !(article?.entry.starred ?? entries.first { $0.id == id }?.starred ?? false)
-        update(id) { $0.starred = starred }
-        if article?.entry.id == id { article?.entry.starred = starred }
+        applyStar(id, starred)
         Task {
-            let _: Ok? = try? await Daemon.shared.call("entries.mark", MarkParams(id: id, starred: starred))
+            do {
+                let _: Ok = try await Daemon.shared.call("entries.mark", MarkParams(id: id, starred: starred))
+            } catch {
+                applyStar(id, !starred)
+                problem = error.localizedDescription
+            }
         }
     }
 
@@ -265,7 +270,7 @@ final class AppModel {
     }
 
     func back() {
-        if isSearching { endSearch() } else if !usesPanes { article = nil }
+        if !usesPanes { article = nil }
     }
 
     func nextUnread() {
@@ -294,7 +299,7 @@ final class AppModel {
         Task {
             do {
                 let result: StatusResult = try await Daemon.shared.callSlow("entries.fetch_full", IdParams(id: id))
-                fullTextStatus = result.status == "done" ? nil : "No longer article found on the page"
+                fullTextStatus = result.status == "done" ? nil : "No fuller article found on the page"
                 await open(id)
             } catch {
                 fullTextStatus = error.localizedDescription

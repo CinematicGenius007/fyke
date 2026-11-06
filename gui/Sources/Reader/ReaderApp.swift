@@ -23,6 +23,8 @@ struct ReaderApp: App {
                 Button("Add Feed…") { model.showingAddFeed = true }.keyboardShortcut("n")
             }
             CommandMenu("Go") {
+                Button("Search…") { model.search.show() }.keyboardShortcut("f")
+                Divider()
                 Button("Briefing") { model.go(to: .briefing) }.keyboardShortcut("1")
                 Button("All") { model.go(to: .all) }.keyboardShortcut("2")
                 Button("Starred") { model.go(to: .starred) }.keyboardShortcut("3")

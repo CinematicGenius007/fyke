@@ -10,6 +10,12 @@ root = pathlib.Path(__file__).resolve().parent.parent
 css = (root / "gui/tokens.css").read_text()
 tokens = dict(re.findall(r"--([a-z0-9-]+):\s*([^;]+);", css))
 
+# The default must render on any Mac. Fonts that are not redistributable belong in
+# Settings on the machine that has them, not in the repository.
+reading = tokens["font-reading"].strip().strip('"')
+if not list((root / "gui/Fonts").glob(reading.replace(" ", "") + "*")):
+    raise SystemExit(f"--font-reading is {reading!r}, which gui/Fonts does not bundle")
+
 
 def camel(name):
     head, *rest = name.split("-")

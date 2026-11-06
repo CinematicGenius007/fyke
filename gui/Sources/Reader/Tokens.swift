@@ -33,7 +33,7 @@ enum Tokens {
     static let colorTerminalGround: UInt32 = 0x000000FF
     static let colorTerminalUnread: UInt32 = 0x39FF88FF
     static let colorTerminalRead: UInt32 = 0x2A9D5CFF
-    static let fontReading = "Anthropic Sans Text"
+    static let fontReading = "Newsreader"
     static let fontUi = "Inter"
     static let fontCode = "JetBrains Mono"
     static let radiusControl: Double = 6

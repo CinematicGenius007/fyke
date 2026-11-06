@@ -108,12 +108,12 @@ enum Fonts {
         CTFontManagerRegisterFontURLs(urls as CFArray, .process, true, nil)
     }
 
-    /// Paper's reading font may be one installed only on this Mac.
+    /// A saved choice may have been uninstalled since.
     static func resolve(_ family: String) -> String {
-        NSFontManager.shared.availableFontFamilies.contains(family) ? family : "Newsreader"
+        NSFontManager.shared.availableFontFamilies.contains(family) ? family : Tokens.fontReading
     }
 
-    static let choices = [Tokens.fontReading, "Newsreader", "Source Serif 4", "Inter", Tokens.fontCode]
+    static let choices = [Tokens.fontReading, "Source Serif 4", "Inter", Tokens.fontCode]
 
     static func label(_ family: String) -> String { family == "Source Serif 4" ? "Source Serif" : family }
 }
