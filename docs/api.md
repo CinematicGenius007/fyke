@@ -60,7 +60,7 @@ Registered operations cover the common paths, and SQL covers every question nobo
 
 ### Manage tier
 
-Built: `feeds.add`, `feeds.remove`, `feeds.refresh`, `feeds.refresh_all`, `opml.import`, `daemon.stop`, `daemon.housekeep`.
+Built: `feeds.add`, `feeds.preview`, `folders.list`, `config.get`, `config.set`, `feeds.remove`, `feeds.refresh`, `feeds.refresh_all`, `opml.import`, `daemon.stop`, `daemon.housekeep`.
 
 Planned: `feeds.update`, `folders.*`, `lenses.put`, `lenses.run`, `runners.put`, `jobs.cancel`.
 
