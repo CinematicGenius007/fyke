@@ -29,6 +29,16 @@ pub const Config = struct {
 
 const housekeeping_interval_ms = 3600 * 1000;
 
+const max_cutoff_days = 100 * 366;
+/// Below this age a body can still be wanted for full-text work on the entry, and
+/// reading it again is likely.
+pub const min_trim_days = 30;
+
+/// Any number of days gives a sane moment, whether from a request or config.json.
+pub fn cutoffMillis(now: i64, days: i64) i64 {
+    return now - std.math.clamp(days, 0, max_cutoff_days) * 24 * 3600 * 1000;
+}
+
 /// A feed body shorter than this is treated as a summary.
 const short_text_length = 1500;
 /// Older entries are fetched only on request, so that subscribing to a feed with a
@@ -129,8 +139,6 @@ pub const Service = struct {
     io: Io,
     home: Io.Dir,
     config: Config,
-    /// Why config.json could not be used at startup, when it could not.
-    config_error: ?[]const u8 = null,
     started_at: i64,
     client: std.http.Client,
 
@@ -380,7 +388,7 @@ pub fn housekeep(s: *Service) !void {
         defer s.unlockWriter();
         try writer.prune(s.now());
         const days = s.remove_read_after_days.load(.monotonic);
-        if (days > 0) _ = try writer.trimEntries(s.now() - days * 24 * 3600 * 1000);
+        if (days > 0) _ = try writer.trimEntries(cutoffMillis(s.now(), @max(days, min_trim_days)));
         break :stale try writer.takeStaleRaw(arena, raw_bodies_kept);
     };
     for (stale) |hash| deleteRaw(s, arena, hash);

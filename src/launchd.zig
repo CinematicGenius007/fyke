@@ -5,6 +5,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const client_module = @import("client.zig");
+const data_home = @import("data_home.zig");
 const ops = @import("ops.zig");
 
 const Io = std.Io;
@@ -87,7 +88,7 @@ pub fn install(connector: client_module.Connector, user_home: []const u8) !void 
     try writePlist(&out.writer, try std.process.executablePathAlloc(io, arena), connector.home_path);
     const cwd = Io.Dir.cwd();
     try cwd.createDirPath(io, std.fs.path.dirname(where.plist).?);
-    try cwd.createDirPath(io, connector.home_path);
+    try data_home.ensure(io, connector.home_path);
     try cwd.writeFile(io, .{ .sub_path = where.plist, .data = out.written() });
 
     _ = try launchctl(io, &.{ "launchctl", "bootout", where.target });

@@ -37,14 +37,14 @@ const Ok = struct { ok: bool = true };
 
 /// Longer than any feed has existed, and small enough that the arithmetic cannot overflow.
 const max_since_days = 100 * 366;
+const cutoffMillis = service.cutoffMillis;
 
 fn sinceMillis(s: *const Service, days: ?i64) ?i64 {
     return cutoffMillis(s.now(), days orelse return null);
 }
 
-fn cutoffMillis(now: i64, days: i64) i64 {
-    return now - std.math.clamp(days, 0, max_since_days) * 24 * 3600 * 1000;
-}
+/// Raised when an operation's parameters or results change in a way clients rely on.
+pub const api_version = 2;
 
 pub const FeedsList = struct {
     pub const name = "feeds.list";
@@ -121,12 +121,14 @@ pub const ConfigGet = struct {
     pub fn run(s: *Service, arena: std.mem.Allocator, _: Params) !Result {
         var ui: ?std.json.Value = null;
         var problem: ?[]const u8 = null;
-        s.config_lock.lockUncancelable(s.io);
-        const text = s.home.readFileAlloc(s.io, "config.json", arena, .limited(1 << 20)) catch |err| switch (err) {
-            error.FileNotFound => "{}",
-            else => return err,
+        const text = text: {
+            s.config_lock.lockUncancelable(s.io);
+            defer s.config_lock.unlock(s.io);
+            break :text s.home.readFileAlloc(s.io, "config.json", arena, .limited(1 << 20)) catch |err| switch (err) {
+                error.FileNotFound => "{}",
+                else => return err,
+            };
         };
-        s.config_lock.unlock(s.io);
         if (std.json.parseFromSliceLeaky(service.Config, arena, text, .{ .ignore_unknown_fields = true })) |values| {
             apply(s, values);
             const root = try std.json.parseFromSliceLeaky(std.json.Value, arena, text, .{});
@@ -709,6 +711,8 @@ pub const StatsGet = struct {
     pub const description = "Counts, queue depth and daemon uptime.";
     pub const Params = struct {};
     pub const Result = struct {
+        /// Clients compare this, because a daemon outlives the app that started it.
+        api_version: i64 = api_version,
         feeds: i64,
         entries: i64,
         unread: i64,
@@ -740,10 +744,6 @@ pub const StatsGet = struct {
     }
 };
 
-/// Below this age a body can still be wanted for full-text work on the entry, and
-/// reading it again is likely.
-const min_trim_days = 30;
-
 pub const StorageGet = struct {
     pub const name = "storage.get";
     pub const tier: Tier = .read;
@@ -760,11 +760,12 @@ pub const StorageGet = struct {
     };
 
     pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
-        const before = cutoffMillis(s.now(), @max(p.older_than_days, min_trim_days));
+        const before = cutoffMillis(s.now(), @max(p.older_than_days, service.min_trim_days));
+        // A scan of every page, so it uses the connection that normal reads do not.
         const articles = articles: {
-            const reader = s.lockReader();
-            defer s.unlockReader();
-            break :articles try reader.articleUse(before);
+            s.sandbox_lock.lockUncancelable(s.io);
+            defer s.sandbox_lock.unlock(s.io);
+            break :articles try s.sandbox.articleUse(before);
         };
         const raw = rawUse(s, arena);
         return .{
@@ -814,18 +815,21 @@ pub const StorageFree = struct {
 
     pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
         var trimmed: usize = 0;
-        const writer = s.lockWriter();
         const stale = stale: {
+            const writer = s.lockWriter();
             defer s.unlockWriter();
             if (p.trim_older_than_days) |days| {
-                trimmed = try writer.trimEntries(cutoffMillis(s.now(), @max(days, min_trim_days)));
+                trimmed = try writer.trimEntries(cutoffMillis(s.now(), @max(days, service.min_trim_days)));
             }
             // The newest copy stays, because it is what a replay would start from.
-            const hashes: []const []const u8 = if (p.feed_copies) try writer.takeStaleRaw(arena, 1) else &.{};
-            try writer.compact();
-            break :stale hashes;
+            break :stale if (p.feed_copies) try writer.takeStaleRaw(arena, 1) else &.{};
         };
+        // Files go first: nothing names them now, and compacting needs disk space.
         for (stale) |hash| service.deleteRaw(s, arena, hash);
+
+        const writer = s.lockWriter();
+        defer s.unlockWriter();
+        writer.compact() catch |err| std.debug.print("compacting: {s}\n", .{@errorName(err)});
         return .{ .trimmed = trimmed, .copies_removed = stale.len };
     }
 };

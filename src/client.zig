@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const daemon = @import("daemon.zig");
+const data_home = @import("data_home.zig");
 
 const Io = std.Io;
 
@@ -103,8 +104,7 @@ pub const Connector = struct {
     }
 
     fn startDaemon(k: Connector) !void {
-        const cwd = Io.Dir.cwd();
-        try cwd.createDirPath(k.io, k.home_path);
+        try data_home.ensure(k.io, k.home_path);
 
         const self = try std.process.executablePathAlloc(k.io, k.arena);
         // Its own process group, so that it outlives this client and any terminal.

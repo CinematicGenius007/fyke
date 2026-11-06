@@ -4,6 +4,7 @@
 const std = @import("std");
 const fetch = @import("fetch.zig");
 const ops = @import("ops.zig");
+const data_home = @import("data_home.zig");
 const service = @import("service.zig");
 const store = @import("store.zig");
 
@@ -39,7 +40,7 @@ fn redirectLog(io: Io, home: Io.Dir) !void {
 
 pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem.Allocator, options: Options) !void {
     const cwd = Io.Dir.cwd();
-    try cwd.createDirPath(io, home_path);
+    try data_home.ensure(io, home_path);
     // Feed choices, notes and API references are private, so the whole directory is.
     try cwd.setFilePermissions(io, home_path, .fromMode(0o700), .{});
     var home = try cwd.openDir(io, home_path, .{});
@@ -61,8 +62,7 @@ pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem
         .gpa = gpa,
         .io = io,
         .home = home,
-        .config = config.values,
-        .config_error = config.problem,
+        .config = config,
         .started_at = Io.Clock.real.now(io).toMilliseconds(),
         .client = .{ .allocator = gpa, .io = fetch.withCancelableConnect(io) },
         .writer = try .open(db_path, .writer),
@@ -96,20 +96,17 @@ pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem
     std.process.exit(0);
 }
 
-const LoadedConfig = struct { values: service.Config = .{}, problem: ?[]const u8 = null };
-
-/// The file is edited by hand, so a typo must not stop the reader. Defaults apply,
-/// the file stays as it is for the owner to fix, and `config.get` reports the problem.
-fn readConfig(arena: std.mem.Allocator, io: Io, home: Io.Dir) !LoadedConfig {
+/// The file is edited by hand, so a typo must not stop the reader. Defaults apply, the
+/// file stays as it is for the owner to fix, and `config.get` reports the problem.
+fn readConfig(arena: std.mem.Allocator, io: Io, home: Io.Dir) !service.Config {
     const text = home.readFileAlloc(io, "config.json", arena, .limited(1 << 20)) catch |err| switch (err) {
         error.FileNotFound => return .{},
         else => return err,
     };
-    const values = std.json.parseFromSliceLeaky(service.Config, arena, text, .{ .ignore_unknown_fields = true }) catch |err| {
+    return std.json.parseFromSliceLeaky(service.Config, arena, text, .{ .ignore_unknown_fields = true }) catch |err| {
         std.debug.print("config.json: {s}, using defaults\n", .{@errorName(err)});
-        return .{ .problem = @errorName(err) };
+        return .{};
     };
-    return .{ .values = values };
 }
 
 fn acceptLoop(s: *Service, server: *Io.net.Server) Io.Cancelable!void {

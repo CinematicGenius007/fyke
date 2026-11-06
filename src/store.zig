@@ -663,6 +663,8 @@ pub const Db = struct {
     pub fn dissolveFolder(db: *Db, id: i64, parent_id: ?i64) Error!void {
         try db.begin();
         errdefer db.rollback();
+        // A child may share this folder's name, and moves up beside it before it goes.
+        try db.run("UPDATE folders SET name = 'removing ' || id || ' ' || name WHERE id = ?1", .{id});
         try db.run("UPDATE feeds SET folder_id = ?2 WHERE folder_id = ?1", .{ id, parent_id });
         try db.run("UPDATE folders SET parent_id = ?2 WHERE parent_id = ?1", .{ id, parent_id });
         try db.run("DELETE FROM folders WHERE id = ?1", .{id});
@@ -750,11 +752,12 @@ pub const Db = struct {
 
     const trimmable_entries =
         \\FROM entries e JOIN entry_state s ON s.entry_id = e.id
-        \\WHERE s.read_at IS NOT NULL AND s.starred_at IS NULL AND e.sort_at < ?1 AND e.content_text != ''
+        \\WHERE s.read_at < ?1 AND e.first_seen_at < ?1 AND s.starred_at IS NULL AND e.content_text != ''
     ;
 
-    /// Empties the bodies of old read entries that are not starred. The row and its
-    /// content_hash stay, so a feed still listing the entry sees nothing new and it
+    /// Empties the bodies of entries read long ago and not starred. Age counts from
+    /// reading and from first sight, never from publishing, so an old post read today
+    /// is safe. The row and its content_hash stay, so a feed still listing the entry sees nothing new and it
     /// cannot come back as unread.
     pub fn trimEntries(db: *Db, before: i64) Error!usize {
         try db.run("UPDATE entries SET content_blocks_json = '[]', content_text = '' WHERE id IN (SELECT e.id " ++

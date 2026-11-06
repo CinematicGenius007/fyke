@@ -469,6 +469,9 @@ op("feeds.update", id=3, top_level=True)
 check("and moves out", rows("SELECT folder_id FROM feeds WHERE id = 3") == [[None]])
 check("feeds.update needs a real folder", "error" in op("feeds.update", id=3, folder_id=9999))
 
+check("nothing read today can be trimmed, however old the post", op("storage.free", trim_older_than_days=30)["result"]["trimmed"] == 0)
+db = sqlite3.connect(ops_home + "/rss.db", timeout=10)
+db.execute("UPDATE entry_state SET read_at = ?", (old,)); db.commit(); db.close()
 use = op("storage.get")["result"]
 check("storage.get splits the database", use["articles"]["entries"] == 9 and use["articles"]["text_bytes"] > 0 and use["articles"]["search_bytes"] > 0, use)
 check("and counts what can be trimmed, sparing stars", use["articles"]["removable"] == 1, use)
@@ -490,6 +493,21 @@ got = op("config.get")["result"]
 check("a broken edit is reported", got["config_error"] is not None and got["ui"] is None, got)
 check("and config.set will not overwrite it", "error" in op("config.set", full_text=True) and open(ops_home + "/config.json").read() == text[:20])
 open(ops_home + "/config.json", "w").write('{"auto_poll": false}')
+
+saved_config = open(ops_home + "/config.json").read()
+open(ops_home + "/config.json", "w").write('{"auto_poll": false, "remove_read_after_days": 9000000000000000}')
+op("config.get")
+check("a huge retention does not stop housekeeping", "result" in op("daemon.housekeep"))
+open(ops_home + "/config.json", "w").write("x" * (2 << 20))
+check("an unreadable config.json is reported", "error" in op("config.get"))
+open(ops_home + "/config.json", "w").write(saved_config)
+check("and leaves config.get working", "result" in op("config.get"))
+check("stats.get names the API version", op("stats.get")["result"]["api_version"] >= 2)
+
+twin = op("folders.add", name="Twin", parent_id=mid)["result"]["id"]
+inner_twin = op("folders.add", name="Twin", parent_id=twin)["result"]["id"]
+check("a child may share the deleted folder's name", "result" in op("folders.remove", id=twin) and rows("SELECT parent_id FROM folders WHERE id = %d" % inner_twin) == [[mid]], rows("SELECT id, parent_id, name FROM folders"))
+op("folders.remove", id=inner_twin)
 
 check("deleting a folder hands its contents to the parent", "result" in op("folders.remove", id=mid) and rows("SELECT folder_id FROM feeds WHERE id = 2") == [[top]] and rows("SELECT parent_id FROM folders WHERE id = %d" % low) == [[top]], rows("SELECT id, parent_id, name FROM folders"))
 check("its entries stay", rows("SELECT count(*) FROM entries") == [[9]])
@@ -525,9 +543,10 @@ p = subprocess.run([RSS, "status"], env=env_new, capture_output=True, text=True,
 check("a client reaches the running daemon after the move", p.returncode == 0, p.stdout + p.stderr)
 check("the data moved", os.path.isfile(user + "/.rss_/rss.db") and not os.path.islink(user + "/.rss_"))
 check("a link stays at the old path", os.path.islink(legacy) and os.path.realpath(legacy) == os.path.realpath(user + "/.rss_"))
-subprocess.run([RSS, "status"], env=env_old, capture_output=True, timeout=30)
-check("the old path still works", os.path.isfile(legacy + "/rss.db"))
 subprocess.run([RSS, "daemon", "stop"], env=env_new, capture_output=True, timeout=30)
+p = subprocess.run([RSS, "status"], env=env_old, capture_output=True, text=True, timeout=30)
+check("the link can start a daemon, as a launch agent would", p.returncode == 0 and os.path.exists(user + "/.rss_/rssd.sock"), p.stdout + p.stderr)
+subprocess.run([RSS, "daemon", "stop"], env=env_old, capture_output=True, timeout=30)
 p = subprocess.run([RSS, "status"], env=env_new, capture_output=True, text=True, timeout=30)
 check("a new daemon starts at the new path", p.returncode == 0 and os.path.exists(user + "/.rss_/rssd.sock"), p.stdout + p.stderr)
 subprocess.run([RSS, "daemon", "stop"], env=env_new, capture_output=True, timeout=30)
@@ -541,7 +560,17 @@ env_both = dict(env_new, HOME=user2)
 p = subprocess.run([RSS, "status"], env=env_both, capture_output=True, text=True, timeout=30)
 check("with data in both, the old folder is left alone", p.returncode == 0 and os.path.isfile(user2 + "/.local/share/rss_/keep") and not os.path.islink(user2 + "/.local/share/rss_"), p.stdout + p.stderr)
 subprocess.run([RSS, "daemon", "stop"], env=env_both, capture_output=True, timeout=30)
-shutil.rmtree(user); shutil.rmtree(user2)
+
+# A link at ~/.rss_ to data that could not move, as a second volume leaves it
+user3 = tempfile.mkdtemp(prefix="rss-m-", dir="/tmp")
+os.makedirs(user3 + "/.local/share/rss_")
+open(user3 + "/.local/share/rss_/config.json", "w").write('{"auto_poll": false}')
+os.symlink(user3 + "/.local/share/rss_", user3 + "/.rss_")
+env_link = dict(env_new, HOME=user3)
+p = subprocess.run([RSS, "status"], env=env_link, capture_output=True, text=True, timeout=30)
+check("a link at the new path is left in place", p.returncode == 0 and os.path.islink(user3 + "/.rss_") and os.path.isfile(user3 + "/.local/share/rss_/rss.db"), p.stdout + p.stderr)
+subprocess.run([RSS, "daemon", "stop"], env=env_link, capture_output=True, timeout=30)
+shutil.rmtree(user); shutil.rmtree(user2); shutil.rmtree(user3)
 
 server.shutdown(); shutil.rmtree(home)
 print(f"\n{passed} checks passed")

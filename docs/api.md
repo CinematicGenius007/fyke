@@ -37,7 +37,7 @@ Pagination is keyset-based: list results return `next_cursor`.
 | `entries.list` | Timeline, filtered by feed, folder tree, read and starred state, and age |
 | `entries.get` | One entry. `format`: `blocks`, `markdown` or `text` |
 | `entries.search` | Words, with snippets, newest first, filtered by `unread_only` and `since_days`. Also matches entries of feeds whose name or host fits every word. Considers the 2,000 most recently stored entries that match and pass the filters. Relevance order is not built: ranking every match of a common term takes around a second at 1,000,000 entries |
-| `stats.get` | Counts and storage |
+| `stats.get` | Counts, queue depth, uptime and `api_version`, which clients compare with their own |
 | `schema.describe` | Annotated database schema |
 | `db.query` | Read-only SQL on a `query_only` connection. Limited to 10,000 rows, 4 MiB of values, 16 MiB for any one value, and a budget of VM steps |
 | `events.since` | Poll the change feed by sequence number |
@@ -66,7 +66,7 @@ Planned: `entries.tag`, to add or remove tags recorded with their source. `notes
 
 Built: `feeds.add`, `feeds.preview`, `feeds.update`, `feeds.remove`, `feeds.refresh`, `feeds.refresh_all`, `feeds.queue`, `folders.add`, `folders.rename`, `folders.move`, `folders.remove`, `config.set`, `storage.free`, `opml.import`, `daemon.stop`, `daemon.housekeep`.
 
-`folders.remove` hands a folder's subfolders and feeds to its parent. With `delete_contents` it deletes them, with their entries. `storage.free` trims old read articles, drops all but the newest copy of each feed, and compacts the database.
+`folders.remove` hands a folder's subfolders and feeds to its parent. With `delete_contents` it deletes them, with their entries. `storage.free` trims articles read long ago, drops all but the newest copy of each feed, and compacts the database.
 
 Planned: `lenses.put`, `lenses.run`, `runners.put`, `jobs.cancel`.
 

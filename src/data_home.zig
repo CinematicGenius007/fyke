@@ -16,6 +16,17 @@ pub fn resolve(arena: std.mem.Allocator, io: Io, user_home: []const u8) ![]const
     return path;
 }
 
+/// Makes sure the data directory exists. Creating a path refuses one that is a link,
+/// and the legacy path is a link after a move, so a directory is looked for first.
+pub fn ensure(io: Io, path: []const u8) !void {
+    const cwd = Io.Dir.cwd();
+    const stat = cwd.statFile(io, path, .{}) catch |err| switch (err) {
+        error.FileNotFound => return cwd.createDirPath(io, path),
+        else => return err,
+    };
+    if (stat.kind != .directory) return error.NotDir;
+}
+
 /// One rename moves everything without copying, so it cannot leave half a database
 /// behind. A daemon already running keeps its open files, and its socket moves with
 /// the folder, so clients at the new path reach it. The link left behind serves
@@ -27,6 +38,9 @@ fn moveLegacy(io: Io, legacy: []const u8, path: []const u8) !void {
         else => return err,
     };
     if (stat.kind != .directory) return;
+    // Data on another volume stays there, and this link was made on an earlier run.
+    const target = cwd.statFile(io, path, .{ .follow_symlinks = false }) catch null;
+    if (target != null and target.?.kind == .sym_link) return;
 
     Io.Dir.renameAbsolute(legacy, path, io) catch |err| switch (err) {
         // Another process moved it first.
@@ -37,6 +51,8 @@ fn moveLegacy(io: Io, legacy: []const u8, path: []const u8) !void {
         error.CrossDevice => {
             cwd.deleteDir(io, path) catch |delete_err| switch (delete_err) {
                 error.FileNotFound => {},
+                // Both locations hold data, which the case above settles the same way.
+                error.DirNotEmpty => return,
                 else => return delete_err,
             };
             return Io.Dir.symLinkAbsolute(io, legacy, path, .{});
