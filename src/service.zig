@@ -319,9 +319,11 @@ pub fn fullTextLoop(s: *Service) Io.Cancelable!void {
         defer arena_state.deinit();
         const arena = arena_state.allocator();
 
-        const reader = s.lockReader();
         const enabled = s.full_text.load(.monotonic);
-        const jobs = if (enabled) reader.dueFullText(arena, s.now() - full_text_window_ms, short_text_length, full_text_batch) catch &.{} else &.{};
+        const since = s.now() - full_text_window_ms;
+        if (enabled) settleLongEntries(s, since);
+        const reader = s.lockReader();
+        const jobs = if (enabled) reader.dueFullText(arena, since, short_text_length, full_text_batch) catch &.{} else &.{};
         s.unlockReader();
 
         for (jobs) |job| {
@@ -342,6 +344,13 @@ pub fn fullTextLoop(s: *Service) Io.Cancelable!void {
             s.full_text_wake.reset();
         }
     }
+}
+
+/// Entries long enough to need no fetch would otherwise be read again on every wake.
+fn settleLongEntries(s: *Service, since: i64) void {
+    const writer = s.lockWriter();
+    defer s.unlockWriter();
+    writer.skipLongEntries(since, short_text_length, s.now()) catch {};
 }
 
 fn setFullStatus(s: *Service, id: i64, status: []const u8) void {
@@ -372,13 +381,18 @@ fn attemptFullText(s: *Service, arena: std.mem.Allocator, job: store.FullTextJob
     const kind = response.content_type orelse "";
     if (std.ascii.findIgnoreCase(kind, "html") == null) return "skipped";
 
-    const page = core.encoding.toUtf8(arena, response.body) catch return "failed";
+    const page = core.encoding.pageToUtf8(arena, response.body, kind) catch |err| switch (err) {
+        error.UnsupportedEncoding => return "skipped",
+        else => return err,
+    };
     const found = (try core.extract.extract(arena, page, response.final_url)) orelse return "skipped";
     const nodes = withoutTitle(found, job.title);
 
     var text: Io.Writer.Allocating = .init(arena);
     try core.blocks.writeText(&text.writer, nodes);
-    const gain = @as(f64, @floatFromInt(text.written().len)) / @as(f64, @floatFromInt(@max(job.text_length, 1)));
+    // `text_length` counts characters, so bytes would flatter text outside ASCII.
+    const characters = std.unicode.utf8CountCodepoints(text.written()) catch text.written().len;
+    const gain = @as(f64, @floatFromInt(characters)) / @as(f64, @floatFromInt(@max(job.text_length, 1)));
     if (gain < full_text_min_gain) return "skipped";
 
     var json: Io.Writer.Allocating = .init(arena);

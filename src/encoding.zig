@@ -25,6 +25,27 @@ pub fn toUtf8(arena: std.mem.Allocator, bytes: []const u8) Error![]const u8 {
     return repair(arena, bytes);
 }
 
+/// Returns a web page as valid UTF-8. Pages declare their charset in the HTTP header
+/// or a `<meta>` tag rather than an XML declaration. A charset this module cannot
+/// convert is refused, since reading it as Windows-1252 would produce garbled text.
+pub fn pageToUtf8(arena: std.mem.Allocator, bytes: []const u8, content_type: []const u8) Error![]const u8 {
+    if (!std.unicode.utf8ValidateSlice(bytes)) {
+        const declared = declaredCharset(content_type);
+        const name = if (declared.len != 0) declared else declaredCharset(bytes[0..@min(bytes.len, 2048)]);
+        if (name.len != 0 and !isWindows1252Compatible(name)) return error.UnsupportedEncoding;
+    }
+    return toUtf8(arena, bytes);
+}
+
+/// Reads the value after the first `charset=`, or returns an empty slice.
+fn declaredCharset(text: []const u8) []const u8 {
+    const key = "charset=";
+    const at = std.ascii.findIgnoreCase(text, key) orelse return "";
+    const rest = std.mem.trimStart(u8, text[at + key.len ..], " \"'");
+    const end = std.mem.indexOfAny(u8, rest, " \"';>/\r\n") orelse rest.len;
+    return rest[0..end];
+}
+
 /// Reads `encoding="..."` from an XML declaration, or returns an empty slice.
 pub fn declaredEncoding(bytes: []const u8) []const u8 {
     const head = bytes[0..@min(bytes.len, 256)];
@@ -141,4 +162,23 @@ test "UTF-16 with a byte order mark" {
 
 test "unsupported declared encodings are refused rather than garbled" {
     try testing.expectError(error.UnsupportedEncoding, toUtf8(testing.allocator, "<?xml encoding=\"shift_jis\"?>\x82\xA0"));
+}
+
+test "a page in a charset this cannot convert is refused, wherever it is declared" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const shift_jis = "<p>\x93\xFA\x96\x7B\x8C\xEA</p>";
+    try std.testing.expectError(error.UnsupportedEncoding, pageToUtf8(a, shift_jis, "text/html; charset=Shift_JIS"));
+    try std.testing.expectError(error.UnsupportedEncoding, pageToUtf8(a, "<meta charset=\"euc-kr\">\xC7\xD1", "text/html"));
+    try std.testing.expectError(error.UnsupportedEncoding, pageToUtf8(a, "<meta http-equiv=content-type content='text/html; charset=windows-1251'>\xCF", ""));
+}
+
+test "pages that can be read still are" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expectEqualStrings("caf\xC3\xA9", try pageToUtf8(a, "caf\xE9", "text/html; charset=ISO-8859-1"));
+    try std.testing.expectEqualStrings("caf\xC3\xA9", try pageToUtf8(a, "caf\xE9", "text/html"));
+    try std.testing.expectEqualStrings("caf\xC3\xA9", try pageToUtf8(a, "caf\xC3\xA9", "text/html; charset=Shift_JIS"));
 }
