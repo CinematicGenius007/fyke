@@ -1,0 +1,8 @@
+flowchart TB
+  e[New entries] -->|every entry, no AI| l0[Dedupe]
+  l0 -->|unique entries| l1[Enrich]
+  l1 -->|summaries, topics, embeddings| l2[Cluster into stories]
+  l2 -->|stories| l3[Rank]
+  l3 -->|top stories| l4[Synthesize digest]
+  l4 -->|cited artifact| ui[GUI, TUI, MCP]
+  sig[Star, read, hide] -->|feedback| l3

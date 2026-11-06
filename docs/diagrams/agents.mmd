@@ -1,0 +1,14 @@
+flowchart LR
+  subgraph inbound [Agents call us]
+    a1[Claude Code, Codex, Cursor, ...] -->|MCP tools and resources| m[rss mcp]
+    a2[Anything with a shell] -->|rss ... --json| c[rss CLI]
+  end
+  m -->|operations| ops[Operation registry]
+  c -->|operations| ops
+  subgraph outbound [We call agents]
+    ops -->|job| r[Job runner]
+    r -->|HTTPS| h[Model API or Ollama]
+    r -->|JSON on stdin and stdout| e[Script using any agent SDK]
+    r -->|ACP over stdio| p[Any ACP agent]
+  end
+  p -->|given rss mcp at session/new| m

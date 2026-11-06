@@ -1,0 +1,11 @@
+flowchart TB
+  web[Publishers] -->|HTTP GET feeds| daemon
+  gui[GUI app] -->|JSON-RPC on socket| daemon
+  tui[rss tui] -->|JSON-RPC on socket| daemon
+  cli[rss CLI] -->|JSON-RPC on socket| daemon
+  shim[rss mcp] -->|JSON-RPC on socket| daemon
+  agent[Any MCP agent] -->|MCP over stdio| shim
+  shell[Any shell agent] -->|runs with --json| cli
+  daemon[rss daemon] -->|sole writer| db[(SQLite + raw files)]
+  daemon -->|dispatches jobs| runners[Runners: http, exec, acp]
+  shell -.->|read-only SQL| db

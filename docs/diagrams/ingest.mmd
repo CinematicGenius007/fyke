@@ -1,0 +1,9 @@
+flowchart TB
+  sched[Scheduler] -->|due feed| fetch[Fetcher]
+  fetch -->|304: no work| sched
+  fetch -->|200: body bytes| raw[Raw store]
+  raw -->|same bytes| parse[Parser]
+  parse -->|normalized entries| clean[Content cleaner]
+  clean -->|block trees| ident[Identity and dedupe]
+  ident -->|one batched transaction| store[(SQLite)]
+  store -->|events| clients[Clients and aggregator]
