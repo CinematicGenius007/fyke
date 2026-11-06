@@ -569,7 +569,7 @@ pub const SchemaDescribe = struct {
     pub const Result = struct { schema: []const u8 };
 
     pub fn run(_: *Service, _: std.mem.Allocator, _: Params) !Result {
-        return .{ .schema = @embedFile("schema") ++ "\n" ++ @embedFile("schema2") ++ "\n" ++ @embedFile("schema3") };
+        return .{ .schema = @embedFile("schema") ++ "\n" ++ @embedFile("schema2") ++ "\n" ++ @embedFile("schema3") ++ "\n" ++ @embedFile("schema4") };
     }
 };
 

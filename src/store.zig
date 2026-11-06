@@ -48,7 +48,7 @@ const SQLITE_DETACH = 25;
 
 pub const Error = error{ OutOfMemory, Sqlite };
 
-const migrations = [_][*:0]const u8{ @embedFile("schema"), @embedFile("schema2"), @embedFile("schema3") };
+const migrations = [_][*:0]const u8{ @embedFile("schema"), @embedFile("schema2"), @embedFile("schema3"), @embedFile("schema4") };
 
 pub const Feed = struct {
     id: i64,
@@ -482,6 +482,15 @@ pub const Db = struct {
         , .{ id, blocks_json, text, now });
         try db.run("INSERT INTO events (at, type, subject_id) VALUES (?1, 'entry.updated', ?2)", .{ now, id });
         try db.commit();
+    }
+
+    /// Settles recent entries that already have enough text, so that `dueFullText`
+    /// reads only those still waiting. A publisher's edit clears the status again.
+    pub fn skipLongEntries(db: *Db, since: i64, short_text: i64, now: i64) Error!void {
+        try db.run(
+            \\UPDATE entries SET full_status = 'skipped', full_attempted_at = ?3
+            \\WHERE full_status IS NULL AND sort_at >= ?1 AND length(content_text) >= ?2
+        , .{ since, short_text, now });
     }
 
     pub fn markFullText(db: *Db, id: i64, status: []const u8, now: i64) Error!void {
@@ -1327,6 +1336,25 @@ test "search filters apply before the window of recent matches" {
     const found = try db.search(a, "zig", .{ .unread_only = true });
     try testing.expectEqual(1, found.len);
     try testing.expectEqual(unread, found[0].id);
+}
+
+test "long entries are settled, and short ones keep waiting" {
+    var db: Db = try .open(":memory:", .writer);
+    defer db.close();
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const feed_id = try db.addFeed("https://example.com/feed", false, 1);
+    var long = sample("long", "Long", "h1");
+    long.content_text = "a long enough body";
+    var short = sample("short", "Short", "h2");
+    short.content_text = "short";
+    _ = try db.ingest(feed_id, &.{ long, short }, 2000);
+
+    try db.skipLongEntries(0, 10, 3000);
+    const due = try db.dueFullText(a, 0, 1000, 10);
+    try testing.expectEqual(1, due.len);
+    try testing.expectEqualStrings("Short", due[0].title.?);
 }
 
 test "an old database is upgraded in place" {
