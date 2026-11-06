@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""Tests the daemon itself: the socket protocol, permissions, tiers, live events,
+OPML, recovery from a crash, and background polling.
+
+Usage: e2e_daemon.py <path-to-rss>
+"""
+import http.server, json, os, shutil, signal, socket, socketserver, sqlite3, stat, subprocess, sys, tempfile, threading, time
+
+RSS = os.path.abspath(sys.argv[1])
+home = tempfile.mkdtemp(prefix="rss-d-", dir="/tmp")  # Short, for the socket path limit.
+env = dict(os.environ, RSS_HOME=home)
+requests = []
+posts = {"count": 1}
+
+def feed_body():
+    items = "".join(f"<item><title>Post {i}</title><guid>{i}</guid><description>word{i}</description></item>" for i in range(posts["count"]))
+    return f'<rss version="2.0"><channel><title>Live</title>{items}</channel></rss>'.encode()
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+    def log_message(self, *args): pass
+    def do_GET(self):
+        requests.append(self.path)
+        body = feed_body()
+        self.send_response(200); self.send_header("Content-Length", str(len(body))); self.send_header("Connection", "close")
+        self.end_headers(); self.wfile.write(body); self.close_connection = True
+
+class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    daemon_threads = True
+server = Server(("127.0.0.1", 0), Handler)
+threading.Thread(target=server.serve_forever, daemon=True).start()
+base = f"http://127.0.0.1:{server.server_address[1]}"
+
+def rss(*args, ok=True):
+    p = subprocess.run([RSS, *args], env=env, capture_output=True, text=True, timeout=60)
+    if ok and p.returncode != 0: raise AssertionError(f"{args}: exit {p.returncode}: {p.stdout} {p.stderr}")
+    return p
+
+class Raw:
+    """A hand-written client, to send what the CLI never would."""
+    def __init__(self):
+        self.s = socket.socket(socket.AF_UNIX); self.s.settimeout(10); self.s.connect(home + "/rssd.sock"); self.f = self.s.makefile("rb")
+    def line(self, text):
+        self.s.sendall(text.encode() + b"\n"); return json.loads(self.f.readline())
+    def call(self, method, **params):
+        return self.line(json.dumps({"jsonrpc": "2.0", "id": 7, "method": method, "params": params}))
+
+passed = 0
+def check(name, condition, detail=""):
+    global passed
+    if not condition:
+        print(f"FAIL {name} {detail}"); print(open(home + "/rssd.log").read()[-800:] if os.path.exists(home + "/rssd.log") else ""); sys.exit(1)
+    passed += 1; print(f"ok   {name}")
+
+def wait_for(predicate, seconds=10):
+    end = time.time() + seconds
+    while time.time() < end:
+        if predicate(): return True
+        time.sleep(0.02)
+    return False
+
+open(home + "/config.json", "w").write('{"auto_poll": false}')
+
+# Startup
+start = time.time()
+out = rss("status").stdout
+check("client starts the daemon", "0 feeds" in out, out)
+print(f"     cold start including daemon: {(time.time() - start) * 1000:.0f} ms")
+check("data directory is owner-only", stat.S_IMODE(os.stat(home).st_mode) == 0o700, oct(os.stat(home).st_mode))
+check("socket is owner-only", stat.S_IMODE(os.stat(home + "/rssd.sock").st_mode) == 0o600)
+p = subprocess.run([RSS, "daemon"], env=env, capture_output=True, text=True, timeout=10)
+check("a second daemon refuses to start", p.returncode == 1 and "AlreadyRunning" in p.stderr, p.stderr)
+check("first daemon survives that", rss("status").returncode == 0)
+
+# Protocol
+c = Raw()
+r = c.line("this is not json")
+check("bad JSON gets a parse error", r["error"]["code"] == -32700, r)
+r = c.line("[1,2,3]")
+check("non-object gets invalid request", r["error"]["code"] == -32600, r)
+r = c.call("no.such.method")
+check("unknown method", r["error"]["code"] == -32601 and r["id"] == 7, r)
+r = c.call("entries.get", id="not a number")
+check("wrong parameter type", r["error"]["code"] == -32602, r)
+r = c.call("entries.get", id=999)
+check("failure carries a stable kind", r["error"]["data"]["kind"] == "NoSuchEntry", r)
+r = c.line('{"id":"abc","method":"stats.get"}')
+check("id is echoed as given", r["id"] == "abc" and "result" in r, r)
+check("connection survives errors", "result" in c.call("stats.get"))
+names = [i["name"] for i in c.call("ops.list")["result"]["items"]]
+check("ops.list describes the registry", "entries.search" in names and "db.query" in names, names)
+
+big = socket.socket(socket.AF_UNIX); big.settimeout(10); big.connect(home + "/rssd.sock")
+try:
+    big.sendall(b"x" * (3 << 20) + b"\n")
+except OSError:
+    pass
+try:
+    data = big.recv(100)
+except OSError:
+    data = b""
+check("oversized request closes that connection only", data == b"" and "result" in c.call("stats.get"))
+
+# Tiers
+t = Raw()
+r = t.call("connection.restrict", tier="read")
+check("a connection can lower its tier", r["result"]["tier"] == "read", r)
+r = t.call("feeds.add", url=base + "/f", allow_private_network=True)
+check("read tier cannot subscribe", r["error"]["code"] == -32001, r)
+r = t.call("entries.mark", id=1, read=True)
+check("read tier cannot annotate", r["error"]["code"] == -32001, r)
+r = t.call("daemon.stop")
+check("read tier cannot stop the daemon", r["error"]["code"] == -32001, r)
+r = t.call("connection.restrict", tier="manage")
+check("a tier cannot be raised again", r["error"]["code"] == -32001, r)
+check("read tier can read", "result" in t.call("entries.list"))
+
+# SQL
+out = json.loads(rss("query", "SELECT count(*) AS n FROM feeds").stdout)
+check("query returns rows", out["columns"] == ["n"] and out["rows"] == [[0]], out)
+for sql in ("DELETE FROM feeds", "PRAGMA query_only=OFF", "ATTACH '/tmp/x' AS x", "SELECT 1; DROP TABLE feeds"):
+    check(f"refused: {sql}", "error" in json.loads(rss("query", sql).stdout))
+start = time.time()
+out = json.loads(rss("query", "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT count(*) FROM c").stdout)
+check("runaway query is stopped", "error" in out, out)
+print(f"     stopped after {time.time() - start:.2f} s")
+check("schema is available", "CREATE TABLE entries" in rss("schema").stdout)
+
+# Live events
+rss("add", base + "/live", "--allow-private")
+sub = Raw()
+r = sub.line('{"id":1,"method":"events.subscribe","params":{"since_seq":0}}')
+check("subscribe is acknowledged", r["result"]["subscribed"], r)
+first = json.loads(sub.f.readline())
+check("history is replayed from since_seq", first["method"] == "event" and first["params"]["type"] == "entry.new", first)
+seq = first["params"]["seq"]
+posts["count"] = 2
+rss("refresh", "1")
+sub.s.settimeout(5)
+event = json.loads(sub.f.readline())
+check("new entries arrive live", event["params"]["type"] == "entry.new" and event["params"]["seq"] > seq, event)
+
+# Clients at once
+errors = []
+def hammer():
+    try:
+        h = Raw()
+        for _ in range(200):
+            if "result" not in h.call("entries.list", limit=5): errors.append("bad")
+            if "result" not in h.call("entries.search", query="word1"): errors.append("bad")
+    except Exception as e:
+        errors.append(repr(e))
+threads = [threading.Thread(target=hammer) for _ in range(8)]
+[t.start() for t in threads]
+for i in range(3, 13):
+    posts["count"] = i
+    rss("refresh", "1")
+[t.join() for t in threads]
+check("8 clients read during writes", not errors, errors[:3])
+check("all writes landed", json.loads(rss("status", "--json").stdout)["entries"] == 12)
+
+# OPML
+opml = f"""<opml version="2.0"><body>
+<outline text="Tech"><outline text="Zig"><outline text="A &amp; B" xmlUrl="{base}/a?x=1&amp;y=2" htmlUrl="{base}/"/></outline>
+<outline text="Two" xmlUrl="{base}/b"/></outline>
+<outline text="Top" xmlUrl="{base}/c"/><outline text="Bad" xmlUrl="ftp://example.com/x"/></body></opml>"""
+path = home + "/in.opml"
+open(path, "w").write(opml)
+out = rss("import", path, "--allow-private").stdout
+check("import adds feeds", "3 added, 0 already" in out, out)
+out = rss("import", path, "--allow-private").stdout
+check("import is repeatable", "0 added, 3 already" in out, out)
+exported = rss("export").stdout
+open(path + ".out", "w").write(exported)
+check("export keeps nesting and escapes", 'text="Zig"' in exported and "a?x=1&amp;y=2" in exported and "<outline text=\"Tech\">" in exported, exported)
+home2 = tempfile.mkdtemp(prefix="rss-e-", dir="/tmp")
+env2 = dict(os.environ, RSS_HOME=home2)
+open(home2 + "/config.json", "w").write('{"auto_poll": false}')
+p = subprocess.run([RSS, "import", path + ".out", "--allow-private"], env=env2, capture_output=True, text=True, timeout=30)
+check("exported file imports elsewhere", "4 added" in p.stdout, p.stdout + p.stderr)
+again = subprocess.run([RSS, "export"], env=env2, capture_output=True, text=True, timeout=30).stdout
+check("export, import, export is stable", sorted(again.splitlines()) == sorted(exported.splitlines()), again)
+subprocess.run([RSS, "daemon", "stop"], env=env2, capture_output=True, timeout=30); shutil.rmtree(home2)
+rss("remove", "2"); rss("remove", "3"); rss("remove", "4")
+
+# Housekeeping
+for i in range(13, 40):
+    posts["count"] = i
+    rss("refresh", "1")
+def raw_files():
+    return sum(len(files) for _, _, files in os.walk(home + "/raw"))
+check("every changed body is saved", raw_files() >= 30, raw_files())
+assert "result" in Raw().call("daemon.housekeep")
+check("raw bodies are pruned to 20 per feed", raw_files() == 20, raw_files())
+posts["count"] = 40
+out = rss("refresh", "1").stdout
+check("feed still works after pruning", "1 new" in out, out)
+
+# Crash
+out = subprocess.run(["lsof", "-t", home + "/rssd.lock"], capture_output=True, text=True).stdout.split()
+pid = int(out[0])
+os.kill(pid, signal.SIGKILL)
+time.sleep(0.2)
+check("stale socket remains after kill -9", os.path.exists(home + "/rssd.sock"))
+status = json.loads(rss("status", "--json").stdout)
+check("next client restarts the daemon and data survives", status["entries"] == 40, status)
+check("database intact after kill", sqlite3.connect(home + "/rss.db").execute("pragma integrity_check").fetchone()[0] == "ok")
+
+# Background polling
+rss("daemon", "stop")
+check("stop removes the socket", wait_for(lambda: not os.path.exists(home + "/rssd.sock")))
+open(home + "/config.json", "w").write('{"auto_poll": true, "min_poll_seconds": 1}')
+db = sqlite3.connect(home + "/rss.db"); db.execute("update feeds set next_fetch_at=0, poll_seconds=1"); db.commit(); db.close()
+requests.clear()
+posts["count"] = 41
+rss("status")
+check("daemon polls on its own", wait_for(lambda: json.loads(rss("status", "--json").stdout)["entries"] == 41), requests)
+count = len(requests)
+check("and keeps polling", wait_for(lambda: len(requests) > count + 1, 15), requests)
+rss("daemon", "stop")
+
+server.shutdown(); shutil.rmtree(home)
+print(f"\n{passed} checks passed")
