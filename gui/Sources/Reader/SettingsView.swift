@@ -4,14 +4,15 @@ import SwiftUI
 struct SettingsView: View {
     enum Tab: String, CaseIterable { case General, Appearance, Shortcuts, Agents }
 
-    @State private var tab = Tab(rawValue: ProcessInfo.processInfo.environment["RSS_TAB"] ?? "") ?? .General
+    @Environment(AppModel.self) private var model
     @Environment(\.palette) private var p
+    private var tab: Tab { model.settingsTab }
 
     var body: some View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(Tab.allCases, id: \.self) { item in
-                    Button { tab = item } label: {
+                    Button { model.settingsTab = item } label: {
                         Text(item.rawValue)
                             .font(.ui(14, tab == item ? .semibold : .medium))
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -282,10 +283,10 @@ private struct AppearancePane: View {
     }
 }
 
-/// Fixed for now. Rebinding keys is not built, so this list does not offer it.
+/// Keys are fixed, so this list only shows them.
 private struct ShortcutsPane: View {
     @Environment(\.palette) private var p
-    private let move = [("Next, previous", "j  k"), ("Open", "Return"), ("Back", "Esc"), ("Next unread", "n"), ("Search", "/"), ("Briefing", "⌘1"), ("All", "⌘2"), ("Starred", "⌘3")]
+    private let move = [("Next, previous", "j  k"), ("Open", "Return"), ("Back", "Esc"), ("Next unread", "n"), ("Search", "⌘F  /"), ("Briefing", "⌘1"), ("All", "⌘2"), ("Starred", "⌘3")]
     private let act = [("Star", "s"), ("Read or unread", "m"), ("Unread only", "u"), ("Open page", "o"), ("Fetch full article", "f"), ("Refresh", "r"), ("Add feed", "a"), ("Text and theme", "t")]
 
     var body: some View {

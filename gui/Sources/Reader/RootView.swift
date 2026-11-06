@@ -23,9 +23,10 @@ struct RootView: View {
         .task {
             if ProcessInfo.processInfo.environment["RSS_SCREEN"] == "settings" { openSettings() }
         }
-        .onChange(of: model.isSearching) { _, searching in if !searching { focused = true } }
+        .onChange(of: model.search.isShowing) { _, showing in if !showing { focused = true } }
         .onChange(of: model.showingAddFeed) { _, showing in if !showing { focused = true } }
         .sheet(isPresented: $model.showingAddFeed) { AddFeedSheet() }
+        .overlay { if model.search.isShowing { SearchPanel() } }
         .overlay(alignment: .bottom) {
             if let problem = model.problem {
                 Text(problem)
@@ -76,8 +77,10 @@ struct RootView: View {
         case "r": model.refresh()
         case "a": model.showingAddFeed = true
         case "t": model.showingType.toggle()
-        case "/": model.isSearching = true
-        case "?": openSettings()
+        case "/": model.search.show()
+        case "?":
+            model.settingsTab = .Shortcuts
+            openSettings()
         default: return .ignored
         }
         return .handled
@@ -102,6 +105,7 @@ struct Sidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
+            searchRow
             item("Briefing", place: .briefing, count: nil)
             item("All", place: .all, count: model.feeds.isEmpty ? nil : model.totalUnread)
             item("Starred", place: .starred, count: nil)
@@ -135,6 +139,20 @@ struct Sidebar: View {
         .frame(width: 231)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(p.surface)
+    }
+
+    private var searchRow: some View {
+        Button { model.search.show() } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").font(.system(size: 12)).foregroundStyle(p.inkSoft)
+                Text("Search").font(.ui(14)).foregroundStyle(p.ink)
+                Spacer(minLength: 8)
+                Text("⌘F").font(.ui(13)).foregroundStyle(p.muted)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 7)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var status: String {
@@ -209,17 +227,13 @@ struct EntryList: View {
         .background(p.ground)
     }
 
-    @ViewBuilder private var header: some View {
-        if model.isSearching {
-            SearchField().padding(.horizontal, 24).padding(.top, 44).padding(.bottom, 12)
-        } else {
-            HStack(alignment: .firstTextBaseline) {
-                Text(model.placeTitle).font(.ui(20, .semibold)).tracking(-0.2).lineLimit(1)
-                Spacer()
-                Text("\(model.placeUnread) unread").font(.ui(13)).foregroundStyle(p.muted)
-            }
-            .padding(.horizontal, 24).padding(.top, 48).padding(.bottom, 16)
+    private var header: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(model.placeTitle).font(.ui(20, .semibold)).tracking(-0.2).lineLimit(1)
+            Spacer()
+            Text("\(model.placeUnread) unread").font(.ui(13)).foregroundStyle(p.muted)
         }
+        .padding(.horizontal, 24).padding(.top, 48).padding(.bottom, 16)
     }
 
     private func rowView(_ row: EntrySummary) -> some View {
@@ -244,24 +258,6 @@ struct EntryList: View {
     }
 }
 
-struct SearchField: View {
-    @Environment(AppModel.self) private var model
-    @Environment(\.palette) private var p
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        @Bindable var model = model
-        TextField("Search", text: Binding(get: { model.searchText }, set: { model.search($0) }))
-            .textFieldStyle(.plain)
-            .font(.ui(15))
-            .focused($focused)
-            .padding(.horizontal, 10).frame(height: 32)
-            .overlay(RoundedRectangle(cornerRadius: Tokens.radiusControl).stroke(p.unread, lineWidth: 2))
-            .onAppear { focused = true }
-            .onExitCommand { model.endSearch() }
-    }
-}
-
 /// All and Starred: one wide column grouped into this week and earlier.
 struct TimelineView: View {
     @Environment(AppModel.self) private var model
@@ -276,20 +272,16 @@ struct TimelineView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    if model.isSearching {
-                        SearchField().padding(.bottom, 36)
-                    } else {
-                        HStack(alignment: .firstTextBaseline) {
-                            Text(model.placeTitle)
-                                .font(.custom(family, fixedSize: 48).weight(.semibold)).tracking(-0.72)
-                            Spacer()
-                            Button { model.toggleUnreadOnly() } label: {
-                                Text(model.unreadOnly ? "Unread · \(model.totalUnread)" : "All · \(model.totalUnread) unread")
-                                    .font(.ui(14, .medium)).foregroundStyle(p.inkSoft)
-                            }.buttonStyle(.plain)
-                        }
-                        .padding(.bottom, 36)
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(model.placeTitle)
+                            .font(.custom(family, fixedSize: 48).weight(.semibold)).tracking(-0.72)
+                        Spacer()
+                        Button { model.toggleUnreadOnly() } label: {
+                            Text(model.unreadOnly ? "Unread · \(model.totalUnread)" : "All · \(model.totalUnread) unread")
+                                .font(.ui(14, .medium)).foregroundStyle(p.inkSoft)
+                        }.buttonStyle(.plain)
                     }
+                    .padding(.bottom, 36)
                     LazyVStack(alignment: .leading, spacing: 0) {
                         group("THIS WEEK", recent)
                         group("EARLIER", earlier)
@@ -355,7 +347,7 @@ struct TimelineView: View {
     }
 }
 
-/// The aggregator is a later milestone, so this says so instead of showing invented stories.
+/// Shown until the aggregator produces a digest.
 struct BriefingView: View {
     @Environment(\.palette) private var p
     @Environment(\.readingFamily) private var family
