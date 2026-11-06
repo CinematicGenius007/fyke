@@ -32,7 +32,9 @@ Polling must run while no UI is open, and several clients (GUI plus an agent) ne
 
 ## On-disk layout
 
-Everything lives under `$RSS_HOME`, default `~/.local/share/rss_`. Backing up is copying this folder.
+Everything lives under `$RSS_HOME`, default `~/.rss_`. Backing up is copying this folder.
+
+Data at `~/.local/share/rss_`, the location of earlier versions, moves to `~/.rss_` the first time any `rss` command runs without `RSS_HOME`. One rename moves it, and a link stays at the old path for older binaries and launch agents. If both locations hold data, `~/.rss_` is used and the old folder is left alone. If they are on different volumes, the data stays and `~/.rss_` becomes a link to it.
 
 ```text
 rss.db            SQLite database (WAL mode)

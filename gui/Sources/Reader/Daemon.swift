@@ -108,7 +108,7 @@ final class Daemon: @unchecked Sendable {
         if let path = ProcessInfo.processInfo.environment["RSS_HOME"] {
             home = URL(filePath: path)
         } else {
-            home = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".local/share/rss_")
+            home = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".rss_")
         }
     }
 

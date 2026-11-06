@@ -5,6 +5,7 @@ const std = @import("std");
 const core = @import("core");
 const client_module = @import("client.zig");
 const daemon = @import("daemon.zig");
+const data_home = @import("data_home.zig");
 const launchd = @import("launchd.zig");
 const mcp = @import("mcp.zig");
 const ops = @import("ops.zig");
@@ -36,7 +37,7 @@ const usage =
     \\  service install|uninstall|status   run the daemon from login, on macOS
     \\
     \\Clients start the daemon when needed.
-    \\Data lives in $RSS_HOME, by default ~/.local/share/rss_
+    \\Data lives in $RSS_HOME, by default ~/.rss_
     \\
 ;
 
@@ -120,7 +121,7 @@ pub fn main(init: std.process.Init) !u8 {
         return 2;
     }
 
-    const home_path = try homeDirectory(arena, init.environ_map);
+    const home_path = try homeDirectory(arena, io, init.environ_map);
     const command = argv[1];
     const args: Args = .{ .items = argv[2..] };
 
@@ -218,10 +219,10 @@ fn serviceCommand(connector: client_module.Connector, environ: *const std.proces
     return 0;
 }
 
-fn homeDirectory(arena: std.mem.Allocator, environ: *const std.process.Environ.Map) ![]const u8 {
+fn homeDirectory(arena: std.mem.Allocator, io: Io, environ: *const std.process.Environ.Map) ![]const u8 {
     if (environ.get("RSS_HOME")) |path| return path;
     const user_home = environ.get("HOME") orelse return error.NoHomeDirectory;
-    return std.fmt.allocPrint(arena, "{s}/.local/share/rss_", .{user_home});
+    return data_home.resolve(arena, io, user_home);
 }
 
 fn printOutcome(app: App, result: ops.RefreshResult) !void {
