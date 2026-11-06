@@ -98,7 +98,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             // Settings is the smaller window, and it may not have become key.
             let wanted = ProcessInfo.processInfo.environment["RSS_SCREEN"] == "settings" ? NSApp.windows.first { $0.isVisible && $0.frame.width < 1000 } : nil
-            guard let window = wanted ?? NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }), let view = window.contentView,
+            // RSS_SNAPSHOT_CHROME takes the frame around the content too, which holds the window buttons.
+            let chrome = ProcessInfo.processInfo.environment["RSS_SNAPSHOT_CHROME"] != nil
+            guard let window = wanted ?? NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }),
+                let view = chrome ? window.contentView?.superview : window.contentView,
                 let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)
             else { exit(1) }
             view.cacheDisplay(in: view.bounds, to: bitmap)
@@ -110,7 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 /// `RSS_KEYS` plays key presses into the window once it settles, then quits, for
 /// tools/e2e_gui.py. Steps are separated by spaces: `cmd+f`, `up`, `down`, `return`,
-/// `esc`, `wait`, `click:X,Y`, `rclick:X,Y`, or text to type. Coordinates count from the
+/// `esc`, `wait`, `click:X,Y`, `rclick:X,Y`, `drag:X1,Y1,X2,Y2`, or text to type. Coordinates count from the
 /// window's top left. The events take the same path as real ones from there on.
 @MainActor private enum KeyReplay {
     private static let settleSeconds = 2.5
@@ -145,6 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "esc": press("\u{1B}", code: 53)
         case "wait": break
         case _ where step.hasPrefix("click:"): mouse(step.dropFirst(6), down: .leftMouseDown, up: .leftMouseUp)
+        case _ where step.hasPrefix("drag:"): drag(step.dropFirst(5))
         case _ where step.hasPrefix("rclick:"): mouse(step.dropFirst(7), down: .rightMouseDown, up: .rightMouseUp)
         default: step.forEach { press(String($0), code: 0) }
         }
@@ -159,6 +163,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let event = NSEvent.mouseEvent(
                 with: type, location: NSPoint(x: parts[0], y: height - parts[1]), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
                 windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+            if let event { NSApp.postEvent(event, atStart: false) }
+        }
+    }
+
+    /// `drag:x1,y1,x2,y2` presses at the first point and releases at the second.
+    private static func drag(_ spec: Substring) {
+        let p = spec.split(separator: ",").compactMap { Double($0) }
+        guard p.count == 4, let window = NSApp.keyWindow, let height = window.contentView?.bounds.height else { return }
+        let steps = 8
+        let moves: [(NSEvent.EventType, Double, Double)] =
+            [(.leftMouseDown, p[0], p[1])]
+            + (1...steps).map { n in (.leftMouseDragged, p[0] + (p[2] - p[0]) * Double(n) / Double(steps), p[1] + (p[3] - p[1]) * Double(n) / Double(steps)) }
+            + [(.leftMouseUp, p[2], p[3])]
+        for (type, x, y) in moves {
+            let event = NSEvent.mouseEvent(
+                with: type, location: NSPoint(x: x, y: height - y), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1)
             if let event { NSApp.postEvent(event, atStart: false) }
         }
     }

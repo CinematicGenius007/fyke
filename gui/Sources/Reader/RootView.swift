@@ -15,6 +15,7 @@ struct RootView: View {
             content
         }
         .ignoresSafeArea()
+        .background(WindowButtons())
         .focusable()
         .focusEffectDisabled()
         .focused($focused)
@@ -54,9 +55,7 @@ struct RootView: View {
         } else if model.place == .briefing && model.web == nil {
             BriefingView()
         } else if model.usesPanes {
-            EntryList().frame(width: 375)
-            Rule(vertical: true)
-            ReaderPane()
+            Panes()
         } else if model.article != nil || model.web != nil {
             ReaderPane()
         } else {
@@ -100,6 +99,56 @@ struct RootView: View {
         default: return .ignored
         }
         return .handled
+    }
+}
+
+/// The article list and the reader, with a divider between them that drags.
+struct Panes: View {
+    @State private var dragStart: Double?
+    @State private var live: Double?
+    @State private var hovering = false
+    @Environment(\.palette) private var p
+
+    private static let standard = 375.0
+    private static let smallest = 280.0
+    /// The reader needs room to be read in.
+    private static let readerMinimum = 400.0
+
+    var body: some View {
+        GeometryReader { proxy in
+            let widest = max(Self.smallest, min(640, proxy.size.width - Self.readerMinimum))
+            let width = min(max(live ?? Prefs.shared.ui.listWidth, Self.smallest), widest)
+            HStack(spacing: 0) {
+                EntryList().frame(width: width)
+                divider(current: width, widest: widest)
+                ReaderPane()
+            }
+        }
+    }
+
+    private func divider(current: Double, widest: Double) -> some View {
+        ZStack {
+            Rectangle().fill(hovering || dragStart != nil ? p.control : p.hairline).frame(width: 1)
+        }
+        .frame(width: 9)
+        .contentShape(Rectangle())
+        .pointerStyle(.columnResize)
+        .onHover { hovering = $0 }
+        .gesture(
+            DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { drag in
+                    let start = dragStart ?? current
+                    dragStart = start
+                    live = min(max(start + drag.translation.width, Self.smallest), widest)
+                }
+                .onEnded { _ in
+                    if let live { Prefs.shared.ui.listWidth = live }
+                    dragStart = nil
+                    live = nil
+                }
+        )
+        .onTapGesture(count: 2) { Prefs.shared.ui.listWidth = Self.standard }
+        .accessibilityLabel("Resize the article list")
     }
 }
 

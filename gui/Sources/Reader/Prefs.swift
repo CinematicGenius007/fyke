@@ -61,6 +61,8 @@ struct UISettings: Codable, Equatable, Sendable {
     var textSize = 19.0
     var lineSpacing = 1.6
     var columnWidth = 640.0
+    /// Width of the article list beside the reader. The divider between them drags.
+    var listWidth = 375.0
     var loadImages = false
     /// `app` or `browser`.
     var openLinks = "app"
@@ -85,6 +87,7 @@ struct UISettings: Codable, Equatable, Sendable {
         textSize = try c.decodeIfPresent(Double.self, forKey: .textSize) ?? d.textSize
         lineSpacing = try c.decodeIfPresent(Double.self, forKey: .lineSpacing) ?? d.lineSpacing
         columnWidth = try c.decodeIfPresent(Double.self, forKey: .columnWidth) ?? d.columnWidth
+        listWidth = try c.decodeIfPresent(Double.self, forKey: .listWidth) ?? d.listWidth
         loadImages = try c.decodeIfPresent(Bool.self, forKey: .loadImages) ?? d.loadImages
         openLinks = try c.decodeIfPresent(String.self, forKey: .openLinks) ?? d.openLinks
         scrollbars = try c.decodeIfPresent(String.self, forKey: .scrollbars) ?? d.scrollbars
