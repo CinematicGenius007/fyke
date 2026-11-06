@@ -121,16 +121,9 @@ pub const ConfigGet = struct {
     pub fn run(s: *Service, arena: std.mem.Allocator, _: Params) !Result {
         var ui: ?std.json.Value = null;
         var problem: ?[]const u8 = null;
-        const text = text: {
-            s.config_lock.lockUncancelable(s.io);
-            defer s.config_lock.unlock(s.io);
-            break :text s.home.readFileAlloc(s.io, "config.json", arena, .limited(1 << 20)) catch |err| switch (err) {
-                error.FileNotFound => "{}",
-                else => return err,
-            };
-        };
+        const text = try service.readConfigFile(s, arena);
         if (std.json.parseFromSliceLeaky(service.Config, arena, text, .{ .ignore_unknown_fields = true })) |values| {
-            apply(s, values);
+            service.applyConfig(s, values);
             const root = try std.json.parseFromSliceLeaky(std.json.Value, arena, text, .{});
             ui = root.object.get("ui");
         } else |err| problem = @errorName(err);
@@ -140,11 +133,6 @@ pub const ConfigGet = struct {
             .ui = ui,
             .config_error = problem,
         };
-    }
-
-    fn apply(s: *Service, values: service.Config) void {
-        if (s.full_text.swap(values.full_text, .monotonic) != values.full_text) s.full_text_wake.set(s.io);
-        s.remove_read_after_days.store(values.remove_read_after_days, .monotonic);
     }
 };
 
@@ -181,6 +169,7 @@ pub const ConfigSet = struct {
         };
         var root = try std.json.parseFromSliceLeaky(std.json.Value, arena, text, .{});
         if (root != .object) return error.InvalidConfig;
+        _ = try std.json.parseFromSliceLeaky(service.Config, arena, text, .{ .ignore_unknown_fields = true });
         if (p.full_text) |enabled| try root.object.put(arena, "full_text", .{ .bool = enabled });
         if (p.remove_read_after_days) |days| try root.object.put(arena, "remove_read_after_days", .{ .integer = days });
         if (p.ui) |ui| try root.object.put(arena, "ui", ui);
@@ -281,11 +270,15 @@ pub const FoldersRemove = struct {
             defer s.unlockWriter();
             const current = try writer.folderInfo(arena, p.id) orelse return error.NoSuchFolder;
             if (p.delete_contents) {
+                // All or nothing: a half-done delete would lose the names of raw files.
+                try writer.begin();
+                errdefer writer.rollback();
                 for (try writer.feedsInFolder(arena, p.id)) |feed| {
                     try hashes.appendSlice(arena, try writer.rawHashesOnlyFor(arena, feed));
                     _ = try writer.removeFeed(feed);
                 }
                 try writer.deleteFolder(p.id);
+                try writer.commit();
             } else {
                 if (try writer.folderChildClashes(p.id, current.parent_id)) return error.FolderExists;
                 try writer.dissolveFolder(p.id, current.parent_id);
@@ -312,13 +305,18 @@ pub const FeedsUpdate = struct {
     pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
         const writer = s.lockWriter();
         defer s.unlockWriter();
+        // Checked first, so that a refused call changes nothing.
+        if (!p.top_level) {
+            if (p.folder_id) |folder| {
+                if (try writer.folderInfo(arena, folder) == null) return error.NoSuchFolder;
+            }
+        }
         if (p.title) |title| {
             if (!try writer.setFeedTitle(p.id, std.mem.trim(u8, title, " "))) return error.NoSuchFeed;
         }
         if (p.top_level) {
             if (!try writer.setFeedFolder(p.id, null)) return error.NoSuchFeed;
         } else if (p.folder_id) |folder| {
-            if (try writer.folderInfo(arena, folder) == null) return error.NoSuchFolder;
             if (!try writer.setFeedFolder(p.id, folder)) return error.NoSuchFeed;
         }
         return .{};
@@ -827,9 +825,12 @@ pub const StorageFree = struct {
         // Files go first: nothing names them now, and compacting needs disk space.
         for (stale) |hash| service.deleteRaw(s, arena, hash);
 
-        const writer = s.lockWriter();
-        defer s.unlockWriter();
-        writer.compact() catch |err| std.debug.print("compacting: {s}\n", .{@errorName(err)});
+        // Rewrites the whole file under the writer lock, so only when it can gain.
+        if (trimmed != 0 or stale.len != 0) {
+            const writer = s.lockWriter();
+            defer s.unlockWriter();
+            writer.compact() catch |err| std.debug.print("compacting: {s}\n", .{@errorName(err)});
+        }
         return .{ .trimmed = trimmed, .copies_removed = stale.len };
     }
 };

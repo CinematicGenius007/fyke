@@ -377,11 +377,34 @@ fn fetchJob(s: *Service, id: i64) !void {
     };
 }
 
+pub fn readConfigFile(s: *Service, arena: std.mem.Allocator) ![]const u8 {
+    s.config_lock.lockUncancelable(s.io);
+    defer s.config_lock.unlock(s.io);
+    return s.home.readFileAlloc(s.io, "config.json", arena, .limited(1 << 20)) catch |err| switch (err) {
+        error.FileNotFound => "{}",
+        else => return err,
+    };
+}
+
+/// Takes up the settings that apply while running.
+pub fn applyConfig(s: *Service, values: Config) void {
+    if (s.full_text.swap(values.full_text, .monotonic) != values.full_text) s.full_text_wake.set(s.io);
+    s.remove_read_after_days.store(values.remove_read_after_days, .monotonic);
+}
+
+/// A daemon can run for days with no client asking, so it reads the file itself.
+fn followConfig(s: *Service, arena: std.mem.Allocator) void {
+    const text = readConfigFile(s, arena) catch return;
+    const values = std.json.parseFromSliceLeaky(Config, arena, text, .{ .ignore_unknown_fields = true }) catch return;
+    applyConfig(s, values);
+}
+
 /// Keeps storage bounded: old raw bodies, events and fetch logs.
 pub fn housekeep(s: *Service) !void {
     var arena_state: std.heap.ArenaAllocator = .init(s.gpa);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
+    followConfig(s, arena);
 
     const writer = s.lockWriter();
     const stale = stale: {

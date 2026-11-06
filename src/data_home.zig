@@ -43,8 +43,8 @@ fn moveLegacy(io: Io, legacy: []const u8, path: []const u8) !void {
     if (target != null and target.?.kind == .sym_link) return;
 
     Io.Dir.renameAbsolute(legacy, path, io) catch |err| switch (err) {
-        // Another process moved it first.
-        error.FileNotFound => return,
+        // Another process moved it first, leaving nothing here or a link to the new folder.
+        error.FileNotFound, error.IsDir => return,
         // Both locations hold data. The new one wins, and the old one stays untouched.
         error.DirNotEmpty => return,
         // A rename cannot cross volumes. Data stays put, and the new path points at it.
