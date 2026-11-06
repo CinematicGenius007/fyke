@@ -514,7 +514,7 @@ pub const DaemonStop = struct {
     pub const Result = Ok;
 
     pub fn run(s: *Service, _: std.mem.Allocator, _: Params) !Result {
-        s.stop.set(s.io);
+        s.stop_requested.store(true, .release);
         return .{};
     }
 };

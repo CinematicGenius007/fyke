@@ -127,7 +127,9 @@ fn serve(s: *Service, stream: Io.net.Stream) Io.Cancelable!void {
         if (length == 0) continue;
 
         handle(s, arena, line.written(), out, &tier) catch return;
-        out.flush() catch return;
+        const flushed = out.flush();
+        if (s.stop_requested.load(.acquire)) s.stop.set(s.io);
+        flushed catch return;
     }
 }
 

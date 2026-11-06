@@ -206,8 +206,14 @@ status = json.loads(rss("status", "--json").stdout)
 check("next client restarts the daemon and data survives", status["entries"] == 40, status)
 check("database intact after kill", sqlite3.connect(home + "/rss.db").execute("pragma integrity_check").fetchone()[0] == "ok")
 
+# Stopping must answer the client every time, which it once raced with exiting.
+for _ in range(25):
+    rss("status")
+    p = rss("daemon", "stop", ok=False)
+    if p.returncode != 0: break
+check("stop always answers", p.returncode == 0, p.stderr)
+
 # Background polling
-rss("daemon", "stop")
 check("stop removes the socket", wait_for(lambda: not os.path.exists(home + "/rssd.sock")))
 open(home + "/config.json", "w").write('{"auto_poll": true, "min_poll_seconds": 1}')
 db = sqlite3.connect(home + "/rss.db"); db.execute("update feeds set next_fetch_at=0, poll_seconds=1"); db.commit(); db.close()

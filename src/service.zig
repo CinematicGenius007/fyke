@@ -50,7 +50,10 @@ pub const Service = struct {
     events_lock: Io.Mutex = .init,
     events_changed: Io.Condition = .init,
 
-    /// Set by `daemon.stop`. The main thread waits on it.
+    /// Set by `daemon.stop`. The connection that asked sets `stop` once its reply
+    /// has been sent, since exiting first would leave the client with no answer.
+    stop_requested: std.atomic.Value(bool) = .init(false),
+    /// The main thread waits on this.
     stop: Io.Event = .unset,
 
     // Scheduler state, guarded by `claims_lock`.
