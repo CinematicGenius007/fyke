@@ -518,7 +518,7 @@ struct MoveDialog: View {
                     .font(.custom(family, fixedSize: 22).weight(.semibold)).tracking(-0.22).padding(.bottom, 6)
                 switch move.phase {
                 case .asking: asking
-                case .moving(let stage): Text(stage + "…").font(.ui(14)).foregroundStyle(p.inkSoft)
+                case .moving(let stage): Text(stage).font(.ui(14)).foregroundStyle(p.inkSoft)
                 case .failed(let reason): failed(reason)
                 }
             }

@@ -28,6 +28,15 @@ enum Confirmation: Identifiable {
     }
 }
 
+/// A value shared with a callback on another thread.
+final class Locked<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: Value
+    init(_ value: Value) { stored = value }
+    var value: Value { lock.withLock { stored } }
+    func update(_ change: (inout Value) -> Void) { lock.withLock { change(&stored) } }
+}
+
 /// A move of the data folder, from the question to the result.
 @MainActor @Observable
 final class DataMove {
@@ -553,10 +562,16 @@ final class AppModel {
         let bytes = (use?.databaseBytes ?? 0) + (use?.rawBytes ?? 0) + (use?.logBytes ?? 0) + (use?.settingsBytes ?? 0)
         let keys: Set<URLResourceKey> = [
             .volumeIsInternalKey, .volumeIsLocalKey, .volumeIsRemovableKey, .volumeAvailableCapacityForImportantUsageKey,
+            .volumeIdentifierKey,
         ]
         var warning: DataMove.Warning?
+        let here = try? Daemon.shared.home.resolvingSymlinksInPath().resourceValues(forKeys: keys)
         if let values = try? chosen.resourceValues(forKeys: keys) {
-            if let free = values.volumeAvailableCapacityForImportantUsage, free < bytes * 12 / 10 {
+            // Inside one volume a move is a rename, which needs no room and unplugs nothing.
+            let sameVolume = values.volumeIdentifier?.isEqual(here?.volumeIdentifier) ?? false
+            if sameVolume {
+                warning = nil
+            } else if let free = values.volumeAvailableCapacityForImportantUsage, free < bytes * 12 / 10 {
                 warning = .noSpace
             } else if values.volumeIsInternal != true || values.volumeIsLocal == false || values.volumeIsRemovable == true {
                 // A disk image reports no answer for internal, so only a yes counts.
@@ -570,33 +585,53 @@ final class AppModel {
     /// restarting is in one place that the terminal uses too.
     func startMove() {
         guard let move = dataMove, move.phase == .asking, move.warning != .noSpace else { return }
-        move.phase = .moving("Stopping")
+        move.phase = .moving("Stopping…")
         Daemon.shared.paused = true
         let program = Daemon.shared.programPath
         let target = move.target.path
         Task {
-            let result = await Task.detached { () -> (Int32, String, String) in
-                let process = Process()
-                process.executableURL = URL(filePath: program)
-                process.arguments = ["data", "move", target]
-                let out = Pipe(), err = Pipe()
-                process.standardOutput = out
-                process.standardError = err
-                do { try process.run() } catch { return (1, "", error.localizedDescription) }
-                process.waitUntilExit()
-                let read = { (pipe: Pipe) in String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self) }
-                return (process.terminationStatus, read(out), read(err))
-            }.value
+            let result = await Self.runMove(program: program, target: target) { stage in
+                Task { @MainActor in move.phase = .moving(stage) }
+            }
             Daemon.shared.paused = false
-            if result.0 == 0 {
+            if result.status == 0 {
                 dataMove = nil
                 await Prefs.shared.load()
                 await reload()
             } else {
-                move.phase = .failed(Self.moveFailure(result.2))
+                // Past "starting" the data and the link are in place, and only the restart failed.
+                let moved = result.output.contains("starting")
+                move.phase = .failed(moved ? "Your data moved, but rss_ could not restart. Opening rss_ again usually fixes this." : Self.moveFailure(result.errors))
                 await reload()
             }
         }
+    }
+
+    private nonisolated static let stageNames = [
+        "stopping": "Stopping", "moving": "Moving", "verifying": "Checking the copy", "linking": "Linking", "starting": "Restarting",
+    ]
+
+    /// Runs the command and reports each stage as it prints it, since a copy can take minutes.
+    private nonisolated static func runMove(program: String, target: String, stage: @escaping @Sendable (String) -> Void) async -> (status: Int32, output: String, errors: String) {
+        await Task.detached {
+            let process = Process()
+            process.executableURL = URL(filePath: program)
+            process.arguments = ["data", "move", target]
+            let out = Pipe(), err = Pipe()
+            process.standardOutput = out
+            process.standardError = err
+            let seen = Locked("")
+            out.fileHandleForReading.readabilityHandler = { handle in
+                let text = String(decoding: handle.availableData, as: UTF8.self)
+                seen.update { $0 += text }
+                for line in text.split(separator: "\n") { if let name = stageNames[String(line)] { stage(name + "…") } }
+            }
+            do { try process.run() } catch { return (1, "", error.localizedDescription) }
+            process.waitUntilExit()
+            out.fileHandleForReading.readabilityHandler = nil
+            let errors = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            return (process.terminationStatus, seen.value, errors)
+        }.value
     }
 
     /// The command names what stopped it, and only a few of these a person can cause.
