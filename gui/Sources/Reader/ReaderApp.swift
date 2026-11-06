@@ -84,6 +84,7 @@ struct Themed<Content: View>: View {
 /// It gives checks a real rendering with no screen recording permission.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        KeyReplay.startIfRequested()
         guard let path = ProcessInfo.processInfo.environment["RSS_SNAPSHOT"] else { return }
         let delay = Double(ProcessInfo.processInfo.environment["RSS_SNAPSHOT_DELAY"] ?? "") ?? 2.5
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
@@ -93,6 +94,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             view.cacheDisplay(in: view.bounds, to: bitmap)
             try? bitmap.representation(using: .png, properties: [:])?.write(to: URL(filePath: path))
             exit(0)
+        }
+    }
+}
+
+/// `RSS_KEYS` plays key presses into the window once it settles, then quits, for
+/// tools/e2e_gui.py. Steps are separated by spaces: `cmd+f`, `up`, `down`, `return`,
+/// `esc`, or text to type. The events take the same path as real ones from there on.
+private enum KeyReplay {
+    private static let settleSeconds = 2.5
+    private static let stepSeconds = 0.5
+
+    static func startIfRequested() {
+        guard let script = ProcessInfo.processInfo.environment["RSS_KEYS"] else { return }
+        let steps = script.split(separator: " ").map(String.init)
+        DispatchQueue.main.asyncAfter(deadline: .now() + settleSeconds) {
+            NSApp.activate(ignoringOtherApps: true)
+            NSApp.windows.first { $0.isVisible }?.makeKeyAndOrderFront(nil)
+            play(steps[...])
+        }
+    }
+
+    private static func play(_ steps: ArraySlice<String>) {
+        guard let step = steps.first else { exit(0) }
+        send(step)
+        DispatchQueue.main.asyncAfter(deadline: .now() + stepSeconds) { play(steps.dropFirst()) }
+    }
+
+    private static func send(_ step: String) {
+        switch step {
+        case "cmd+f": press("f", code: 3, flags: .command)
+        case "up": press(String(UnicodeScalar(NSUpArrowFunctionKey)!), code: 126)
+        case "down": press(String(UnicodeScalar(NSDownArrowFunctionKey)!), code: 125)
+        case "return": press("\r", code: 36)
+        case "esc": press("\u{1B}", code: 53)
+        default: step.forEach { press(String($0), code: 0) }
+        }
+    }
+
+    private static func press(_ text: String, code: UInt16, flags: NSEvent.ModifierFlags = []) {
+        for type in [NSEvent.EventType.keyDown, .keyUp] {
+            let event = NSEvent.keyEvent(
+                with: type, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: NSApp.keyWindow?.windowNumber ?? 0, context: nil, characters: text,
+                charactersIgnoringModifiers: text, isARepeat: false, keyCode: code)
+            if let event { NSApp.sendEvent(event) }
         }
     }
 }
