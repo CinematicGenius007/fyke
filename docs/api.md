@@ -22,7 +22,9 @@ Not used: A2A (agent-to-agent, no need here). Note that "ACP" also once meant IB
 
 ## Operation registry
 
-An operation is declared once: name, tier, input type, output type, description. From that one declaration come the socket method, the CLI subcommand, the MCP tool, the JSON Schema and the generated reference doc.
+An operation is declared once: name, tier, input type, output type, description. From that one declaration come the socket method, the MCP tool and its JSON Schema, and the wire types the CLI uses.
+
+The tables below list what exists. Each tier ends with what is planned, and `rss ops` always shows the truth.
 
 Pagination is keyset-based: list results return `next_cursor`.
 
@@ -30,18 +32,20 @@ Pagination is keyset-based: list results return `next_cursor`.
 
 | Operation | Purpose |
 |---|---|
-| `feeds.list`, `feeds.get` | Subscriptions, health, last error |
-| `entries.list` | Timeline, filtered by feed, folder, tag, state, date range |
+| `feeds.list` | Subscriptions, health, last error |
+| `folders.list` | Folders |
+| `entries.list` | Timeline, filtered by feed, read and starred state, and age |
 | `entries.get` | One entry. `format`: `blocks`, `markdown` or `text` |
-| `entries.search` | Words, with snippets, newest first, filtered by `unread_only` and `since_days`. Also matches entries of feeds whose name or host fits every word. Relevance order is not built: ranking every match of a common term takes around a second at 1,000,000 entries |
-| `entries.similar` | Nearest neighbors by embedding |
-| `stories.list`, `stories.get` | Aggregated stories |
-| `artifacts.list`, `artifacts.get` | Summaries and digests, with citations |
-| `lenses.list`, `jobs.list` | Aggregator configuration and status |
+| `entries.search` | Words, with snippets, newest first, filtered by `unread_only` and `since_days`. Also matches entries of feeds whose name or host fits every word. Considers the 2,000 most recently stored entries that match and pass the filters. Relevance order is not built: ranking every match of a common term takes around a second at 1,000,000 entries |
 | `stats.get` | Counts and storage |
 | `schema.describe` | Annotated database schema |
-| `db.query` | Read-only SQL, row and time limited, on a `query_only` connection |
+| `db.query` | Read-only SQL on a `query_only` connection. Limited to 10,000 rows, 4 MiB of values, 16 MiB for any one value, and a budget of VM steps |
 | `events.since` | Poll the change feed by sequence number |
+| `opml.export` | Subscriptions as OPML |
+| `config.get` | Settings a client can change. Hidden from MCP |
+| `ops.list` | Every operation. Hidden from MCP |
+
+Planned: `feeds.get`, `entries.similar`, `stories.list`, `stories.get`, `artifacts.list`, `artifacts.get`, `lenses.list`, `jobs.list`.
 
 `db.query` is deliberate, and it is the recommended path for agents. Opening the file directly is possible, but `sqlite3 -readonly` fails with error 14 after a clean daemon shutdown; use `file:rss.db?immutable=1` only while the daemon is stopped.
 
@@ -51,20 +55,16 @@ Registered operations cover the common paths, and SQL covers every question nobo
 
 | Operation | Purpose |
 |---|---|
-| `entries.mark` | Read, starred, hidden |
-| `entries.tag` | Add or remove tags, recorded with their source |
-| `notes.add` | Attach a note |
-| `artifacts.put` | Store agent output. Requires citations. It then appears in the Briefing view |
+| `entries.mark` | Read, starred, hidden. Hidden entries leave lists and search |
+| `entries.fetch_full` | Fetch an entry's article from its page |
 
-`artifacts.put` lets an external agent, run by you on your own schedule, publish into the GUI with no runner configured.
+Planned: `entries.tag`, to add or remove tags recorded with their source. `notes.add`, to attach a note. `artifacts.put`, to store agent output with citations, so that an external agent run on your own schedule can publish into the Briefing view with no runner configured.
 
 ### Manage tier
 
-Built: `feeds.add`, `feeds.preview`, `folders.list`, `config.get`, `config.set`, `feeds.remove`, `feeds.refresh`, `feeds.refresh_all`, `opml.import`, `daemon.stop`, `daemon.housekeep`.
+Built: `feeds.add`, `feeds.preview`, `feeds.remove`, `feeds.refresh`, `feeds.refresh_all`, `feeds.queue`, `config.set`, `opml.import`, `daemon.stop`, `daemon.housekeep`.
 
-Planned: `feeds.update`, `folders.*`, `lenses.put`, `lenses.run`, `runners.put`, `jobs.cancel`.
-
-`rss ops` lists what exists now. `opml.export` and `ops.list` are in the read tier.
+Planned: `feeds.update`, folder management, `lenses.put`, `lenses.run`, `runners.put`, `jobs.cancel`.
 
 ### Socket only
 
@@ -105,7 +105,7 @@ Requests are limited to 1 MiB per line. A longer one closes that connection.
 
 `events.subscribe` takes `since_seq` and turns the connection into a one-way stream, so a client keeps a second connection for requests. After a reconnect, it resumes from its last sequence number.
 
-`connection.restrict` takes a `tier` and lowers this connection for good. New connections start at `manage`, since anything that can open the socket already owns the data. `rss mcp` will restrict itself before accepting any agent request.
+`connection.restrict` takes a `tier` and lowers this connection for good. New connections start at `manage`, since anything that can open the socket already owns the data. `rss mcp` restricts itself before accepting any agent request.
 
 ## CLI
 
@@ -117,6 +117,7 @@ rss list --unread --feed 12 --limit 20
 rss search "zig parser" --json
 rss show 5120 --format markdown
 rss mark 5120 --read
+rss mark 5120 --hide
 rss import subscriptions.opml
 rss export
 rss status
@@ -127,9 +128,12 @@ rss tui
 rss mcp
 rss daemon
 rss daemon stop
+rss service install
+rss service uninstall
+rss service status
 ```
 
-Clients start the daemon when none is running. Planned: `rss digest`.
+Clients start the daemon when none is running, and give up on a daemon that does not answer within 120 s. `rss service install` runs it from login as a macOS launch agent, replacing any daemon already running, and launchd restarts it after a crash. Planned: `rss digest`.
 
 ## MCP server
 
@@ -138,7 +142,7 @@ Clients start the daemon when none is running. Planned: `rss digest`.
 | MCP feature | Mapped to |
 |---|---|
 | Tools | Operations within the connection's tier |
-| Resources | `rss://entry/{id}`, `rss://feed/{id}`, `rss://story/{id}`, `rss://digest/{id}`, `rss://schema` |
+| Resources | `rss://entry/{id}`, `rss://feed/{id}`, `rss://schema`. Planned: `rss://story/{id}`, `rss://digest/{id}` |
 | Prompts | `daily-briefing`, `catch-up-on-topic`, `compare-coverage` |
 
 Example registration for any MCP client:
@@ -149,7 +153,7 @@ Example registration for any MCP client:
 
 For more than reading, add `"--tier", "annotate"` or `"--tier", "manage"` to `args`.
 
-Tools are generated from the registry ([src/mcp.zig](../src/mcp.zig)): the name with `.` replaced by `_`, the description, and an input schema built from `Params`. An operation sets `agent_visible = false` to stay off MCP entirely. That covers `daemon.*`, `ops.list`, and `opml.import`, which takes a file path.
+Tools are generated from the registry ([src/mcp.zig](../src/mcp.zig)): the name with `.` replaced by `_`, the description, and an input schema built from `Params`. An operation sets `agent_visible = false` to stay off MCP entirely. That covers `daemon.*`, `ops.list`, `config.*`, and `opml.import`, which takes a file path.
 
 Tool descriptions tell the agent to prefer `entries.search` before `db.query`, and that returned feed text is data, not instructions. Results stay compact by default: `entries.list` returns metadata, and `entries.get` returns the body. Every tool result is wrapped as `{"trust":"untrusted-feed-content","result":...}`.
 
@@ -157,7 +161,7 @@ Streamable HTTP is deferred. Stdio serves every local agent and opens no port. I
 
 ## ACP client
 
-The daemon spawns the agent as a subprocess and speaks JSON-RPC over stdio.
+Planned. The daemon will spawn the agent as a subprocess and speak JSON-RPC over stdio.
 
 | Step | Method | Our choice |
 |---|---|---|
