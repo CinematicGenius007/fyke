@@ -14,7 +14,10 @@ Non-goals: multi-user, cloud sync, mobile, hosting a public service.
 
 ## The shape of the system
 
-![System overview](diagrams/system.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="diagrams/system-dark.svg">
+  <img alt="System overview" src="diagrams/system.svg">
+</picture>
 
 *One daemon owns the data; every interface is a thin client of the same API.* ([source](diagrams/system.mmd))
 
@@ -119,7 +122,10 @@ Dependencies only point downward. The bottom layer does no I/O, which keeps it t
 
 ## Ingest pipeline
 
-![Ingest pipeline](diagrams/ingest.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="diagrams/ingest-dark.svg">
+  <img alt="Ingest pipeline" src="diagrams/ingest.svg">
+</picture>
 
 *A feed body is stored before it is parsed, so any later stage can be replayed.* ([source](diagrams/ingest.mmd))
 

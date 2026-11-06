@@ -2,7 +2,10 @@
 
 Everything outside the daemon goes through one set of operations. This document defines them and how each protocol maps on to them.
 
-![Agent integration](diagrams/agents.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="diagrams/agents-dark.svg">
+  <img alt="Agent integration" src="diagrams/agents.svg">
+</picture>
 
 *Agents reach us through MCP or the CLI, and we reach agents through runners; ACP closes the loop by giving a spawned agent our MCP server.* ([source](diagrams/agents.mmd))
 

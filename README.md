@@ -20,7 +20,10 @@ zig build -Drelease
 ./zig-out/bin/rss tui
 ```
 
-![System overview](docs/diagrams/system.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagrams/system-dark.svg">
+  <img alt="System overview" src="docs/diagrams/system.svg">
+</picture>
 
 *One daemon owns the data; every interface is a thin client of the same API.*
 
