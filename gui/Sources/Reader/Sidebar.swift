@@ -12,6 +12,18 @@ private enum TreeRow: Identifiable {
     }
 }
 
+/// Everything in the sidebar sits on two columns: icons, chevrons and the FEEDS label
+/// start at `edge`, and names start where the names of Briefing, All and Starred do.
+/// Counts and the plus end at the same right edge.
+enum SidebarGrid {
+    static let edge: CGFloat = 10
+    static let trailing: CGFloat = 6
+    static let icon: CGFloat = 14
+    static let gap: CGFloat = 8
+    static let indent: CGFloat = 16
+    static var label: CGFloat { edge + icon + gap }
+}
+
 struct Sidebar: View {
     @Environment(AppModel.self) private var model
     @Environment(FloatLayer.self) private var layer
@@ -43,13 +55,13 @@ struct Sidebar: View {
                     .foregroundStyle(p.muted)
                 Spacer()
                 Button(action: showAddMenu) {
-                    Icon(glyph: .plus, size: 14).frame(width: 20, height: 18).contentShape(Rectangle())
+                    Icon(glyph: .plus, size: 14).frame(width: 14, height: 18).contentShape(Rectangle().inset(by: -5))
                 }
                 .buttonStyle(.plain)
                 .help("Add a feed or a folder")
                 .floatFrame($addFrame)
             }
-            .padding(.horizontal, 10).padding(.top, 22).padding(.bottom, 6)
+            .padding(.leading, SidebarGrid.edge).padding(.trailing, SidebarGrid.trailing).padding(.top, 22).padding(.bottom, 6)
             .background(dropTarget ? p.selected : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
             .dropDestination(for: String.self) { items, _ in
                 drop(items, on: nil)
@@ -68,7 +80,7 @@ struct Sidebar: View {
             .themedScrollbar()
 
             Text(status).font(.ui(12)).foregroundStyle(p.muted)
-                .padding(.horizontal, 10).padding(.vertical, 14)
+                .padding(.leading, SidebarGrid.edge).padding(.trailing, SidebarGrid.trailing).padding(.vertical, 14)
         }
         .padding(.horizontal, 12).padding(.top, 48)
         .frame(width: 231)
@@ -105,7 +117,7 @@ struct Sidebar: View {
                 Spacer(minLength: 8)
                 Text("⌘F").font(.ui(13)).foregroundStyle(p.muted)
             }
-            .padding(.horizontal, 10).padding(.vertical, 7)
+            .padding(.leading, SidebarGrid.edge).padding(.trailing, SidebarGrid.trailing).padding(.vertical, 7)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -128,7 +140,7 @@ struct Sidebar: View {
                         .font(.ui(13, quietCount ? .regular : .medium)).foregroundStyle(quietCount ? p.muted : p.unread)
                 }
             }
-            .padding(.horizontal, 10).padding(.vertical, 7)
+            .padding(.leading, SidebarGrid.edge).padding(.trailing, SidebarGrid.trailing).padding(.vertical, 7)
             .background(selected ? p.selectedStrong : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
             .contentShape(Rectangle())
         }
@@ -197,10 +209,10 @@ private struct FolderRow: View {
     private var selected: Bool { model.place == .folder(folder.id) }
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: SidebarGrid.gap) {
             Button { model.toggleFolder(folder.id) } label: {
-                Icon(glyph: closed ? .right : .down, size: 14, color: p.muted)
-                    .frame(width: 18, height: 28).contentShape(Rectangle())
+                Icon(glyph: closed ? .right : .down, size: SidebarGrid.icon, color: p.muted)
+                    .frame(width: SidebarGrid.icon, height: 28).contentShape(Rectangle().inset(by: -4))
             }
             .buttonStyle(.plain)
             .help(closed ? "Open folder" : "Close folder")
@@ -221,7 +233,7 @@ private struct FolderRow: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.leading, 2 + CGFloat(depth) * 16).padding(.trailing, 10)
+        .padding(.leading, SidebarGrid.edge + CGFloat(depth) * SidebarGrid.indent).padding(.trailing, SidebarGrid.trailing)
         .background(selected ? p.selectedStrong : (target ? p.selected : .clear), in: RoundedRectangle(cornerRadius: Radii.control))
         .draggable(Drag.folder(folder.id))
         .dropDestination(for: String.self) { items, _ in
@@ -286,7 +298,7 @@ private struct FeedRow: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.leading, 26 + CGFloat(depth) * 16).padding(.trailing, 10)
+        .padding(.leading, SidebarGrid.label + CGFloat(depth) * SidebarGrid.indent).padding(.trailing, SidebarGrid.trailing)
         .background(selected ? p.selectedStrong : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
         .draggable(Drag.feed(feed.id))
         .rightClickMenu { FeedMenu(feed: feed) }

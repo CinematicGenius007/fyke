@@ -41,6 +41,7 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .ignoresSafeArea()
+        .background(WindowButtons())
         .overlay { if let move = model.dataMove { MoveDialog(move: move) } }
     }
 }

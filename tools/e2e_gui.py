@@ -96,6 +96,17 @@ themes("switching theme clears a temporary font", on_dusk, LIGHT_TILE,
 themes("a built-in saves as a new theme instead", {"theme": "light", "follow_system": False, "fonts": {"reading": "Inter"}}, BUILT_IN_SAVE + " wait Mine return",
        lambda ui: ui["theme"] == "mine" and ui["fonts"] == {} and ui["themes"][0]["base"] == "light" and ui["themes"][0]["fonts"]["reading"] == "Inter")
 
+# The divider between the article list and the reader drags, and keeps where it was left.
+config_path = pathlib.Path(home) / "config.json"
+before_width = json.loads(config_path.read_text()).get("ui", {}).get("list_width", 375)
+subprocess.run([str(app / "Reader")], env=dict(env, RSS_SCREEN="feed", RSS_FEED="0", RSS_KEYS="wait drag:611,500,691,500 wait wait"), capture_output=True, timeout=60)
+width = json.loads(config_path.read_text()).get("ui", {}).get("list_width")
+if width is None or abs(width - (before_width + 80)) > 2:
+    print(f"FAIL the divider drags: {before_width} to {width}")
+    rss("daemon", "stop"); shutil.rmtree(home); sys.exit(1)
+print("ok   dragging the divider widens the article list and saves it")
+passed += 1
+
 # The data folder move. RSS_HOME is set, so the command refuses, which is the failure
 # path: it must hand control back, and leave the data and the daemon as they were.
 before = rss("feeds", "--json")

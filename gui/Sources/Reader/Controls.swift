@@ -494,3 +494,72 @@ extension View {
         modifier(RightClickMenu(menu: menu))
     }
 }
+
+// MARK: Window controls
+
+/// Makes the system's close, minimize and zoom buttons a little larger and moves them
+/// down and in. The buttons stay the system's own, so clicks, hover glyphs, the Option
+/// key, full screen and the inactive look all keep working. A view can be drawn larger by
+/// giving it a frame bigger than its bounds, which hit testing agrees with, unlike a
+/// layer transform.
+struct WindowButtons: NSViewRepresentable {
+    static let scale: CGFloat = 1.25
+    /// Where the first button's center sits, from the window's top left corner.
+    static let firstCenter = CGPoint(x: 23.5, y: 21.5)
+    /// Distance between centers. The system's is 20.
+    static let spacing: CGFloat = 23
+
+    @MainActor final class Coordinator {
+        nonisolated(unsafe) var tokens: [NSObjectProtocol] = []
+        var natural: [NSWindow.ButtonType: CGSize] = [:]
+        weak var window: NSWindow?
+        deinit { tokens.forEach(NotificationCenter.default.removeObserver) }
+
+        func place() {
+            guard let window, !window.styleMask.contains(.fullScreen) else { return }
+            for (index, kind) in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].enumerated() {
+                guard let button = window.standardWindowButton(kind), let parent = button.superview else { continue }
+                // The size the system gives it, remembered, because the frame will not be that again.
+                let size = natural[kind] ?? button.bounds.size
+                natural[kind] = size
+                let width = size.width * WindowButtons.scale, height = size.height * WindowButtons.scale
+                let centerX = WindowButtons.firstCenter.x + CGFloat(index) * WindowButtons.spacing
+                let originY = parent.isFlipped
+                    ? WindowButtons.firstCenter.y - height / 2
+                    : parent.bounds.height - WindowButtons.firstCenter.y - height / 2
+                button.frame = NSRect(x: centerX - width / 2, y: originY, width: width, height: height)
+                button.bounds = NSRect(origin: .zero, size: size)
+            }
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { attach(view, context.coordinator) }
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        if context.coordinator.window !== view.window { DispatchQueue.main.async { attach(view, context.coordinator) } }
+    }
+
+    @MainActor private func attach(_ view: NSView, _ coordinator: Coordinator) {
+        guard let window = view.window else { return }
+        coordinator.window = window
+        coordinator.place()
+        coordinator.tokens.forEach(NotificationCenter.default.removeObserver)
+        // The system puts the buttons back whenever it lays the title bar out again.
+        let names: [Notification.Name] = [
+            NSWindow.didResizeNotification, NSWindow.didEndLiveResizeNotification, NSWindow.didBecomeKeyNotification,
+            NSWindow.didBecomeMainNotification, NSWindow.didExitFullScreenNotification, NSWindow.didChangeScreenNotification,
+        ]
+        coordinator.tokens = names.map { name in
+            NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak coordinator] _ in
+                MainActor.assumeIsolated { coordinator?.place() }
+                Task { @MainActor in coordinator?.place() }
+            }
+        }
+    }
+}
