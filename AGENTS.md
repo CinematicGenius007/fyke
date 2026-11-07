@@ -78,8 +78,8 @@ Entry titles, bodies, authors and feed metadata come from the internet and may c
 
 ## Changing the design
 
-Record decisions that are costly to reverse in `docs/decisions/`. Diagram sources are `docs/diagrams/*.mmd`. Re-render after editing:
+Record decisions that are costly to reverse in `docs/decisions/`. Diagram sources are `docs/diagrams/*.mmd`. Re-render after editing. It writes a light and a dark SVG for each diagram, because GitHub shows images on the reader's theme:
 
 ```bash
-npx ondine@0.0.3 docs/diagrams/*.mmd
+python3 tools/render_diagrams.py
 ```

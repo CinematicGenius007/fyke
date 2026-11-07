@@ -12,7 +12,10 @@ Turn "2,000 unread items" into "the 12 things that happened and why they matter 
 
 ## Stages
 
-![Aggregation stages](diagrams/aggregate.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="diagrams/aggregate-dark.svg">
+  <img alt="Aggregation stages" src="diagrams/aggregate.svg">
+</picture>
 
 *Each stage narrows the data, so expensive model calls only touch the small set that survives.* ([source](diagrams/aggregate.mmd))
 
