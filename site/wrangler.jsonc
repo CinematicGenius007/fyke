@@ -1,3 +1,4 @@
+// Serves the built site from dist/. A missing path returns dist/404.html with status 404.
 {
   "name": "weir",
   "compatibility_date": "2026-11-01",
