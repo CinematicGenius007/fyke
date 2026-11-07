@@ -30,15 +30,15 @@ const stories = [
           <div class="frame">
             <img class="img-day" src={url("img/app-light.png")} width="2940" height="1846" alt="The Weir app showing a list of articles beside a reading pane, in the light theme." />
             <img class="img-night" src={url("img/app-dark.png")} width="2940" height="1846" alt="The Weir app showing a list of articles beside a reading pane, in the dark theme." />
+            <div class="ph" id="ph" aria-hidden="true">
+              <span class="blocked">Image from cdn.example-news.com, not loaded</span>
+              <img id="photo" class="photo" src={url("img/sample.svg")} width="400" height="180" alt="" draggable="false" />
+            </div>
           </div>
           <figcaption>Fig. 1 · The reader. Folders, a list, and one article at a time.</figcaption>
         </figure>
         <div class="ribbon-wrap">
           <div class="inset" id="inset" hidden>
-            <div class="ph" id="ph">
-              <span class="blocked" id="blocked" role="img" aria-label="An image from a publisher, not loaded">Image from cdn.example-news.com, not loaded</span>
-              <img id="photo" class="photo" src={url("img/sample.svg")} width="400" height="180" alt="" />
-            </div>
             <div class="switch-row">
               <div><b>Load images</b><span class="s" id="switch-state" aria-live="polite">Off. Try it: flip to see what changes.</span></div>
               <input class="switch" id="img-switch" type="checkbox" role="switch" aria-label="Load images" />
