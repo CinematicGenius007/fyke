@@ -25,6 +25,6 @@ After changing `src/plugins/rehype-docs.mjs`, run `pnpm clean`, because Astro ca
 
 ## Hosting
 
-The output is plain files in `dist/`. For Cloudflare, connect the repository, set the root directory to `site`, the build command to `pnpm install && pnpm build` and the output directory to `dist`, then add the custom domain. `wrangler.jsonc` serves the same folder with `wrangler deploy`. Any static host works the same way.
+The output is plain files in `dist/`. For Cloudflare, connect the repository, set the root directory to `site`, the build command to `pnpm install && pnpm build` and the output directory to `dist`, then add the custom domain. `wrangler.jsonc` serves the same folder and attaches `weir.cinematicgenius007.com` with `pnpm build && npx wrangler deploy`, run in `site/` with `CLOUDFLARE_ACCOUNT_ID` set to the account that holds the domain's zone. Any static host works the same way.
 
 The page has no trackers and loads nothing from other sites. The only thing it stores is the reader's choice of day or night edition, in local storage.
