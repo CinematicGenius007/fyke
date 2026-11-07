@@ -11,8 +11,37 @@ const stories = [
   { h: "MCP for agents", p: "Agents can read your feeds, too.", c: "Continued below, col. 2", href: "#how" },
   { h: "Editable themes", p: "Newsprint, terminal, or your own.", c: "Continued below, col. 3", href: "#how" },
 ];
+const faq = [
+  ["What is Weir?", "Weir is a local-first RSS reader for macOS. A small background process fetches your feeds into one SQLite database in a folder on your Mac, and the Mac app, a terminal reader, a command line program and an MCP server all read from it."],
+  ["What does it need to run?", "macOS 15 or later. Building it from source needs Zig 0.17.1 and Xcode's command line tools."],
+  ["Is there a download?", "Not yet. Weir is built from source today with three lines in a terminal. Signed prebuilt releases are planned and have no date."],
+  ["Does Weir track what I read?", "No. There is no account, no telemetry and no server of ours. Weir contacts only the sites behind your feeds, to fetch the feed and, when a feed gives only a summary, the full article. It loads publishers' images only when you allow it."],
+  ["Does it use AI?", "Not today. A daily briefing where every sentence cites the article it came from is designed and planned, and it is not built."],
+  ["Can my AI agent read my feeds?", "Yes. The rss mcp command serves your feeds, search and articles to any agent that speaks the Model Context Protocol, on your machine."],
+  ["What does it cost, and what is the licence?", "Weir is free and open source under the MIT licence."],
+];
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: site.name,
+    applicationCategory: "UtilitiesApplication",
+    operatingSystem: "macOS 15 or later",
+    description: "A local-first RSS reader for macOS. Feeds, articles and search live in one folder on your own machine.",
+    license: "https://opensource.org/license/mit",
+    isAccessibleForFree: true,
+    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    codeRepository: site.repo,
+    programmingLanguage: ["Zig", "Swift"],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faq.map(([q, a]) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } })),
+  },
+];
 ---
-<Base current="home">
+<Base current="home" jsonLd={jsonLd}>
   <div class="wrap">
     <section class="hero">
       <div>
@@ -28,8 +57,8 @@ const stories = [
       <div class="shot">
         <figure>
           <div class="frame">
-            <img class="img-day" src={url("img/app-light.png")} width="2940" height="1846" alt="The Weir app showing a list of articles beside a reading pane, in the light theme." />
-            <img class="img-night" src={url("img/app-dark.png")} width="2940" height="1846" alt="The Weir app showing a list of articles beside a reading pane, in the dark theme." />
+            <img class="img-day" src={url("img/app-light.webp")} width="1800" height="1130" fetchpriority="high" decoding="async" alt="The Weir app showing a list of articles beside a reading pane, in the light theme." />
+            <img class="img-night" src={url("img/app-dark.webp")} width="1800" height="1130" alt="The Weir app showing a list of articles beside a reading pane, in the dark theme." />
             <div class="ph" id="ph" aria-hidden="true">
               <span class="blocked">Image from cdn.example-news.com, not loaded</span>
               <img id="photo" class="photo" src={url("img/sample.svg")} width="400" height="180" alt="" draggable="false" />
@@ -129,5 +158,12 @@ const stories = [
       </div>
       <div class="mock">“…three releases this week [1], one of them a security fix [2].”<small>Mock-up of a cited line</small></div>
     </aside>
+
+    <section class="block faq" id="questions" aria-labelledby="faq-h">
+      <div class="head"><div><span class="kicker">Letters</span><h2 id="faq-h">Questions, <em>answered plainly.</em></h2></div></div>
+      <dl>
+        {faq.map(([q, a]) => (<div><dt>{q}</dt><dd>{a}</dd></div>))}
+      </dl>
+    </section>
   </div>
 </Base>

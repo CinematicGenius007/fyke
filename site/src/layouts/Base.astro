@@ -3,8 +3,12 @@ import "../styles/global.css";
 import Badge from "../components/Badge.astro";
 import { site, url } from "../site";
 
-interface Props { title?: string; description?: string; current?: string; }
-const { title, description = "Weir is a local-first RSS reader for macOS. Your feeds, articles and search live in one folder on your own machine.", current = "" } = Astro.props;
+interface Props { title?: string; description?: string; current?: string; jsonLd?: object[]; noindex?: boolean; }
+const { title, description = "Weir is a local-first RSS reader for macOS. Your feeds, articles and search live in one folder on your own machine.", current = "", jsonLd = [], noindex = false } = Astro.props;
+// Absolute addresses need SITE_URL. Without it the tags use site-relative paths, which is fine for a local preview.
+const abs = (path: string) => (Astro.site ? new URL(path, Astro.site).href : path);
+const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site).href : undefined;
+const ogImage = abs(url("og.png"));
 const full = title ? `${title} · ${site.name}` : `${site.name}, a local-first RSS reader for macOS`;
 
 const fmt = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -22,6 +26,25 @@ const nav = (key: string) => (current === key ? "page" : undefined);
     <title>{full}</title>
     <meta name="description" content={description} />
     <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#e9e3d3" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1c1915" media="(prefers-color-scheme: dark)" />
+    {noindex ? <meta name="robots" content="noindex" /> : <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />}
+    {canonical && !noindex && <link rel="canonical" href={canonical} />}
+    <link rel="alternate" type="text/plain" href={url("llms.txt")} title="Site summary for language models" />
+    <meta property="og:site_name" content={site.name} />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={full} />
+    <meta property="og:description" content={description} />
+    {canonical && <meta property="og:url" content={canonical} />}
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Weir, a local-first RSS reader for macOS, with its feed badge and the app window." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={full} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    {jsonLd.map((d) => <script type="application/ld+json" set:html={JSON.stringify(d).replace(/</g, "\\u003c")} />)}
     <link rel="icon" type="image/svg+xml" href={url("favicon.svg")} />
     <script is:inline>
       // Set the edition before first paint so the page never flashes the other one.
