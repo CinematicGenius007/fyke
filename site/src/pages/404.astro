@@ -1,0 +1,13 @@
+---
+import Base from "../layouts/Base.astro";
+import { url } from "../site";
+---
+<Base title="Page not found" noindex>
+  <div class="wrap page solo">
+    <div class="prose">
+      <span class="kicker">Correction</span>
+      <h1>That page is not in this edition.</h1>
+      <p>It may have moved, or it may never have been printed. Try the <a href={url()}>front page</a>, the <a href={url("docs/")}>docs</a> or the <a href={url("install/")}>install notes</a>.</p>
+    </div>
+  </div>
+</Base>

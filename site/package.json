@@ -1,0 +1,20 @@
+{
+  "name": "weir-site",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "scripts": {
+    "predev": "node scripts/sync.mjs",
+    "dev": "astro dev",
+    "prebuild": "node scripts/sync.mjs",
+    "build": "astro build",
+    "preview": "astro preview",
+    "clean": "rm -rf .astro dist node_modules/.astro"
+  },
+  "dependencies": {
+    "@astrojs/markdown-remark": "7.3.6",
+    "@astrojs/sitemap": "3.7.0",
+    "astro": "7.4.7"
+  },
+  "packageManager": "pnpm@12.16.1"
+}

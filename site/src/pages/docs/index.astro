@@ -1,0 +1,29 @@
+---
+import Base from "../../layouts/Base.astro";
+import Docs from "../../components/Docs.astro";
+import { url } from "../../site";
+
+const items = [
+  { n: "01", id: "architecture", h: "Architecture", p: "How the pieces fit: one daemon, the database, the interfaces, and the security model." },
+  { n: "02", id: "api", h: "Operations and protocols", p: "Every operation the app, the terminal reader, the CLI and the MCP server share, and how agents connect." },
+  { n: "03", id: "aggregator", h: "The AI pipeline", p: "Planned. How a daily briefing would be built so that every sentence cites its source." },
+  { n: "04", id: "rss-primer", h: "Feed formats and HTTP", p: "RSS, Atom and JSON Feed, and how to be a polite client." },
+];
+---
+<Base title="Docs" current="docs" description="The design documents behind Weir: architecture, operations, the planned AI pipeline and feed formats.">
+  <div class="wrap">
+    <div class="page">
+      <Docs />
+      <div class="prose">
+        <h1>Docs</h1>
+        <p>These are the design documents from the repository, shown as they are. They state what the system does, what it does not do, and what was measured, and they label planned work as planned.</p>
+        <ul class="doclist">
+          {items.map((i) => (
+            <li><a data-story href={url(`docs/${i.id}/`)}><span class="n">{i.n}</span><span><h3>{i.h}</h3><p>{i.p}</p></span></a></li>
+          ))}
+          <li><a data-story href={url("roadmap/")}><span class="n">05</span><span><h3>Roadmap</h3><p>Milestones, what is built, and what comes next.</p></span></a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</Base>

@@ -1,0 +1,169 @@
+---
+import Base from "../layouts/Base.astro";
+import Terminal from "../components/Terminal.astro";
+import Badge from "../components/Badge.astro";
+import { site, url } from "../site";
+
+const scribble = "M2 5 C 18 1, 30 8, 48 4 S 78 7, 98 3";
+const stories = [
+  { h: "One folder", p: "A SQLite file you can open yourself.", c: "Continued below, col. 1", href: "#how" },
+  { h: "Terminal and CLI", p: "The same feeds, from any shell.", c: "Continued below, col. 2", href: "#how" },
+  { h: "MCP for agents", p: "Agents can read your feeds, too.", c: "Continued below, col. 2", href: "#how" },
+  { h: "Editable themes", p: "Newsprint, terminal, or your own.", c: "Continued below, col. 3", href: "#how" },
+];
+const faq = [
+  ["What is Weir?", "Weir is a local-first RSS reader for macOS. A small background process fetches your feeds into one SQLite database in a folder on your Mac, and the Mac app, a terminal reader, a command line program and an MCP server all read from it."],
+  ["What does it need to run?", "macOS 15 or later. Building it from source needs Zig 0.17.1 and Xcode's command line tools."],
+  ["Is there a download?", "Not yet. Weir is built from source today with three lines in a terminal. Signed prebuilt releases are planned and have no date."],
+  ["Does Weir track what I read?", "No. There is no account, no telemetry and no server of ours. Weir contacts only the sites behind your feeds, to fetch the feed and, when a feed gives only a summary, the full article. It loads publishers' images only when you allow it."],
+  ["Does it use AI?", "Not today. A daily briefing where every sentence cites the article it came from is designed and planned, and it is not built."],
+  ["Can my AI agent read my feeds?", "Yes. The rss mcp command serves your feeds, search and articles to any agent that speaks the Model Context Protocol, on your machine."],
+  ["What does it cost, and what is the licence?", "Weir is free and open source under the MIT licence."],
+];
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: site.name,
+    applicationCategory: "UtilitiesApplication",
+    operatingSystem: "macOS 15 or later",
+    description: "A local-first RSS reader for macOS. Feeds, articles and search live in one folder on your own machine.",
+    license: "https://opensource.org/license/mit",
+    isAccessibleForFree: true,
+    offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+    codeRepository: site.repo,
+    programmingLanguage: ["Zig", "Swift"],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faq.map(([q, a]) => ({ "@type": "Question", name: q, acceptedAnswer: { "@type": "Answer", text: a } })),
+  },
+];
+---
+<Base current="home" jsonLd={jsonLd}>
+  <div class="wrap">
+    <section class="hero">
+      <div>
+        <div class="kicker"><Badge />Subscribe to the whole web</div>
+        <h1>All the news you follow, <em>kept on your own Mac.</em></h1>
+        <p class="lede">{site.name} is an RSS reader that lives in one folder on your disk. No account to make, nothing tracked, images off until you allow them. Folders, full-text search and OPML import come standard.</p>
+        <div class="actions">
+          <a class="btn" href="#install" data-get-started>Get started <span class="arrow" aria-hidden="true">↓</span></a>
+          <a class="btn alt" href={url("docs/")}>Read the docs</a>
+        </div>
+        <p class="note">Built from source today. Signed prebuilt releases are planned.</p>
+      </div>
+      <div class="shot">
+        <figure>
+          <div class="frame">
+            <img class="img-day" src={url("img/app-light.webp")} width="1800" height="1130" fetchpriority="high" decoding="async" alt="The Weir app showing a list of articles beside a reading pane, in the light theme." />
+            <img class="img-night" src={url("img/app-dark.webp")} width="1800" height="1130" alt="The Weir app showing a list of articles beside a reading pane, in the dark theme." />
+            <div class="ph" id="ph" aria-hidden="true">
+              <span class="blocked">Image from cdn.example-news.com, not loaded</span>
+              <img id="photo" class="photo" src={url("img/sample.svg")} width="400" height="180" alt="" draggable="false" />
+            </div>
+          </div>
+          <figcaption>Fig. 1 · The reader. Folders, a list, and one article at a time.</figcaption>
+        </figure>
+        <div class="ribbon-wrap">
+          <div class="inset" id="inset" hidden>
+            <div class="switch-row">
+              <div><b>Load images</b><span class="s" id="switch-state" aria-live="polite">Off. Try it: flip to see what changes.</span></div>
+              <input class="switch" id="img-switch" type="checkbox" role="switch" aria-label="Load images" />
+            </div>
+            <p class="what" id="what">With images off, reading an article loads nothing from the publisher. <em>Publishers cannot see you read until you turn images on.</em></p>
+          </div>
+          <button class="ribbon" id="ribbon" type="button" aria-expanded="false" aria-controls="inset">Images off by default <span class="chev" aria-hidden="true">▾</span></button>
+        </div>
+      </div>
+    </section>
+
+    <nav class="strip" aria-label="In this edition">
+      <span class="kicker">In this edition</span>
+      {stories.map((s) => (
+        <a class="story" data-story href={s.href}>
+          <h3>{s.h}<svg class="scribble" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true"><path d={scribble} pathLength="1" vector-effect="non-scaling-stroke" /></svg></h3>
+          <p>{s.p}</p>
+          <span class="cont">{s.c}</span>
+        </a>
+      ))}
+    </nav>
+
+    <section class="block" id="how">
+      <div class="head">
+        <div><span class="kicker">How it works</span><h2>One reader, one folder, <em>every way you like to read.</em></h2></div>
+        <p class="aside">Three short columns on what runs where, and what stays yours.</p>
+      </div>
+      <div class="cols">
+        <div class="col" data-story>
+          <span class="kicker">Col. 1</span>
+          <h3>One folder</h3>
+          <p>Everything {site.name} knows sits in one folder on your Mac: a SQLite database with your feeds and articles, and a settings file beside it.</p>
+          <p>Back it up by copying the folder. Open the database with any SQLite tool. Move it from Settings and the app follows. There is no account and no server of ours in between, so nobody else keeps a record of what you read.</p>
+          <div class="tree"><div>{site.dataFolder}/</div><div>├─ rss.db <span class="dim">&nbsp;feeds, articles, search</span></div><div>└─ config.json <span class="dim">&nbsp;settings, themes</span></div></div>
+        </div>
+        <div class="col" data-story>
+          <span class="kicker">Col. 2</span>
+          <h3>Any surface, one daemon</h3>
+          <p>A small background process fetches your feeds and is the only thing that writes to the database. The Mac app, the terminal reader, the <code>{site.cli}</code> command and the MCP server all ask it through the same API, so a feed you add in one appears in all four.</p>
+          <figure class="diagram-fig" aria-label="Four ways to read, one process that writes">
+            <div class="flow">
+              <div class="row"><span class="box">Mac app</span><span class="box">{site.cli} tui</span><span class="box">{site.cli}</span><span class="box">{site.cli} mcp</span></div>
+              <span class="tick">API</span>
+              <div class="box daemon">daemon · fetches feeds, serves the API</div>
+              <span class="tick">the only writer</span>
+              <div class="box">rss.db</div>
+            </div>
+            <figcaption>Fig. 2 · Four ways to read, one process that writes.</figcaption>
+          </figure>
+        </div>
+        <div class="col" data-story>
+          <span class="kicker">Col. 3</span>
+          <h3>Yours to restyle</h3>
+          <p>Start from Newsprint, Terminal, Light or Dark, then change any color or font and keep it as your own theme. Your theme stores only what differs from its base, in the same settings file.</p>
+          <blockquote class="pull">“Articles arrive as clean text blocks. A feed’s scripts and trackers never run in the reader.”<cite>From the <a href={url("privacy/")}>privacy page</a></cite></blockquote>
+          <div class="swatches" aria-hidden="true"><i style="background:#f1eee6"></i><i style="background:#39ff88"></i><i style="background:#fff"></i><i style="background:#111"></i><i style="background:transparent;border-style:dashed;border-color:var(--orange-text)"></i><span class="small">Four bases, and yours.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="block" id="install">
+      <div class="head">
+        <div><h2>Classifieds <span class="kicker" style="margin-left:10px">Install · Section B</span></h2></div>
+        <p class="aside">Free to all readers. No account, no sign-up, no mailing list.</p>
+      </div>
+      <div class="classifieds">
+        <div data-story>
+          <span class="tag now">Available now</span> <span class="kicker" style="margin-left:8px">For macOS</span>
+          <h3>BUILD FROM SOURCE. <em>Wanted: one Mac, Zig {site.zig} and Xcode’s command line tools. Three lines in a terminal.</em></h3>
+          <Terminal />
+          <p class="small" style="margin:16px 0 0">The last line builds {site.name} and copies it to Applications. Running it again later updates the app and keeps your feeds and settings. Terminal only? <code>zig build -Drelease</code>, then <code>./zig-out/bin/{site.cli} tui</code>. <a class="more" href={url("install/")}>Full install notes →</a></p>
+        </div>
+        <div data-story>
+          <span class="tag planned">Planned</span> <span class="kicker" style="margin-left:8px">Not available yet</span>
+          <h3>SIGNED RELEASES. <em>A prebuilt, signed app you can download and open, with no build step.</em></h3>
+          <p class="small">This is on the roadmap and has no date. Until it ships, building from source is the only way to install {site.name}, and this space will not offer a download.</p>
+          <div class="dashbox">Nothing to download yet</div>
+          <p class="small" style="margin-top:16px"><a class="more" href={url("roadmap/")}>See the roadmap →</a></p>
+        </div>
+      </div>
+    </section>
+
+    <aside class="coming" aria-label="Coming" data-story>
+      <div><span class="kicker">Coming</span><br /><span class="tag planned" style="margin-top:10px">Planned</span></div>
+      <div>
+        <h3>The morning briefing, <em>with its sources in the margin.</em></h3>
+        <p class="small" style="margin:0">A short daily summary of what your feeds published, where every sentence cites the article it came from. It is designed and not yet built: {site.name} does not write summaries today.</p>
+      </div>
+      <div class="mock">“…three releases this week [1], one of them a security fix [2].”<small>Mock-up of a cited line</small></div>
+    </aside>
+
+    <section class="block faq" id="questions" aria-labelledby="faq-h">
+      <div class="head"><div><span class="kicker">Letters</span><h2 id="faq-h">Questions, <em>answered plainly.</em></h2></div></div>
+      <dl>
+        {faq.map(([q, a]) => (<div><dt>{q}</dt><dd>{a}</dd></div>))}
+      </dl>
+    </section>
+  </div>
+</Base>

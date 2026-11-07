@@ -1,0 +1,35 @@
+---
+import { getCollection, render } from "astro:content";
+import Base from "../../layouts/Base.astro";
+import Docs from "../../components/Docs.astro";
+import { site, url } from "../../site";
+import { docSummary } from "../../docs-meta";
+
+export async function getStaticPaths() {
+  const all = await getCollection("docs");
+  return all
+    .filter((e) => e.id !== "roadmap")
+    .map((entry) => ({ params: { slug: entry.id }, props: { entry } }));
+}
+const { entry } = Astro.props;
+const { Content, headings } = await render(entry);
+const title = headings.find((h) => h.depth === 1)?.text ?? entry.id;
+const description = docSummary(entry.body ?? "", `${title}: a design document of Weir.`);
+const abs = (p: string) => (Astro.site ? new URL(url(p), Astro.site).href : url(p));
+const jsonLd = [
+  { "@context": "https://schema.org", "@type": "TechArticle", headline: title, description, inLanguage: "en",
+    isPartOf: { "@type": "WebSite", name: site.name }, mainEntityOfPage: abs(`docs/${entry.id}/`) },
+  { "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [
+    { "@type": "ListItem", position: 1, name: site.name, item: abs("") },
+    { "@type": "ListItem", position: 2, name: "Docs", item: abs("docs/") },
+    { "@type": "ListItem", position: 3, name: title, item: abs(`docs/${entry.id}/`) } ] },
+];
+---
+<Base title={title} current="docs" description={description} jsonLd={jsonLd}>
+  <div class="wrap">
+    <div class="page">
+      <Docs current={entry.id} />
+      <article class="prose"><Content /></article>
+    </div>
+  </div>
+</Base>

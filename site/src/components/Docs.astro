@@ -1,0 +1,24 @@
+---
+import { getCollection } from "astro:content";
+import { url } from "../site";
+
+const { current = "" } = Astro.props;
+const all = await getCollection("docs");
+const guides = ["architecture", "api", "aggregator", "rss-primer"].map((id) => all.find((e) => e.id === id)).filter(Boolean);
+const decisions = all.filter((e) => e.id.startsWith("decisions/")).sort((a, b) => a.id.localeCompare(b.id));
+const label: Record<string, string> = {
+  architecture: "Architecture", api: "Operations and protocols", aggregator: "The AI pipeline", "rss-primer": "Feed formats and HTTP",
+};
+---
+<aside class="side" aria-label="Documents">
+  <h4>Guides</h4>
+  <ul>
+    <li><a href={url("docs/")} aria-current={current === "" ? "page" : undefined}>Overview</a></li>
+    {guides.map((g) => <li><a href={url(`docs/${g!.id}/`)} aria-current={current === g!.id ? "page" : undefined}>{label[g!.id]}</a></li>)}
+    <li><a href={url("roadmap/")}>Roadmap</a></li>
+  </ul>
+  <h4>Decisions</h4>
+  <ul>
+    {decisions.map((d) => <li><a href={url(`docs/${d.id}/`)} aria-current={current === d.id ? "page" : undefined}>{d.id.replace("decisions/", "").replace(/^\d+-/, "").replace(/-/g, " ")}</a></li>)}
+  </ul>
+</aside>

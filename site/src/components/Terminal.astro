@@ -1,0 +1,10 @@
+---
+import { installCommands, site } from "../site";
+const lines = installCommands(site);
+---
+<div class="term">
+  <div class="bar"><span>Terminal · installs the app</span><button class="copy" type="button" data-copy>Copy</button></div>
+  <pre id="commands" tabindex="0" aria-label="Install commands">{lines.map((l, i) => (
+    <span data-line={l}><span class="p">$ </span>{l}{i < lines.length - 1 ? "\n" : ""}</span>
+  ))}</pre>
+</div>
