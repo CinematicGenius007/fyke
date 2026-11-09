@@ -1,7 +1,7 @@
 // Serves the built site from dist/. A missing path returns dist/404.html with status 404.
 {
-  "name": "weir",
+  "name": "fyke",
   "compatibility_date": "2026-11-01",
-  "routes": [{ "pattern": "weir.cinematicgenius007.com", "custom_domain": true }],
+  "routes": [{ "pattern": "fyke.cinematicgenius007.com", "custom_domain": true }],
   "assets": { "directory": "./dist", "not_found_handling": "404-page" }
 }

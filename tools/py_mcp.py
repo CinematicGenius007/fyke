@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Runs the official Python MCP client against `rss mcp`.
+"""Runs the official Python MCP client against `fyke mcp`.
 
-Usage: py_mcp.py <path-to-rss>     (needs: pip install mcp, and RSS_HOME with data)
+Usage: py_mcp.py <path-to-fyke>     (needs: pip install mcp, and FYKE_HOME with data)
 """
 import asyncio, json, os, sys
 from mcp import ClientSession, StdioServerParameters, stdio_client

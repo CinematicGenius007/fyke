@@ -2,7 +2,7 @@
 
 Local-first RSS reader with AI aggregation, built from scratch. One daemon owns a SQLite database; the GUI, TUI, CLI and MCP server are thin clients of one API.
 
-Status: milestones 1 to 6 are implemented: parser, HTML to blocks, fetcher, SQLite store, daemon, operation registry, the `rss` CLI as a socket client, `rss mcp`, `rss tui`, `rss service` and the SwiftUI app in `gui/`. No aggregator yet. `spikes/` is throwaway. Language: Zig 0.17.1 core, SwiftUI macOS GUI.
+Status: milestones 1 to 6 are implemented: parser, HTML to blocks, fetcher, SQLite store, daemon, operation registry, the `fyke` CLI as a socket client, `fyke mcp`, `fyke tui`, `fyke service` and the SwiftUI app in `gui/`. No aggregator yet. `spikes/` is throwaway. Language: Zig 0.17.1 core, SwiftUI macOS GUI.
 
 ## Read in this order
 
@@ -49,25 +49,27 @@ python3 tools/fetch_corpus.py smallweb.txt  # downloads corpus/, not committed
 python3 tools/oracle.py corpus dump.jsonl   # compares with Python's XML parser
 ./zig-out/bin/feedcheck corpus --html-dump > html.jsonl
 python3 tools/oracle_html.py html.jsonl     # compares with Python's HTML parser
-python3 tools/e2e.py ./zig-out/bin/rss      # full behavior against a recording server
-python3 tools/e2e_daemon.py ./zig-out/bin/rss  # socket, tiers, events, OPML, crash recovery
-python3 tools/e2e_mcp.py ./zig-out/bin/rss     # MCP protocol, both eras
+python3 tools/e2e.py ./zig-out/bin/fyke      # full behavior against a recording server
+python3 tools/e2e_daemon.py ./zig-out/bin/fyke  # socket, tiers, events, OPML, crash recovery
+python3 tools/e2e_mcp.py ./zig-out/bin/fyke     # MCP protocol, both eras
+python3 tools/e2e_service.py ./zig-out/bin/fyke  # service install, status, uninstall, with a stand-in service manager
+python3 tools/e2e_container.py                  # builds for Linux and runs every script above in Docker
 python3 -m venv .venv && .venv/bin/pip install pyte mcp  # Python test dependencies
-.venv/bin/python tools/e2e_tui.py ./zig-out/bin/rss  # real pseudo-terminal
-.venv/bin/python tools/py_mcp.py ./zig-out/bin/rss  # official Python client
-python3 tools/mcp_http_bridge.py ./zig-out/bin/rss  # then, in another shell:
+.venv/bin/python tools/e2e_tui.py ./zig-out/bin/fyke  # real pseudo-terminal
+.venv/bin/python tools/py_mcp.py ./zig-out/bin/fyke  # official Python client
+python3 tools/mcp_http_bridge.py ./zig-out/bin/fyke  # then, in another shell:
 npx @modelcontextprotocol/conformance@0.1.16 server --url http://127.0.0.1:8931/mcp --suite all --spec-version 2025-11-25 --expected-failures tools/conformance-baseline.yml
-node tools/sdk_mcp.mjs ./zig-out/bin/rss modern  # official client; see the file for setup
+node tools/sdk_mcp.mjs ./zig-out/bin/fyke modern  # official client; see the file for setup
 python3 tools/eval_extract.py ./zig-out/bin/feedcheck html.jsonl dump.jsonl  # sends real requests
-python3 tools/load_corpus.py ./zig-out/bin/rss corpus dump.jsonl
-python3 tools/scale.py ./zig-out/bin/rss local corpus 1000
+python3 tools/load_corpus.py ./zig-out/bin/fyke corpus dump.jsonl
+python3 tools/scale.py ./zig-out/bin/fyke local corpus 1000
 python3 tools/e2e_gui.py                    # key presses and clicks in the app, after bundle_app.py
-python3 tools/bundle_app.py                 # builds zig-out/rss_.app; --install copies it to /Applications
+python3 tools/bundle_app.py                 # builds zig-out/Fyke.app; --install copies it to /Applications
 python3 tools/gen_tokens.py                 # gui/tokens.css to Tokens.swift
 cd site && pnpm install && pnpm build        # the website, which renders docs/ ; pnpm dev to preview
 ```
 
-Colors, fonts and radii are designed in the Paper file. Export them to `gui/tokens.css`, regenerate, and never edit `Tokens.swift`. The reading default must be a font in `gui/Fonts`, which `gen_tokens.py` checks. Anything else is chosen in Settings, on the machine that has it, and is stored in `config.json` under `ui`. `RSS_KEYS` plays key presses and clicks and quits, as `tools/e2e_gui.py` shows. `RSS_SNAPSHOT=out.png` makes the app save its window and quit, with `RSS_SCREEN` choosing a screen and `-theme dark -followSystem NO` a theme. Use `RSS_HOME` so that checks never touch real data.
+Colors, fonts and radii are designed in the Paper file. Export them to `gui/tokens.css`, regenerate, and never edit `Tokens.swift`. The reading default must be a font in `gui/Fonts`, which `gen_tokens.py` checks. Anything else is chosen in Settings, on the machine that has it, and is stored in `config.json` under `ui`. `FYKE_KEYS` plays key presses and clicks and quits, as `tools/e2e_gui.py` shows. `FYKE_SNAPSHOT=out.png` makes the app save its window and quit, with `FYKE_SCREEN` choosing a screen and `-theme dark -followSystem NO` a theme. Use `FYKE_HOME` so that checks never touch real data.
 
 A new capability is a struct in `src/ops.zig`. Add it to `all`, and the socket and MCP serve it. Give it `docs` for its parameters, or `agent_visible = false`.
 

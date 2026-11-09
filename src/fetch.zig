@@ -15,7 +15,7 @@ const max_redirects = 5;
 const max_body = 32 * 1024 * 1024;
 
 /// Sent with every request. Publishers read this to see who is polling them.
-pub const user_agent = "rss_/0.1 (feed reader)";
+pub const user_agent = "fyke/0.1 (feed reader)";
 
 pub const Request = struct {
     url: []const u8,

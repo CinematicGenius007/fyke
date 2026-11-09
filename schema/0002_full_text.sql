@@ -1,4 +1,4 @@
--- rss_ schema, version 2: articles fetched from their web pages.
+-- Fyke schema, version 2: articles fetched from their web pages.
 --
 -- Many feeds carry only a summary. The daemon fetches the page and replaces the
 -- entry's content with what it extracts, so that search, readers and agents all

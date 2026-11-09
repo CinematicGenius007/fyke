@@ -4,7 +4,7 @@ import Badge from "../components/Badge.astro";
 import { site, url } from "../site";
 
 interface Props { title?: string; description?: string; current?: string; jsonLd?: object[]; noindex?: boolean; }
-const { title, description = "Weir is a local-first RSS reader for macOS. Your feeds, articles and search live in one folder on your own machine.", current = "", jsonLd = [], noindex = false } = Astro.props;
+const { title, description = "Fyke is a local-first RSS reader for macOS. Your feeds, articles and search live in one folder on your own machine.", current = "", jsonLd = [], noindex = false } = Astro.props;
 // Absolute addresses need SITE_URL. Without it the tags use site-relative paths, which is fine for a local preview.
 const abs = (path: string) => (Astro.site ? new URL(path, Astro.site).href : path);
 const canonical = Astro.site ? new URL(Astro.url.pathname, Astro.site).href : undefined;
@@ -39,7 +39,7 @@ const nav = (key: string) => (current === key ? "page" : undefined);
     <meta property="og:image" content={ogImage} />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Weir, a local-first RSS reader for macOS, with its feed badge and the app window." />
+    <meta property="og:image:alt" content="Fyke, a local-first RSS reader for macOS, with its feed badge and the app window." />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={full} />
     <meta name="twitter:description" content={description} />
@@ -50,7 +50,7 @@ const nav = (key: string) => (current === key ? "page" : undefined);
       // Set the edition before first paint so the page never flashes the other one.
       (function () {
         var saved = null;
-        try { saved = localStorage.getItem("weir-edition"); } catch (e) {}
+        try { saved = localStorage.getItem("fyke-edition"); } catch (e) {}
         var night = saved ? saved === "night" : matchMedia("(prefers-color-scheme: dark)").matches;
         if (night) document.documentElement.dataset.theme = "night";
         document.documentElement.classList.remove("nojs");

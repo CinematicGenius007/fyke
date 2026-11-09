@@ -45,7 +45,7 @@ final class DataMove {
 
         var text: String {
             switch self {
-            case .external: "This is an external drive. If it is not connected, rss_ cannot start."
+            case .external: "This is an external drive. If it is not connected, Fyke cannot start."
             case .noSpace: "There is not enough free space there."
             }
         }
@@ -99,7 +99,7 @@ final class AppModel {
     var web: WebState?
     var fullTextStatus: String?
     var dataMove: DataMove?
-    var settingsTab = SettingsView.Tab(rawValue: ProcessInfo.processInfo.environment["RSS_TAB"] ?? "") ?? .General
+    var settingsTab = SettingsView.Tab(rawValue: ProcessInfo.processInfo.environment["FYKE_TAB"] ?? "") ?? .General
 
     private var pendingReload: Task<Void, Never>?
 
@@ -178,11 +178,11 @@ final class AppModel {
         }
     }
 
-    /// `RSS_SCREEN` opens one screen at launch, for rendering checks.
+    /// `FYKE_SCREEN` opens one screen at launch, for rendering checks.
     private func openRequestedScreen() async {
-        switch ProcessInfo.processInfo.environment["RSS_SCREEN"] {
+        switch ProcessInfo.processInfo.environment["FYKE_SCREEN"] {
         case "feed":
-            let index = Int(ProcessInfo.processInfo.environment["RSS_FEED"] ?? "") ?? 0
+            let index = Int(ProcessInfo.processInfo.environment["FYKE_FEED"] ?? "") ?? 0
             guard feeds.indices.contains(index) else { return }
             go(to: .feed(feeds[index].id))
             try? await Task.sleep(for: .milliseconds(300))
@@ -190,27 +190,27 @@ final class AppModel {
         case "briefing": go(to: .briefing)
         case "shortcuts": showingShortcuts = true
         case "web":
-            if let url = URL(string: ProcessInfo.processInfo.environment["RSS_ADDRESS"] ?? "") { web = WebState(address: url) }
+            if let url = URL(string: ProcessInfo.processInfo.environment["FYKE_ADDRESS"] ?? "") { web = WebState(address: url) }
         case "delete-folder":
             if let folder = folders.first { confirmation = .deleteFolder(folder) }
         case "search":
             search.show()
-            search.query = ProcessInfo.processInfo.environment["RSS_QUERY"] ?? ""
+            search.query = ProcessInfo.processInfo.environment["FYKE_QUERY"] ?? ""
             search.run()
         case "add":
-            AddFeedDraft.shared.address = ProcessInfo.processInfo.environment["RSS_ADDRESS"] ?? ""
+            AddFeedDraft.shared.address = ProcessInfo.processInfo.environment["FYKE_ADDRESS"] ?? ""
             showingAddFeed = true
         default: break
         }
     }
 
-    /// `RSS_MOVE` asks about moving the data folder at launch, and `RSS_MOVE_RUN` agrees,
+    /// `FYKE_MOVE` asks about moving the data folder at launch, and `FYKE_MOVE_RUN` agrees,
     /// for checks that cannot click a file panel.
     private func openRequestedMove() async {
         let environment = ProcessInfo.processInfo.environment
-        guard let path = environment["RSS_MOVE"] else { return }
+        guard let path = environment["FYKE_MOVE"] else { return }
         await proposeMove(to: URL(filePath: path))
-        if environment["RSS_MOVE_RUN"] != nil { startMove() }
+        if environment["FYKE_MOVE_RUN"] != nil { startMove() }
     }
 
     /// A poll can produce hundreds of events at once. One reload covers them.
@@ -552,9 +552,9 @@ final class AppModel {
         func isEmpty(_ url: URL) -> Bool { ((try? manager.contentsOfDirectory(atPath: url.path)) ?? []).isEmpty }
         var target = chosen
         if !isEmpty(chosen) {
-            target = chosen.appending(path: "rss_data")
+            target = chosen.appending(path: "fyke_data")
             if manager.fileExists(atPath: target.path) && !isEmpty(target) {
-                problem = "That folder already holds a rss_data folder"
+                problem = "That folder already holds a fyke_data folder"
                 return
             }
         }
@@ -581,7 +581,7 @@ final class AppModel {
         dataMove = DataMove(target: target, bytes: bytes, warning: warning)
     }
 
-    /// Runs `rss data move`, so that the work of stopping the daemon, moving files and
+    /// Runs `fyke data move`, so that the work of stopping the daemon, moving files and
     /// restarting is in one place that the terminal uses too.
     func startMove() {
         guard let move = dataMove, move.phase == .asking, move.warning != .noSpace else { return }
@@ -601,7 +601,7 @@ final class AppModel {
             } else {
                 // Past "starting" the data and the link are in place, and only the restart failed.
                 let moved = result.output.contains("starting")
-                move.phase = .failed(moved ? "Your data moved, but rss_ could not restart. Opening rss_ again usually fixes this." : Self.moveFailure(result.errors))
+                move.phase = .failed(moved ? "Your data moved, but Fyke could not restart. Opening Fyke again usually fixes this." : Self.moveFailure(result.errors))
                 await reload()
             }
         }
@@ -641,7 +641,7 @@ final class AppModel {
             ("InsideCurrentFolder", "That folder is inside the one in use."),
             ("ParentMissing", "That folder's location does not exist."),
             ("NoSpaceLeft", "There was not enough free space."),
-            ("DaemonStillRunning", "rss_ could not stop its background service."),
+            ("DaemonStillRunning", "Fyke could not stop its background service."),
             ("VerifyFailed", "The copy did not match, so nothing was changed."),
         ]
         let reason = reasons.first { text.contains($0.0) }?.1 ?? "Something went wrong."

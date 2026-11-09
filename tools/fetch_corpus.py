@@ -55,7 +55,7 @@ def get(url):
     name = hashlib.sha1(url.encode()).hexdigest()[:16] + ".feed"
     path = os.path.join("corpus", name)
     p = subprocess.run(["curl", "-sSL", "--compressed", "--max-time", "20", "--max-filesize", "33554432",
-                        "-A", "rss_/0.1 (feed reader in development)", "-o", path,
+                        "-A", "fyke/0.1 (feed reader in development)", "-o", path,
                         "-w", "%{http_code}\t%{content_type}", url], capture_output=True, text=True)
     status, _, ctype = p.stdout.partition("\t")
     if p.returncode != 0 or status != "200":

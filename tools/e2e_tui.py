@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Tests `rss tui` in a real pseudo-terminal, reading the screen through pyte, an
+"""Tests `fyke tui` in a real pseudo-terminal, reading the screen through pyte, an
 independent terminal emulator.
 
-Usage: e2e_tui.py <path-to-rss> [monkey-keys]     (needs: pip install pyte)
+Usage: e2e_tui.py <path-to-fyke> [monkey-keys]     (needs: pip install pyte)
 """
 import fcntl, http.server, json, os, pty, random, re, select, shutil, signal, socketserver, sqlite3, stat, struct
 import subprocess, sys, tempfile, termios, threading, time
@@ -10,10 +10,10 @@ import pyte
 
 RSS = os.path.abspath(sys.argv[1])
 MONKEY = int(sys.argv[2]) if len(sys.argv) > 2 else 20000
-home = tempfile.mkdtemp(prefix="rss-t-", dir="/tmp")
-shim = tempfile.mkdtemp(prefix="rss-b-", dir="/tmp")
+home = tempfile.mkdtemp(prefix="fyke-t-", dir="/tmp")
+shim = tempfile.mkdtemp(prefix="fyke-b-", dir="/tmp")
 opened = shim + "/opened.txt"
-env = dict(os.environ, RSS_HOME=home, TERM="xterm-256color", PATH=shim + ":" + os.environ["PATH"])
+env = dict(os.environ, FYKE_HOME=home, TERM="xterm-256color", PATH=shim + ":" + os.environ["PATH"])
 open(home + "/config.json", "w").write('{"auto_poll": false}')
 # A stand-in for the browser opener, which records exactly what it was given.
 for name in ("open", "xdg-open", "terminal-browser"):
@@ -286,7 +286,7 @@ for columns, rows, needle in ((200, 50, "Main Feed"), (90, 30, "Feeds"), (60, 20
     check(f"borders stay straight at {columns}x{rows}", len(separators(t)) <= 2, separators(t))
 
 # Daemon loss
-pid = int(subprocess.run(["lsof", "-t", home + "/rssd.lock"], capture_output=True, text=True).stdout.split()[0])
+pid = int(subprocess.run(["lsof", "-t", home + "/fyked.lock"], capture_output=True, text=True).stdout.split()[0])
 os.kill(pid, signal.SIGKILL)
 time.sleep(0.2)
 t.keys("j", 0.5); t.keys("k", 0.5)

@@ -1,4 +1,4 @@
--- rss_ schema, version 4: finding the fetches that share a stored body.
+-- Fyke schema, version 4: finding the fetches that share a stored body.
 --
 -- Housekeeping and unsubscribing look up `fetch_log` by body hash while holding the
 -- writer lock, so that lookup must not scan the table.

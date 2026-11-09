@@ -27,7 +27,7 @@ pub fn build(b: *std.Build) void {
         .flags = &.{ "-DSQLITE_ENABLE_FTS5", "-DSQLITE_ENABLE_DBSTAT_VTAB", "-DSQLITE_DQS=0", "-DSQLITE_THREADSAFE=2", "-O3", "-fno-sanitize=undefined" },
     });
 
-    b.installArtifact(b.addExecutable(.{ .name = "rss", .root_module = app }));
+    b.installArtifact(b.addExecutable(.{ .name = "fyke", .root_module = app }));
 
     const feedcheck = b.addExecutable(.{
         .name = "feedcheck",

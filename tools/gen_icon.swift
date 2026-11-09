@@ -31,7 +31,7 @@ let inset = (canvas - tile) / 2
 ground.setFill()
 NSBezierPath(roundedRect: NSRect(x: inset, y: inset, width: tile, height: tile), xRadius: corner, yRadius: corner).fill()
 
-let text = NSAttributedString(string: "rss_", attributes: [.font: font, .foregroundColor: NSColor.white, .kern: -0.03 * fontSize])
+let text = NSAttributedString(string: "fyke", attributes: [.font: font, .foregroundColor: NSColor.white, .kern: -0.03 * fontSize])
 let size = text.size()
 text.draw(at: NSPoint(x: (canvas - size.width) / 2, y: (canvas - size.height) / 2 + 20))
 

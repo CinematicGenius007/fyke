@@ -14,7 +14,7 @@ export async function getStaticPaths() {
 const { entry } = Astro.props;
 const { Content, headings } = await render(entry);
 const title = headings.find((h) => h.depth === 1)?.text ?? entry.id;
-const description = docSummary(entry.body ?? "", `${title}: a design document of Weir.`);
+const description = docSummary(entry.body ?? "", `${title}: a design document of Fyke.`);
 const abs = (p: string) => (Astro.site ? new URL(url(p), Astro.site).href : url(p));
 const jsonLd = [
   { "@context": "https://schema.org", "@type": "TechArticle", headline: title, description, inLanguage: "en",

@@ -9,9 +9,9 @@ read, since opening an article is the one effect that outlives the window.
 import http.server, json, os, pathlib, shutil, socketserver, subprocess, sys, tempfile, threading
 
 root = pathlib.Path(__file__).resolve().parent.parent
-app = root / "zig-out/rss_.app/Contents/MacOS"
-home = tempfile.mkdtemp(prefix="rss-g-", dir="/tmp")
-env = dict(os.environ, RSS_HOME=home, RSS_BIN=str(app / "rss"))
+app = root / "zig-out/Fyke.app/Contents/MacOS"
+home = tempfile.mkdtemp(prefix="fyke-g-", dir="/tmp")
+env = dict(os.environ, FYKE_HOME=home, FYKE_BIN=str(app / "fyke"))
 passed = 0
 
 ITEMS = "".join(f"<item><title>Needle {name}</title><guid>{name}</guid><pubDate>{day} Nov 2026 09:00:00 GMT</pubDate><description>needle text</description></item>"
@@ -32,7 +32,7 @@ threading.Thread(target=server.serve_forever, daemon=True).start()
 
 
 def rss(*args):
-    return subprocess.run([str(app / "rss"), *args], env=env, capture_output=True, text=True, timeout=60, check=True).stdout
+    return subprocess.run([str(app / "fyke"), *args], env=env, capture_output=True, text=True, timeout=60, check=True).stdout
 
 
 def read_titles():
@@ -44,7 +44,7 @@ def play(name, keys, expected):
     global passed
     for entry in json.loads(rss("list", "--json"))["items"]:
         rss("mark", str(entry["id"]), "--unread")
-    subprocess.run([str(app / "Reader"), "-theme", "light", "-followSystem", "NO"], env=dict(env, RSS_KEYS=keys),
+    subprocess.run([str(app / "Reader"), "-theme", "light", "-followSystem", "NO"], env=dict(env, FYKE_KEYS=keys),
                    capture_output=True, timeout=60)
     got = read_titles()
     if got != expected:
@@ -77,7 +77,7 @@ def themes(name, start, keys, check):
     config = json.loads(path.read_text())
     config["ui"] = start
     path.write_text(json.dumps(config))
-    subprocess.run([str(app / "Reader")], env=dict(env, RSS_KEYS="t wait " + keys + " wait", RSS_SCREEN="feed"), capture_output=True, timeout=60)
+    subprocess.run([str(app / "Reader")], env=dict(env, FYKE_KEYS="t wait " + keys + " wait", FYKE_SCREEN="feed"), capture_output=True, timeout=60)
     ui = json.loads(path.read_text())["ui"]
     if not check(ui):
         print(f"FAIL {name}: {ui}")
@@ -99,7 +99,7 @@ themes("a built-in saves as a new theme instead", {"theme": "light", "follow_sys
 # The divider between the article list and the reader drags, and keeps where it was left.
 config_path = pathlib.Path(home) / "config.json"
 before_width = json.loads(config_path.read_text()).get("ui", {}).get("list_width", 375)
-subprocess.run([str(app / "Reader")], env=dict(env, RSS_SCREEN="feed", RSS_FEED="0", RSS_KEYS="wait drag:611,500,691,500 wait wait"), capture_output=True, timeout=60)
+subprocess.run([str(app / "Reader")], env=dict(env, FYKE_SCREEN="feed", FYKE_FEED="0", FYKE_KEYS="wait drag:611,500,691,500 wait wait"), capture_output=True, timeout=60)
 width = json.loads(config_path.read_text()).get("ui", {}).get("list_width")
 if width is None or abs(width - (before_width + 80)) > 2:
     print(f"FAIL the divider drags: {before_width} to {width}")
@@ -107,11 +107,11 @@ if width is None or abs(width - (before_width + 80)) > 2:
 print("ok   dragging the divider widens the article list and saves it")
 passed += 1
 
-# The data folder move. RSS_HOME is set, so the command refuses, which is the failure
+# The data folder move. FYKE_HOME is set, so the command refuses, which is the failure
 # path: it must hand control back, and leave the data and the daemon as they were.
 before = rss("feeds", "--json")
-moved = tempfile.mkdtemp(prefix="rss-mv-", dir="/tmp")
-subprocess.run([str(app / "Reader")], env=dict(env, RSS_SCREEN="settings", RSS_TAB="General", RSS_MOVE=moved + "/data", RSS_MOVE_RUN="1", RSS_KEYS="wait wait wait wait"),
+moved = tempfile.mkdtemp(prefix="fyke-mv-", dir="/tmp")
+subprocess.run([str(app / "Reader")], env=dict(env, FYKE_SCREEN="settings", FYKE_TAB="General", FYKE_MOVE=moved + "/data", FYKE_MOVE_RUN="1", FYKE_KEYS="wait wait wait wait"),
                capture_output=True, timeout=60)
 if rss("feeds", "--json") != before or os.path.exists(moved + "/data"):
     print("FAIL a refused move changes nothing")

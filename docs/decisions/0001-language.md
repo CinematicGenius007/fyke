@@ -122,7 +122,7 @@ Built with `zig build`, FTS5 on, hand-written externs. 1,000,000 synthetic entri
 
 Relevance ranking must score every match, and the common terms here appear in up to 98% of rows, which is close to worst case. Limiting ranking to recent rows helps but does not reach the budget: on that same term, the latest 50,000 rows took 140 ms and the latest 10,000 took 40 ms (single runs). So search defaults to newest first, and relevance is opt-in and limited to a recent window.
 
-Read-only access also has a trap. After a clean shutdown of the last connection, the `-wal` and `-shm` files are gone, and `sqlite3 -readonly` fails with error 14. It works while the daemon runs, and `file:rss.db?immutable=1` works while it does not.
+Read-only access also has a trap. After a clean shutdown of the last connection, the `-wal` and `-shm` files are gone, and `sqlite3 -readonly` fails with error 14. It works while the daemon runs, and `file:fyke.db?immutable=1` works while it does not.
 
 ### 3. SwiftUI over a socket: pass
 

@@ -1,4 +1,4 @@
--- rss_ schema, version 1.
+-- Fyke schema, version 1.
 --
 -- This file is the source of truth for the data model and is written to be read
 -- by people and agents. Conventions:

@@ -2,13 +2,13 @@
 """Tests the daemon itself: the socket protocol, permissions, tiers, live events,
 OPML, recovery from a crash, and background polling.
 
-Usage: e2e_daemon.py <path-to-rss>
+Usage: e2e_daemon.py <path-to-fyke>
 """
 import collections, http.server, json, os, shutil, signal, socket, socketserver, sqlite3, stat, subprocess, sys, tempfile, threading, time
 
 RSS = os.path.abspath(sys.argv[1])
-home = tempfile.mkdtemp(prefix="rss-d-", dir="/tmp")  # Short, for the socket path limit.
-env = dict(os.environ, RSS_HOME=home)
+home = tempfile.mkdtemp(prefix="fyke-d-", dir="/tmp")  # Short, for the socket path limit.
+env = dict(os.environ, FYKE_HOME=home)
 requests = []
 posts = {"count": 1}
 
@@ -44,7 +44,7 @@ def rss(*args, ok=True):
 class Raw:
     """A hand-written client, to send what the CLI never would."""
     def __init__(self):
-        self.s = socket.socket(socket.AF_UNIX); self.s.settimeout(10); self.s.connect(home + "/rssd.sock"); self.f = self.s.makefile("rb")
+        self.s = socket.socket(socket.AF_UNIX); self.s.settimeout(10); self.s.connect(home + "/fyked.sock"); self.f = self.s.makefile("rb")
     def line(self, text):
         self.s.sendall(text.encode() + b"\n"); return json.loads(self.f.readline())
     def call(self, method, **params):
@@ -54,7 +54,7 @@ passed = 0
 def check(name, condition, detail=""):
     global passed
     if not condition:
-        print(f"FAIL {name} {detail}"); print(open(home + "/rssd.log").read()[-800:] if os.path.exists(home + "/rssd.log") else ""); sys.exit(1)
+        print(f"FAIL {name} {detail}"); print(open(home + "/fyked.log").read()[-800:] if os.path.exists(home + "/fyked.log") else ""); sys.exit(1)
     passed += 1; print(f"ok   {name}")
 
 def wait_for(predicate, seconds=10):
@@ -72,7 +72,7 @@ out = rss("status").stdout
 check("client starts the daemon", "0 feeds" in out, out)
 print(f"     cold start including daemon: {(time.time() - start) * 1000:.0f} ms")
 check("data directory is owner-only", stat.S_IMODE(os.stat(home).st_mode) == 0o700, oct(os.stat(home).st_mode))
-check("socket is owner-only", stat.S_IMODE(os.stat(home + "/rssd.sock").st_mode) == 0o600)
+check("socket is owner-only", stat.S_IMODE(os.stat(home + "/fyked.sock").st_mode) == 0o600)
 p = subprocess.run([RSS, "daemon"], env=env, capture_output=True, text=True, timeout=10)
 check("a second daemon refuses to start", p.returncode == 1 and "AlreadyRunning" in p.stderr, p.stderr)
 check("first daemon survives that", rss("status").returncode == 0)
@@ -95,7 +95,7 @@ check("connection survives errors", "result" in c.call("stats.get"))
 names = [i["name"] for i in c.call("ops.list")["result"]["items"]]
 check("ops.list describes the registry", "entries.search" in names and "db.query" in names, names)
 
-big = socket.socket(socket.AF_UNIX); big.settimeout(10); big.connect(home + "/rssd.sock")
+big = socket.socket(socket.AF_UNIX); big.settimeout(10); big.connect(home + "/fyked.sock")
 try:
     big.sendall(b"x" * (3 << 20) + b"\n")
 except OSError:
@@ -282,8 +282,8 @@ check("import is repeatable", "0 added, 3 already" in out, out)
 exported = rss("export").stdout
 open(path + ".out", "w").write(exported)
 check("export keeps nesting and escapes", 'text="Zig"' in exported and "a?x=1&amp;y=2" in exported and "<outline text=\"Tech\">" in exported, exported)
-home2 = tempfile.mkdtemp(prefix="rss-e-", dir="/tmp")
-env2 = dict(os.environ, RSS_HOME=home2)
+home2 = tempfile.mkdtemp(prefix="fyke-e-", dir="/tmp")
+env2 = dict(os.environ, FYKE_HOME=home2)
 open(home2 + "/config.json", "w").write('{"auto_poll": false}')
 p = subprocess.run([RSS, "import", path + ".out", "--allow-private"], env=env2, capture_output=True, text=True, timeout=30)
 check("exported file imports elsewhere", "4 added" in p.stdout, p.stdout + p.stderr)
@@ -306,14 +306,14 @@ out = rss("refresh", "1").stdout
 check("feed still works after pruning", "1 new" in out, out)
 
 # Crash
-out = subprocess.run(["lsof", "-t", home + "/rssd.lock"], capture_output=True, text=True).stdout.split()
+out = subprocess.run(["lsof", "-t", home + "/fyked.lock"], capture_output=True, text=True).stdout.split()
 pid = int(out[0])
 os.kill(pid, signal.SIGKILL)
 time.sleep(0.2)
-check("stale socket remains after kill -9", os.path.exists(home + "/rssd.sock"))
+check("stale socket remains after kill -9", os.path.exists(home + "/fyked.sock"))
 status = json.loads(rss("status", "--json").stdout)
 check("next client restarts the daemon and data survives", status["entries"] == 40, status)
-check("database intact after kill", sqlite3.connect(home + "/rss.db").execute("pragma integrity_check").fetchone()[0] == "ok")
+check("database intact after kill", sqlite3.connect(home + "/fyke.db").execute("pragma integrity_check").fetchone()[0] == "ok")
 
 # Stopping must answer the client every time, which it once raced with exiting.
 for _ in range(25):
@@ -323,9 +323,9 @@ for _ in range(25):
 check("stop always answers", p.returncode == 0, p.stderr)
 
 # Background polling
-check("stop removes the socket", wait_for(lambda: not os.path.exists(home + "/rssd.sock")))
+check("stop removes the socket", wait_for(lambda: not os.path.exists(home + "/fyked.sock")))
 open(home + "/config.json", "w").write('{"auto_poll": true, "min_poll_seconds": 1}')
-db = sqlite3.connect(home + "/rss.db"); db.execute("update feeds set next_fetch_at=0, poll_seconds=1"); db.commit(); db.close()
+db = sqlite3.connect(home + "/fyke.db"); db.execute("update feeds set next_fetch_at=0, poll_seconds=1"); db.commit(); db.close()
 requests.clear()
 posts["count"] = 41
 rss("status")
@@ -358,9 +358,9 @@ extreme.call("daemon.housekeep")
 raw_files = sum(len(names) for _, _, names in os.walk(home + "/raw"))
 check("bad bodies stay within retention", raw_files <= 40, raw_files)
 
-with open(home + "/rssd.log", "a") as log: log.write("marker\n")
+with open(home + "/fyked.log", "a") as log: log.write("marker\n")
 check("a second daemon refuses to start", rss("daemon", "--log", ok=False).returncode != 0)
-check("and leaves the running daemon's log alone", "marker" in open(home + "/rssd.log").read())
+check("and leaves the running daemon's log alone", "marker" in open(home + "/fyked.log").read())
 
 # Full text after failures: this part needs the background loop
 flaky = {"up": False, "hits": collections.Counter()}
@@ -394,7 +394,7 @@ check("asking by hand reports later", later["result"]["status"] == "later", late
 check("and leaves the entry waiting", full_row("Flaky")[0] is None)
 
 rss("daemon", "stop")
-db = sqlite3.connect(home + "/rss.db"); db.execute("update entries set full_retry_at = 0 where title in ('Flaky', 'Gone')"); db.commit(); db.close()
+db = sqlite3.connect(home + "/fyke.db"); db.execute("update entries set full_retry_at = 0 where title in ('Flaky', 'Gone')"); db.commit(); db.close()
 flaky["up"] = True
 rss("status")
 check("the retry fetches the article", wait_for(lambda: full_row("Flaky")[0] == "done", 15), full_row("Flaky"))
@@ -419,14 +419,14 @@ check("and costs at most the two tries before it was noticed", sum(tries for _, 
 rss("daemon", "stop")
 
 # Folders, feeds and storage
-ops_home = tempfile.mkdtemp(prefix="rss-o-", dir="/tmp")
-env_ops = dict(os.environ, RSS_HOME=ops_home)
+ops_home = tempfile.mkdtemp(prefix="fyke-o-", dir="/tmp")
+env_ops = dict(os.environ, FYKE_HOME=ops_home)
 open(ops_home + "/config.json", "w").write('{"auto_poll": false, "owner_key": 7}')
 subprocess.run([RSS, "status"], env=env_ops, capture_output=True, timeout=30)
 def op(method, **params):
     with socket.socket(socket.AF_UNIX) as s:
         s.settimeout(30)
-        s.connect(ops_home + "/rssd.sock")
+        s.connect(ops_home + "/fyked.sock")
         s.sendall(json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode() + b"\n")
         return json.loads(s.makefile().readline())
 def rows(sql):
@@ -445,7 +445,7 @@ check("nor onto itself", "error" in op("folders.move", id=top, parent_id=top))
 check("folders.move refuses a name clash at the top level", op("folders.add", name="Deep")["result"]["id"] and "error" in op("folders.move", id=low))
 now = int(time.time() * 1000)
 old = now - 200 * 24 * 3600 * 1000
-db = sqlite3.connect(ops_home + "/rss.db", timeout=10)
+db = sqlite3.connect(ops_home + "/fyke.db", timeout=10)
 for feed_id, folder in ((1, low), (2, mid), (3, None)):
     db.execute("INSERT INTO feeds (id, url, title, folder_id, created_at) VALUES (?, ?, ?, ?, 0)", (feed_id, f"http://x/{feed_id}", f"F{feed_id}", folder))
     for n, age in enumerate((old, old, now)):
@@ -471,7 +471,7 @@ check("feeds.update needs a real folder", "error" in op("feeds.update", id=3, ti
 check("and a refused call changes nothing", rows("SELECT title_override FROM feeds WHERE id = 3") == [[None]])
 
 check("nothing read today can be trimmed, however old the post", op("storage.free", trim_older_than_days=30)["result"]["trimmed"] == 0)
-db = sqlite3.connect(ops_home + "/rss.db", timeout=10)
+db = sqlite3.connect(ops_home + "/fyke.db", timeout=10)
 db.execute("UPDATE entry_state SET read_at = ?", (old,)); db.commit(); db.close()
 use = op("storage.get")["result"]
 check("storage.get splits the database", use["articles"]["entries"] == 9 and use["articles"]["text_bytes"] > 0 and use["articles"]["search_bytes"] > 0, use)
@@ -523,13 +523,13 @@ check("and the folders inside", rows("SELECT count(*) FROM folders WHERE id IN (
 subprocess.run([RSS, "daemon", "stop"], env=env_ops, capture_output=True, timeout=30); shutil.rmtree(ops_home)
 
 # A hand edit that breaks config.json
-broken = tempfile.mkdtemp(prefix="rss-c-", dir="/tmp")
-env_broken = dict(os.environ, RSS_HOME=broken)
+broken = tempfile.mkdtemp(prefix="fyke-c-", dir="/tmp")
+env_broken = dict(os.environ, FYKE_HOME=broken)
 open(broken + "/config.json", "w").write('{"auto_poll": false,')
 p = subprocess.run([RSS, "status"], env=env_broken, capture_output=True, text=True, timeout=30)
 check("a broken config.json does not stop the daemon", p.returncode == 0, p.stdout + p.stderr)
 with socket.socket(socket.AF_UNIX) as s:
-    s.connect(broken + "/rssd.sock")
+    s.connect(broken + "/fyked.sock")
     s.sendall(b'{"jsonrpc":"2.0","id":1,"method":"config.get"}\n')
     reply = json.loads(s.makefile().readline())
 check("config.get reports the problem", reply["result"]["config_error"] is not None, reply)
@@ -537,50 +537,99 @@ check("and the file stays for the owner to fix", open(broken + "/config.json").r
 subprocess.run([RSS, "daemon", "stop"], env=env_broken, capture_output=True, timeout=30); shutil.rmtree(broken)
 
 # Moving data out of the legacy location, with its daemon still running
-user = tempfile.mkdtemp(prefix="rss-m-", dir="/tmp")
-legacy = user + "/.local/share/rss_"
+user = tempfile.mkdtemp(prefix="fyke-m-", dir="/tmp")
+legacy = user + "/.rss_"
 os.makedirs(legacy)
 open(legacy + "/config.json", "w").write('{"auto_poll": false}')
-env_old = dict(os.environ, RSS_HOME=legacy)
+env_old = dict(os.environ, FYKE_HOME=legacy)
 subprocess.run([RSS, "status"], env=env_old, capture_output=True, timeout=30)
-env_new = {k: v for k, v in os.environ.items() if k != "RSS_HOME"}
+env_new = {k: v for k, v in os.environ.items() if k != "FYKE_HOME"}
 env_new["HOME"] = user
 p = subprocess.run([RSS, "status"], env=env_new, capture_output=True, text=True, timeout=30)
 check("a client reaches the running daemon after the move", p.returncode == 0, p.stdout + p.stderr)
-check("the data moved", os.path.isfile(user + "/.rss_/rss.db") and not os.path.islink(user + "/.rss_"))
-check("a link stays at the old path", os.path.islink(legacy) and os.path.realpath(legacy) == os.path.realpath(user + "/.rss_"))
+check("the data moved", os.path.isfile(user + "/.fyke/fyke.db") and not os.path.islink(user + "/.fyke"))
+check("a link stays at the old path", os.path.islink(legacy) and os.path.realpath(legacy) == os.path.realpath(user + "/.fyke"))
 subprocess.run([RSS, "daemon", "stop"], env=env_new, capture_output=True, timeout=30)
 p = subprocess.run([RSS, "status"], env=env_old, capture_output=True, text=True, timeout=30)
-check("the link can start a daemon, as a launch agent would", p.returncode == 0 and os.path.exists(user + "/.rss_/rssd.sock"), p.stdout + p.stderr)
+check("the link can start a daemon, as a launch agent would", p.returncode == 0 and os.path.exists(user + "/.fyke/fyked.sock"), p.stdout + p.stderr)
 subprocess.run([RSS, "daemon", "stop"], env=env_old, capture_output=True, timeout=30)
 p = subprocess.run([RSS, "status"], env=env_new, capture_output=True, text=True, timeout=30)
-check("a new daemon starts at the new path", p.returncode == 0 and os.path.exists(user + "/.rss_/rssd.sock"), p.stdout + p.stderr)
+check("a new daemon starts at the new path", p.returncode == 0 and os.path.exists(user + "/.fyke/fyked.sock"), p.stdout + p.stderr)
 subprocess.run([RSS, "daemon", "stop"], env=env_new, capture_output=True, timeout=30)
 
 # Both locations already hold data
-user2 = tempfile.mkdtemp(prefix="rss-m-", dir="/tmp")
-os.makedirs(user2 + "/.local/share/rss_"); os.makedirs(user2 + "/.rss_")
-open(user2 + "/.local/share/rss_/keep", "w").write("old")
-open(user2 + "/.rss_/config.json", "w").write('{"auto_poll": false}')
+user2 = tempfile.mkdtemp(prefix="fyke-m-", dir="/tmp")
+os.makedirs(user2 + "/.rss_"); os.makedirs(user2 + "/.fyke")
+open(user2 + "/.rss_/keep", "w").write("old")
+open(user2 + "/.fyke/config.json", "w").write('{"auto_poll": false}')
 env_both = dict(env_new, HOME=user2)
 p = subprocess.run([RSS, "status"], env=env_both, capture_output=True, text=True, timeout=30)
-check("with data in both, the old folder is left alone", p.returncode == 0 and os.path.isfile(user2 + "/.local/share/rss_/keep") and not os.path.islink(user2 + "/.local/share/rss_"), p.stdout + p.stderr)
+check("with data in both, the old folder is left alone", p.returncode == 0 and os.path.isfile(user2 + "/.rss_/keep") and not os.path.islink(user2 + "/.rss_"), p.stdout + p.stderr)
 subprocess.run([RSS, "daemon", "stop"], env=env_both, capture_output=True, timeout=30)
 
-# A link at ~/.rss_ to data that could not move, as a second volume leaves it
-user3 = tempfile.mkdtemp(prefix="rss-m-", dir="/tmp")
-os.makedirs(user3 + "/.local/share/rss_")
-open(user3 + "/.local/share/rss_/config.json", "w").write('{"auto_poll": false}')
-os.symlink(user3 + "/.local/share/rss_", user3 + "/.rss_")
+# A link at ~/.fyke to data that could not move, as a second volume leaves it
+user3 = tempfile.mkdtemp(prefix="fyke-m-", dir="/tmp")
+os.makedirs(user3 + "/.rss_")
+open(user3 + "/.rss_/config.json", "w").write('{"auto_poll": false}')
+os.symlink(user3 + "/.rss_", user3 + "/.fyke")
 env_link = dict(env_new, HOME=user3)
 p = subprocess.run([RSS, "status"], env=env_link, capture_output=True, text=True, timeout=30)
-check("a link at the new path is left in place", p.returncode == 0 and os.path.islink(user3 + "/.rss_") and os.path.isfile(user3 + "/.local/share/rss_/rss.db"), p.stdout + p.stderr)
+check("a link at the new path is left in place", p.returncode == 0 and os.path.islink(user3 + "/.fyke") and os.path.isfile(user3 + "/.rss_/fyke.db"), p.stdout + p.stderr)
 subprocess.run([RSS, "daemon", "stop"], env=env_link, capture_output=True, timeout=30)
 shutil.rmtree(user); shutil.rmtree(user2); shutil.rmtree(user3)
 
-# rss data move, with a throwaway HOME so that nothing real is touched
-mv_home = tempfile.mkdtemp(prefix="rss-v-", dir="/tmp")
-env_mv = {k: v for k, v in os.environ.items() if k != "RSS_HOME"}
+# Data written by a build from before the name: old file names, found at ~/.rss_
+import fcntl
+def earlier_build_data(folder):
+    """A data folder as an earlier build left it: one feed, with the old file names."""
+    os.makedirs(folder)
+    open(folder + "/config.json", "w").write('{"auto_poll": false}')
+    env_b = dict(os.environ, FYKE_HOME=folder)
+    subprocess.run([RSS, "add", f"http://127.0.0.1:{server.server_address[1]}/feed.xml", "--allow-private"], env=env_b, capture_output=True, timeout=30)
+    subprocess.run([RSS, "daemon", "stop"], env=env_b, capture_output=True, timeout=30)
+    time.sleep(0.3)
+    for new, old in (("fyke.db", "rss.db"), ("fyke.db-wal", "rss.db-wal"), ("fyke.db-shm", "rss.db-shm"), ("fyked.lock", "rssd.lock"), ("fyked.log", "rssd.log")):
+        if os.path.exists(f"{folder}/{new}"): os.rename(f"{folder}/{new}", f"{folder}/{old}")
+    if os.path.exists(folder + "/fyked.sock"): os.remove(folder + "/fyked.sock")
+
+user4 = tempfile.mkdtemp(prefix="fyke-m-", dir="/tmp")
+earlier_build_data(user4 + "/.rss_")
+env_old_names = dict(env_new, HOME=user4)
+p = subprocess.run([RSS, "feeds", "--json"], env=env_old_names, capture_output=True, text=True, timeout=30)
+check("data under the old file names is still there after the rename", p.returncode == 0 and len(json.loads(p.stdout)["items"]) == 1, p.stdout + p.stderr)
+check("the database was renamed, not copied", os.path.isfile(user4 + "/.fyke/fyke.db") and not os.path.exists(user4 + "/.fyke/rss.db"))
+check("the earlier daemon's leftovers are gone", not any(os.path.exists(user4 + "/.fyke/" + n) for n in ("rssd.sock", "rssd.lock", "rssd.log")))
+subprocess.run([RSS, "daemon", "stop"], env=env_old_names, capture_output=True, timeout=30)
+
+# A link at ~/.rss_ that `data move` made: the data stays where the person put it
+user5 = tempfile.mkdtemp(prefix="fyke-m-", dir="/tmp")
+elsewhere = tempfile.mkdtemp(prefix="fyke-e-", dir="/tmp") + "/data"
+earlier_build_data(elsewhere)
+os.symlink(elsewhere, user5 + "/.rss_")
+env_linked = dict(env_new, HOME=user5)
+p = subprocess.run([RSS, "feeds", "--json"], env=env_linked, capture_output=True, text=True, timeout=30)
+check("a moved folder reached through the old link is migrated", p.returncode == 0 and len(json.loads(p.stdout)["items"]) == 1, p.stdout + p.stderr)
+check("the new anchor links to the same folder", os.path.islink(user5 + "/.fyke") and os.path.realpath(user5 + "/.fyke") == os.path.realpath(elsewhere))
+check("the old anchor still reaches it", os.path.islink(user5 + "/.rss_") and os.path.realpath(user5 + "/.rss_") == os.path.realpath(elsewhere))
+check("the data did not move", os.path.isfile(elsewhere + "/fyke.db"))
+subprocess.run([RSS, "daemon", "stop"], env=env_linked, capture_output=True, timeout=30)
+
+# An earlier daemon still running: its lock is held, so nothing is renamed beneath it
+user6 = tempfile.mkdtemp(prefix="fyke-m-", dir="/tmp")
+earlier_build_data(user6 + "/.rss_")
+held = open(user6 + "/.rss_/rssd.lock", "a+"); fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+p = subprocess.run([RSS, "feeds", "--json"], env=dict(env_new, HOME=user6), capture_output=True, text=True, timeout=30)
+check("a running earlier daemon stops the migration with a clear error", p.returncode != 0 and "EarlierDaemonRunning" in p.stderr, p.stdout + p.stderr)
+check("and nothing was renamed", os.path.isfile(user6 + "/.fyke/rss.db") and not os.path.exists(user6 + "/.fyke/fyke.db"))
+held.close()
+p = subprocess.run([RSS, "feeds", "--json"], env=dict(env_new, HOME=user6), capture_output=True, text=True, timeout=30)
+check("once it has stopped, the migration goes through", p.returncode == 0 and len(json.loads(p.stdout)["items"]) == 1, p.stdout + p.stderr)
+subprocess.run([RSS, "daemon", "stop"], env=dict(env_new, HOME=user6), capture_output=True, timeout=30)
+for d in (user4, user5, os.path.dirname(elsewhere), user6): shutil.rmtree(d, ignore_errors=True)
+
+# fyke data move, with a throwaway HOME so that nothing real is touched
+mv_home = tempfile.mkdtemp(prefix="fyke-v-", dir="/tmp")
+env_mv = {k: v for k, v in os.environ.items() if k != "FYKE_HOME"}
 env_mv["HOME"] = mv_home
 def move(*args):
     return subprocess.run([RSS, "data", "move", *args], env=env_mv, capture_output=True, text=True, timeout=90)
@@ -588,19 +637,19 @@ def status():
     return subprocess.run([RSS, "status"], env=env_mv, capture_output=True, text=True, timeout=30)
 def feed_list():
     return subprocess.run([RSS, "feeds", "--json"], env=env_mv, capture_output=True, text=True, timeout=30).stdout
-os.makedirs(mv_home + "/.rss_")
-open(mv_home + "/.rss_/config.json", "w").write('{"auto_poll": false}')
+os.makedirs(mv_home + "/.fyke")
+open(mv_home + "/.fyke/config.json", "w").write('{"auto_poll": false}')
 status()
 subprocess.run([RSS, "add", f"http://127.0.0.1:{server.server_address[1]}/feed.xml", "--allow-private"], env=env_mv, capture_output=True, timeout=30)
 feeds_before = feed_list()
 check("data move refuses a relative path", "NotAbsolute" in move("relative").stderr)
 os.makedirs(mv_home + "/full"); open(mv_home + "/full/x", "w").write("x")
 check("and a folder that holds other files", "TargetNotEmpty" in move(mv_home + "/full").stderr)
-check("and one inside the data folder", "InsideCurrentFolder" in move(mv_home + "/.rss_/inner").stderr)
+check("and one inside the data folder", "InsideCurrentFolder" in move(mv_home + "/.fyke/inner").stderr)
 check("and one whose parent is missing", "ParentMissing" in move(mv_home + "/nope/data").stderr)
 p = move(mv_home + "/first")
 check("data move reports its stages", p.returncode == 0 and p.stdout.split() == ["stopping", "moving", "linking", "starting", "done"], p.stdout + p.stderr)
-check("~/.rss_ links to the new folder", os.path.islink(mv_home + "/.rss_") and os.path.realpath(mv_home + "/.rss_") == os.path.realpath(mv_home + "/first"))
+check("~/.fyke links to the new folder", os.path.islink(mv_home + "/.fyke") and os.path.realpath(mv_home + "/.fyke") == os.path.realpath(mv_home + "/first"))
 check("the daemon runs on the moved data", feed_list() == feeds_before)
 long_name = mv_home + "/" + "very-long-folder-name-" * 6 + "data"
 p = move(long_name)
@@ -609,16 +658,16 @@ check("moving again leaves nothing behind", not os.path.exists(mv_home + "/first
 os.makedirs(mv_home + "/real_parent"); os.symlink(mv_home + "/real_parent", mv_home + "/link_parent")
 p = move(mv_home + "/link_parent/data")
 check("a parent reached through a link is fine", p.returncode == 0 and status().returncode == 0, p.stdout + p.stderr)
-p = move(mv_home + "/.rss_")
-check("moving back to ~/.rss_ makes it a folder again", p.returncode == 0 and os.path.isdir(mv_home + "/.rss_") and not os.path.islink(mv_home + "/.rss_"), p.stdout + p.stderr)
+p = move(mv_home + "/.fyke")
+check("moving back to ~/.fyke makes it a folder again", p.returncode == 0 and os.path.isdir(mv_home + "/.fyke") and not os.path.islink(mv_home + "/.fyke"), p.stdout + p.stderr)
 check("and the data is intact", feed_list() == feeds_before)
 subprocess.run([RSS, "daemon", "stop"], env=env_mv, capture_output=True, timeout=30)
-os.rename(mv_home + "/.rss_", mv_home + "/rel_data"); os.symlink("rel_data", mv_home + "/.rss_")
+os.rename(mv_home + "/.fyke", mv_home + "/rel_data"); os.symlink("rel_data", mv_home + "/.fyke")
 p = move(mv_home + "/after_rel")
-check("a link written relative to its folder is understood", p.returncode == 0 and os.path.realpath(mv_home + "/.rss_") == os.path.realpath(mv_home + "/after_rel") and not os.path.exists(mv_home + "/rel_data") and feed_list() == feeds_before, p.stdout + p.stderr)
-check("moving back again", move(mv_home + "/.rss_").returncode == 0 and os.path.isdir(mv_home + "/.rss_") and not os.path.islink(mv_home + "/.rss_"))
-check("moving onto the same folder is refused", "SameFolder" in move(mv_home + "/.rss_").stderr)
-check("RSS_HOME blocks a move", "HomeIsOverridden" in subprocess.run([RSS, "data", "move", mv_home + "/x"], env=dict(env_mv, RSS_HOME=mv_home + "/.rss_"), capture_output=True, text=True, timeout=30).stderr)
+check("a link written relative to its folder is understood", p.returncode == 0 and os.path.realpath(mv_home + "/.fyke") == os.path.realpath(mv_home + "/after_rel") and not os.path.exists(mv_home + "/rel_data") and feed_list() == feeds_before, p.stdout + p.stderr)
+check("moving back again", move(mv_home + "/.fyke").returncode == 0 and os.path.isdir(mv_home + "/.fyke") and not os.path.islink(mv_home + "/.fyke"))
+check("moving onto the same folder is refused", "SameFolder" in move(mv_home + "/.fyke").stderr)
+check("FYKE_HOME blocks a move", "HomeIsOverridden" in subprocess.run([RSS, "data", "move", mv_home + "/x"], env=dict(env_mv, FYKE_HOME=mv_home + "/.fyke"), capture_output=True, text=True, timeout=30).stderr)
 
 if sys.platform == "darwin":
     # A real second volume, because a rename cannot cross one
@@ -626,17 +675,17 @@ if sys.platform == "darwin":
     subprocess.run(["hdiutil", "create", "-quiet", "-size", "40m", "-fs", "APFS", "-volname", "rssv", image], check=True)
     os.makedirs(mount); subprocess.run(["hdiutil", "attach", "-quiet", "-mountpoint", mount, image], check=True)
     try:
-        os.makedirs(mv_home + "/.rss_.old"); open(mv_home + "/.rss_.old/mine", "w").write("keep")
-        os.symlink("config.json", mv_home + "/.rss_/kept-link")
+        os.makedirs(mv_home + "/.fyke.old"); open(mv_home + "/.fyke.old/mine", "w").write("keep")
+        os.symlink("config.json", mv_home + "/.fyke/kept-link")
         p = move(mount + "/data")
         check("a move to another volume copies and verifies", p.returncode == 0 and "verifying" in p.stdout.split(), p.stdout + p.stderr)
-        check("the data is there, behind a link, and the old folder is gone", os.path.islink(mv_home + "/.rss_") and os.path.realpath(mv_home + "/.rss_").startswith(os.path.realpath(mount)) and not os.path.exists(mv_home + "/.rss_.old1"))
+        check("the data is there, behind a link, and the old folder is gone", os.path.islink(mv_home + "/.fyke") and os.path.realpath(mv_home + "/.fyke").startswith(os.path.realpath(mount)) and not os.path.exists(mv_home + "/.fyke.old1"))
         check("the daemon runs there", feed_list() == feeds_before)
         check("a link inside the data folder survives the copy", os.path.islink(mount + "/data/kept-link") and os.readlink(mount + "/data/kept-link") == "config.json")
-        check("a leftover .rss_.old is not touched or reused", open(mv_home + "/.rss_.old/mine").read() == "keep" and not os.path.exists(mv_home + "/.rss_.old1"))
-        p = move(mv_home + "/.rss_")
-        check("and back again from another volume", p.returncode == 0 and os.path.isdir(mv_home + "/.rss_") and not os.path.islink(mv_home + "/.rss_") and not os.path.exists(mount + "/data"), p.stdout + p.stderr)
-        check("with its data intact, links included", feed_list() == feeds_before and os.path.islink(mv_home + "/.rss_/kept-link"))
+        check("a leftover .fyke.old is not touched or reused", open(mv_home + "/.fyke.old/mine").read() == "keep" and not os.path.exists(mv_home + "/.fyke.old1"))
+        p = move(mv_home + "/.fyke")
+        check("and back again from another volume", p.returncode == 0 and os.path.isdir(mv_home + "/.fyke") and not os.path.islink(mv_home + "/.fyke") and not os.path.exists(mount + "/data"), p.stdout + p.stderr)
+        check("with its data intact, links included", feed_list() == feeds_before and os.path.islink(mv_home + "/.fyke/kept-link"))
     finally:
         subprocess.run([RSS, "daemon", "stop"], env=env_mv, capture_output=True, timeout=30)
         subprocess.run(["hdiutil", "detach", "-quiet", "-force", mount], capture_output=True)

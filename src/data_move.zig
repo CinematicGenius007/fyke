@@ -1,5 +1,5 @@
-//! `rss data move <folder>`: moves the data directory, so that nobody has to do it by
-//! hand. `~/.rss_` stays the one address every client uses. After a move it is a link
+//! `fyke data move <folder>`: moves the data directory, so that nobody has to do it by
+//! hand. `~/.fyke` stays the one address every client uses. After a move it is a link
 //! to the chosen folder, which keeps socket paths short, whatever the folder's name,
 //! and needs no pointer file for clients to read.
 //!
@@ -9,13 +9,13 @@
 const std = @import("std");
 const client_module = @import("client.zig");
 const daemon = @import("daemon.zig");
-const launchd = @import("launchd.zig");
+const autostart = @import("autostart.zig");
 const ops = @import("ops.zig");
 
 const Io = std.Io;
 
 pub const Error = error{
-    /// `RSS_HOME` names the folder, so there is no `~/.rss_` to repoint.
+    /// `FYKE_HOME` names the folder, so there is no `~/.fyke` to repoint.
     HomeIsOverridden,
     NotAbsolute,
     NoData,
@@ -120,7 +120,7 @@ fn clear(io: Io, path: []const u8, remove_folder: bool) void {
 /// Waits for the daemon to let go of the data directory, and holds the same lock the
 /// daemon takes, so that no client can start one on a folder that is being moved.
 fn holdLock(io: Io, current: []const u8, arena: std.mem.Allocator) !Io.File {
-    const path = try std.fmt.allocPrint(arena, "{s}/rssd.lock", .{current});
+    const path = try std.fmt.allocPrint(arena, "{s}/fyked.lock", .{current});
     const file = try Io.Dir.cwd().createFile(io, path, .{ .truncate = false });
     errdefer file.close(io);
     for (0..150) |_| {
@@ -153,7 +153,7 @@ fn asideName(arena: std.mem.Allocator, io: Io, anchor: []const u8) ![]const u8 {
     return error.TargetNotEmpty;
 }
 
-/// Puts the data in its new place and points `~/.rss_` at it. Each step that changes
+/// Puts the data in its new place and points `~/.fyke` at it. Each step that changes
 /// something can be undone, and is, if a later one fails, so that an error leaves the
 /// data where it was.
 fn relocate(arena: std.mem.Allocator, io: Io, out: *Io.Writer, l: Layout) !void {
@@ -220,10 +220,10 @@ pub fn run(
     const io = connector.io;
     const cwd = Io.Dir.cwd();
 
-    if (connector.environ.get("RSS_HOME") != null) return error.HomeIsOverridden;
+    if (connector.environ.get("FYKE_HOME") != null) return error.HomeIsOverridden;
     if (target_arg.len == 0 or target_arg[0] != '/') return error.NotAbsolute;
     const target = trimSlashes(target_arg);
-    const anchor = try std.fmt.allocPrint(arena, "{s}/.rss_", .{user_home});
+    const anchor = try std.fmt.allocPrint(arena, "{s}/.fyke", .{user_home});
 
     // Where the data is now, which is the anchor itself or what it links to.
     var current: []const u8 = anchor;
@@ -275,8 +275,8 @@ pub fn run(
     lock.close(io);
 
     try progress(out, "starting");
-    if (launchd.isInstalled(connector, user_home) catch false) {
-        try launchd.install(connector, user_home);
+    if (autostart.isInstalled(connector, user_home) catch false) {
+        try autostart.install(connector, user_home);
     } else {
         var started: client_module.Client = undefined;
         try connector.connect(&started, true);

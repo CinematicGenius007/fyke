@@ -34,7 +34,7 @@ def get(item):
     url, text = item
     path = "corpus/pages/" + hashlib.sha1(url.encode()).hexdigest()[:16] + ".html"
     if not os.path.exists(path):
-        r = subprocess.run(["curl", "-sSL", "--compressed", "--max-time", "20", "-A", "rss_/0.1 (feed reader)", "-o", path, "-w", "%{http_code}", url], capture_output=True, text=True)
+        r = subprocess.run(["curl", "-sSL", "--compressed", "--max-time", "20", "-A", "fyke/0.1 (feed reader)", "-o", path, "-w", "%{http_code}", url], capture_output=True, text=True)
         if r.stdout != "200":
             if os.path.exists(path): os.remove(path)
             return None

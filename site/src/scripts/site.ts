@@ -21,7 +21,7 @@ const syncToggle = () => {
 };
 function setEdition(next: "day" | "night") {
   if (next === "night") root.dataset.theme = "night"; else delete root.dataset.theme;
-  try { localStorage.setItem("weir-edition", next); } catch { /* private mode */ }
+  try { localStorage.setItem("fyke-edition", next); } catch { /* private mode */ }
   syncToggle();
   say(next === "night" ? "Night edition" : "Day edition");
 }
@@ -29,7 +29,7 @@ syncToggle();
 radios.forEach((r) => r.addEventListener("change", () => r.checked && setEdition(r.value as "day" | "night")));
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
   let saved: string | null = null;
-  try { saved = localStorage.getItem("weir-edition"); } catch { /* ignore */ }
+  try { saved = localStorage.getItem("fyke-edition"); } catch { /* ignore */ }
   if (!saved) { if (e.matches) root.dataset.theme = "night"; else delete root.dataset.theme; syncToggle(); }
 });
 

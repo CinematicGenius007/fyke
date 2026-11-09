@@ -1,4 +1,4 @@
--- rss_ schema, version 3: when a publisher asks not to be polled.
+-- Fyke schema, version 3: when a publisher asks not to be polled.
 --
 -- `<skipHours>` and `<skipDays>` arrive only in a full feed body, but polls that end
 -- in `304` must obey them too, so they are stored with the feed. Bit n of
