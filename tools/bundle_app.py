@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Builds zig-out/rss_.app: the SwiftUI client, the rss binary, the fonts and the icon.
+"""Builds zig-out/Fyke.app: the SwiftUI client, the fyke binary, the fonts and the icon.
 
     python3 tools/bundle_app.py             builds the app
     python3 tools/bundle_app.py --install   also copies it to /Applications
 
-The app holds no data. Feeds and settings live in ~/.rss_, so replacing the app
+The app holds no data. Feeds and settings live in ~/.fyke, so replacing the app
 keeps both.
 """
 import pathlib, plistlib, shutil, subprocess, sys, tempfile
 
 root = pathlib.Path(__file__).resolve().parent.parent
-identifier = "local.rss_.app"
+identifier = "local.fyke.app"
 version = "0.1"
 
 
@@ -36,22 +36,22 @@ run("swift", "build", "-c", "release", "--package-path", root / "gui")
 built = subprocess.run(["swift", "build", "-c", "release", "--package-path", root / "gui", "--show-bin-path"],
                        check=True, capture_output=True, text=True).stdout.strip()
 
-app = root / "zig-out/rss_.app"
+app = root / "zig-out/Fyke.app"
 shutil.rmtree(app, ignore_errors=True)
 macos = app / "Contents/MacOS"
 resources = app / "Contents/Resources"
 macos.mkdir(parents=True)
 resources.mkdir()
 shutil.copy(pathlib.Path(built) / "Reader", macos / "Reader")
-shutil.copy(root / "zig-out/bin/rss", macos / "rss")
+shutil.copy(root / "zig-out/bin/fyke", macos / "fyke")
 shutil.copytree(root / "gui/Fonts", resources / "Fonts")
 make_icon(resources / "AppIcon.icns")
 with open(app / "Contents/Info.plist", "wb") as out:
     plistlib.dump({
         # The page viewer shows what a browser would, and some sites are plain http.
         "NSAppTransportSecurity": {"NSAllowsArbitraryLoadsInWebContent": True},
-        "CFBundleName": "rss_",
-        "CFBundleDisplayName": "rss_",
+        "CFBundleName": "Fyke",
+        "CFBundleDisplayName": "Fyke",
         "CFBundleIdentifier": identifier,
         "CFBundleExecutable": "Reader",
         "CFBundleIconFile": "AppIcon",
@@ -66,7 +66,7 @@ with open(app / "Contents/Info.plist", "wb") as out:
 run("codesign", "--force", "--deep", "--sign", "-", app)
 
 if "--install" in sys.argv:
-    target = pathlib.Path("/Applications/rss_.app")
+    target = pathlib.Path("/Applications/Fyke.app")
     shutil.rmtree(target, ignore_errors=True)
     shutil.copytree(app, target, symlinks=True)
     print(target)

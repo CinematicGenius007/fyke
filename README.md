@@ -1,8 +1,8 @@
-# rss_
+# Fyke
 
 A local-first RSS reader with AI aggregation, built from scratch. Read in a GUI or TUI, connect any agent on your machine, and keep all of the data yourself.
 
-Status: the daemon polls feeds in the background, and fetches the full article when a feed gives only a summary. Read them with the macOS app, the TUI or CLI, or through any MCP agent. No aggregator yet. `rss_` is a working name.
+Status: the daemon polls feeds in the background, and fetches the full article when a feed gives only a summary. Read them with the macOS app, the TUI or CLI (also built for Linux), or through any MCP agent. No aggregator yet.
 
 Build and install the macOS app. It needs Zig 0.17.1 and Xcode's command line tools, and keeps your feeds and settings when replaced:
 
@@ -14,10 +14,10 @@ Or use the terminal:
 
 ```bash
 zig build -Drelease
-./zig-out/bin/rss add https://ziglang.org/news/index.xml
-./zig-out/bin/rss list
-./zig-out/bin/rss show 1
-./zig-out/bin/rss tui
+./zig-out/bin/fyke add https://ziglang.org/news/index.xml
+./zig-out/bin/fyke list
+./zig-out/bin/fyke show 1
+./zig-out/bin/fyke tui
 ```
 
 <picture>

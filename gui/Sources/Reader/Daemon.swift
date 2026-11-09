@@ -90,7 +90,7 @@ final class Daemon: @unchecked Sendable {
     static let apiVersion: Int64 = 2
 
     let home: URL
-    private var socketPath: String { home.appending(path: "rssd.sock").path }
+    private var socketPath: String { home.appending(path: "fyked.sock").path }
     private let queue = DispatchQueue(label: "daemon.calls")
     private var shared: Connection?
     private let pauseLock = NSLock()
@@ -119,10 +119,10 @@ final class Daemon: @unchecked Sendable {
     }
 
     private init() {
-        if let path = ProcessInfo.processInfo.environment["RSS_HOME"] {
+        if let path = ProcessInfo.processInfo.environment["FYKE_HOME"] {
             home = URL(filePath: path)
         } else {
-            home = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".rss_")
+            home = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".fyke")
         }
     }
 
@@ -184,15 +184,15 @@ final class Daemon: @unchecked Sendable {
         throw RPCFailure(message: "The background service did not start")
     }
 
-    /// The `rss` binary ships beside this one in the app bundle.
+    /// The `fyke` binary ships beside this one in the app bundle.
     var programPath: String {
-        ProcessInfo.processInfo.environment["RSS_BIN"] ?? Bundle.main.executableURL!.deletingLastPathComponent().appending(path: "rss").path
+        ProcessInfo.processInfo.environment["FYKE_BIN"] ?? Bundle.main.executableURL!.deletingLastPathComponent().appending(path: "fyke").path
     }
 
     private func startDaemon() throws {
         let path = programPath
         guard FileManager.default.isExecutableFile(atPath: path) else {
-            throw RPCFailure(message: "Cannot find the rss program at \(path)")
+            throw RPCFailure(message: "Cannot find the fyke program at \(path)")
         }
         try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         let process = Process()

@@ -11,8 +11,8 @@ import functools, http.server, json, os, shutil, socketserver, sqlite3, subproce
 from xml.sax.saxutils import quoteattr
 
 rss, mode, corpus = os.path.abspath(sys.argv[1]), sys.argv[2], sys.argv[3]
-home = tempfile.mkdtemp(prefix="rss-s-", dir="/tmp")
-env = dict(os.environ, RSS_HOME=home)
+home = tempfile.mkdtemp(prefix="fyke-s-", dir="/tmp")
+env = dict(os.environ, FYKE_HOME=home)
 
 def cli(*args):
     return subprocess.run([rss, *args], env=env, capture_output=True, text=True, timeout=120)
@@ -21,7 +21,7 @@ def stats():
     return json.loads(cli("status", "--json").stdout)
 
 def daemon_pid():
-    return int(subprocess.run(["lsof", "-t", home + "/rssd.lock"], capture_output=True, text=True).stdout.split()[0])
+    return int(subprocess.run(["lsof", "-t", home + "/fyked.lock"], capture_output=True, text=True).stdout.split()[0])
 
 def usage(pid):
     rss_kb, cpu = subprocess.run(["ps", "-o", "rss=,time=", "-p", str(pid)], capture_output=True, text=True).stdout.split()
@@ -63,7 +63,7 @@ def wait_idle(limit):
     return time.time() - start, peak, stats()
 
 def report_db():
-    db = sqlite3.connect(home + "/rss.db")
+    db = sqlite3.connect(home + "/fyke.db")
     print("integrity", db.execute("pragma integrity_check").fetchone()[0])
     print("statuses", db.execute("select coalesce(http_status, 'none'), count(*) from fetch_log group by 1 order by 2 desc limit 8").fetchall())
     print("errors", db.execute("select error, count(*) from fetch_log where error is not null group by 1 order by 2 desc limit 8").fetchall())

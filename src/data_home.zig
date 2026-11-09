@@ -1,12 +1,12 @@
-//! Finds the data directory when `RSS_HOME` does not name one, and moves data out
+//! Finds the data directory when `FYKE_HOME` does not name one, and moves data out
 //! of the location earlier versions used.
 
 const std = @import("std");
 
 const Io = std.Io;
 
-const folder = ".rss_";
-const legacy_folder = ".local/share/rss_";
+const folder = ".fyke";
+const legacy_folder = ".rss_";
 
 /// The data directory for this user, after moving any data left at the legacy path.
 pub fn resolve(arena: std.mem.Allocator, io: Io, user_home: []const u8) ![]const u8 {

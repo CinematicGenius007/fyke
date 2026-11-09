@@ -1,4 +1,4 @@
-//! `rss service`: runs the daemon as a macOS launch agent, so that feeds keep
+//! `fyke service`: runs the daemon as a macOS launch agent, so that feeds keep
 //! polling from login, with no client open. It only writes a property list and
 //! asks `launchctl` to load it, and everything else stays the daemon's business.
 
@@ -10,9 +10,9 @@ const ops = @import("ops.zig");
 
 const Io = std.Io;
 
-const label = "local.rss_.daemon";
+const label = "local.fyke.daemon";
 
-/// Writes the agent's property list. A clean `rss daemon stop` is respected, and
+/// Writes the agent's property list. A clean `fyke daemon stop` is respected, and
 /// launchd restarts the daemon only after a crash.
 pub fn writePlist(w: *Io.Writer, program: []const u8, home: []const u8) !void {
     try w.writeAll(
@@ -32,7 +32,7 @@ pub fn writePlist(w: *Io.Writer, program: []const u8, home: []const u8) !void {
     try w.writeAll(
         \\</string><string>daemon</string><string>--log</string></array>
         \\  <key>EnvironmentVariables</key>
-        \\  <dict><key>RSS_HOME</key><string>
+        \\  <dict><key>FYKE_HOME</key><string>
     );
     try writeEscaped(w, home);
     try w.writeAll(
@@ -118,5 +118,5 @@ test "the property list escapes paths and keeps the daemon's arguments" {
     const text = out.written();
     try std.testing.expect(std.mem.indexOf(u8, text, "<string>/Apps/a&amp;b/rss</string><string>daemon</string><string>--log</string>") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "<string>/Users/me/&lt;data&gt;</string>") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "<key>Label</key><string>local.rss_.daemon</string>") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "<key>Label</key><string>local.fyke.daemon</string>") != null);
 }

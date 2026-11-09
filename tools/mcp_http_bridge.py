@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Exposes `rss mcp` over minimal Streamable HTTP, for the official conformance
-suite, which only speaks HTTP. For testing only: rss itself opens no port.
+"""Exposes `fyke mcp` over minimal Streamable HTTP, for the official conformance
+suite, which only speaks HTTP. For testing only: fyke itself opens no port.
 
-Usage: mcp_http_bridge.py <path-to-rss> [port]
+Usage: mcp_http_bridge.py <path-to-fyke> [port]
 Then:  npx @modelcontextprotocol/conformance server --url http://127.0.0.1:8931/mcp
 """
 import http.server, json, os, subprocess, sys, threading

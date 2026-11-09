@@ -8,7 +8,7 @@ Read [docs/architecture.md](docs/architecture.md). For anything larger than a fi
 
 ## Setup
 
-You need Zig 0.17.1. The macOS app also needs Xcode's command line tools. Python checks run from a virtual environment, which git ignores.
+You need Zig 0.17.1. The macOS app also needs Xcode's command line tools. To check the Linux build from a Mac, `python3 tools/e2e_container.py` needs Docker. Python checks run from a virtual environment, which git ignores.
 
 ```bash
 zig build -Drelease
@@ -16,7 +16,7 @@ python3 -m venv .venv
 .venv/bin/pip install pyte mcp
 ```
 
-Set `RSS_HOME` to a scratch directory whenever you run the app or daemon by hand, so that checks never touch your real data.
+Set `FYKE_HOME` to a scratch directory whenever you run the app or daemon by hand, so that checks never touch your real data.
 
 ## Checks
 
@@ -25,10 +25,11 @@ A change should pass these before review:
 ```bash
 zig fmt --check src tools build.zig
 zig build test
-python3 tools/e2e.py ./zig-out/bin/rss
-python3 tools/e2e_daemon.py ./zig-out/bin/rss
-python3 tools/e2e_mcp.py ./zig-out/bin/rss
-.venv/bin/python tools/e2e_tui.py ./zig-out/bin/rss
+python3 tools/e2e.py ./zig-out/bin/fyke
+python3 tools/e2e_daemon.py ./zig-out/bin/fyke
+python3 tools/e2e_mcp.py ./zig-out/bin/fyke
+python3 tools/e2e_service.py ./zig-out/bin/fyke
+.venv/bin/python tools/e2e_tui.py ./zig-out/bin/fyke
 ```
 
 Some areas need more:

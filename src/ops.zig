@@ -682,7 +682,7 @@ pub const OpmlExport = struct {
             break :rows .{ try reader.folders(arena), try reader.exportFeeds(arena) };
         };
         var out: Io.Writer.Allocating = .init(arena);
-        try core.opml.write(&out.writer, "rss_ subscriptions", try outlines(arena, rows[0], rows[1], null, 0));
+        try core.opml.write(&out.writer, "Fyke subscriptions", try outlines(arena, rows[0], rows[1], null, 0));
         return .{ .opml = out.written() };
     }
 
@@ -768,10 +768,10 @@ pub const StorageGet = struct {
         const raw = rawUse(s, arena);
         return .{
             .articles = articles,
-            .database_bytes = fileSize(s, "rss.db") + fileSize(s, "rss.db-wal") + fileSize(s, "rss.db-shm"),
+            .database_bytes = fileSize(s, "fyke.db") + fileSize(s, "fyke.db-wal") + fileSize(s, "fyke.db-shm"),
             .raw_bytes = raw.bytes,
             .raw_files = raw.files,
-            .log_bytes = fileSize(s, "rssd.log"),
+            .log_bytes = fileSize(s, "fyked.log"),
             .settings_bytes = fileSize(s, "config.json"),
         };
     }

@@ -48,7 +48,7 @@ struct StoragePane: View {
                 VStack(alignment: .leading, spacing: 0) {
                     PaneTitle(text: "Storage").padding(.bottom, -16)
                     HStack(spacing: 4) {
-                        Text("Space rss_ uses in").font(.ui(13)).foregroundStyle(p.muted)
+                        Text("Space Fyke uses in").font(.ui(13)).foregroundStyle(p.muted)
                         Text(Daemon.shared.home.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")).font(.code(13)).foregroundStyle(p.inkSoft)
                     }
                     .padding(.bottom, 18)

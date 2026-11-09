@@ -23,7 +23,7 @@ struct RootView: View {
         .onAppear { focused = true }
         .task { await model.start() }
         .task {
-            if ProcessInfo.processInfo.environment["RSS_SCREEN"] == "settings" { openSettings() }
+            if ProcessInfo.processInfo.environment["FYKE_SCREEN"] == "settings" { openSettings() }
         }
         .onChange(of: model.showingShortcuts) { _, showing in if !showing { focused = true } }
         .onChange(of: model.renaming) { _, renaming in if renaming == nil { focused = true } }

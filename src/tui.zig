@@ -1,4 +1,4 @@
-//! `rss tui`: a terminal reader, and a client of the socket like any other.
+//! `fyke tui`: a terminal reader, and a client of the socket like any other.
 //!
 //! The drawing model is simple on purpose: each frame draws everything into a
 //! cell grid, and `Screen.render` sends only what changed. Nothing tracks what is
@@ -840,7 +840,7 @@ const App = struct {
     fn drawSide(app: *App, x: usize, limit: usize, height: usize) void {
         app.side_range = .{ x, limit };
         const focused = app.focus == .feeds;
-        _ = app.screen.put(x + 2, 0, limit, "rss_", .{ .bold = true, .fg = .cyan });
+        _ = app.screen.put(x + 2, 0, limit, "fyke", .{ .bold = true, .fg = .cyan });
 
         // Rows are All and Starred, a labeled gap, then the feeds.
         const first_row: usize = 2;

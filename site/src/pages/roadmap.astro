@@ -6,7 +6,7 @@ import Docs from "../components/Docs.astro";
 const entry = (await getEntry("docs", "roadmap"))!;
 const { Content } = await render(entry);
 ---
-<Base title="Roadmap" current="roadmap" description="The Weir roadmap: which milestones are built, what comes next, and which features are only planned, each marked as such.">
+<Base title="Roadmap" current="roadmap" description="The Fyke roadmap: which milestones are built, what comes next, and which features are only planned, each marked as such.">
   <div class="wrap">
     <div class="page">
       <Docs current="roadmap" />

@@ -1,4 +1,4 @@
-//! The `rss` command: a thin client of the daemon's socket. See docs/api.md.
+//! The `fyke` command: a thin client of the daemon's socket. See docs/api.md.
 //! Nothing here touches the database, which is what keeps the daemon its only writer.
 
 const std = @import("std");
@@ -7,7 +7,7 @@ const client_module = @import("client.zig");
 const daemon = @import("daemon.zig");
 const data_home = @import("data_home.zig");
 const data_move = @import("data_move.zig");
-const launchd = @import("launchd.zig");
+const autostart = @import("autostart.zig");
 const mcp = @import("mcp.zig");
 const ops = @import("ops.zig");
 const tui = @import("tui.zig");
@@ -16,7 +16,7 @@ const Io = std.Io;
 const Client = client_module.Client;
 
 const usage =
-    \\usage: rss <command>
+    \\usage: fyke <command>
     \\
     \\  add <url> [--allow-private]    subscribe to a feed or a site
     \\  refresh [feed-id]              fetch one feed now, or queue all of them
@@ -39,7 +39,7 @@ const usage =
     \\  data move <folder>             move the data folder, then restart
     \\
     \\Clients start the daemon when needed.
-    \\Data lives in $RSS_HOME, by default ~/.rss_
+    \\Data lives in $FYKE_HOME, by default ~/.fyke
     \\
 ;
 
@@ -129,7 +129,7 @@ pub fn main(init: std.process.Init) !u8 {
 
     if (std.mem.eql(u8, command, "daemon") and args.positional() == null) {
         daemon.run(init.gpa, io, home_path, arena, .{ .log_to_file = args.has("--log") }) catch |err| {
-            std.debug.print("rss: daemon: {s}\n", .{@errorName(err)});
+            std.debug.print("fyke: daemon: {s}\n", .{@errorName(err)});
             return 1;
         };
         return 0;
@@ -140,7 +140,7 @@ pub fn main(init: std.process.Init) !u8 {
     if (std.mem.eql(u8, command, "tui")) {
         tui.run(init.gpa, connector) catch |err| {
             tui.restoreTerminal();
-            std.debug.print("rss: tui: {s}\n", .{@errorName(err)});
+            std.debug.print("fyke: tui: {s}\n", .{@errorName(err)});
             return 1;
         };
         return 0;
@@ -152,7 +152,7 @@ pub fn main(init: std.process.Init) !u8 {
             return 2;
         };
         mcp.run(connector, tier) catch |err| {
-            std.debug.print("rss: mcp: {s}\n", .{@errorName(err)});
+            std.debug.print("fyke: mcp: {s}\n", .{@errorName(err)});
             return 1;
         };
         return 0;
@@ -161,14 +161,14 @@ pub fn main(init: std.process.Init) !u8 {
     if (std.mem.eql(u8, command, "data")) {
         return dataCommand(connector, init.environ_map, args, out) catch |err| {
             try out.flush();
-            std.debug.print("rss: data: {s}\n", .{@errorName(err)});
+            std.debug.print("fyke: data: {s}\n", .{@errorName(err)});
             return 1;
         };
     }
 
     if (std.mem.eql(u8, command, "service")) {
         return serviceCommand(connector, init.environ_map, args, out) catch |err| {
-            std.debug.print("rss: service: {s}\n", .{@errorName(err)});
+            std.debug.print("fyke: service: {s}\n", .{@errorName(err)});
             return 1;
         };
     }
@@ -185,7 +185,7 @@ pub fn main(init: std.process.Init) !u8 {
 
         var client: Client = undefined;
         connector.connect(&client, !std.mem.eql(u8, command, "daemon")) catch |err| {
-            std.debug.print("rss: cannot reach the daemon: {s}\n", .{@errorName(err)});
+            std.debug.print("fyke: cannot reach the daemon: {s}\n", .{@errorName(err)});
             return 1;
         };
         const app: App = .{ .arena = arena, .io = io, .client = &client, .out = out };
@@ -196,12 +196,12 @@ pub fn main(init: std.process.Init) !u8 {
             },
             error.Reported => {
                 try out.flush();
-                std.debug.print("rss: {s}\n", .{client.last_error});
+                std.debug.print("fyke: {s}\n", .{client.last_error});
                 return 1;
             },
             else => {
                 try out.flush();
-                std.debug.print("rss: {s}: {s}\n", .{ command, @errorName(err) });
+                std.debug.print("fyke: {s}: {s}\n", .{ command, @errorName(err) });
                 return 1;
             },
         };
@@ -230,13 +230,13 @@ fn serviceCommand(connector: client_module.Connector, environ: *const std.proces
     const user_home = environ.get("HOME") orelse return error.NoHomeDirectory;
     const action = args.positional() orelse "";
     if (std.mem.eql(u8, action, "install")) {
-        try launchd.install(connector, user_home);
+        try autostart.install(connector, user_home);
         try out.writeAll("installed: the daemon now runs from login\n");
     } else if (std.mem.eql(u8, action, "uninstall")) {
-        try launchd.uninstall(connector, user_home);
+        try autostart.uninstall(connector, user_home);
         try out.writeAll("uninstalled\n");
     } else if (std.mem.eql(u8, action, "status")) {
-        try out.writeAll(if (try launchd.isInstalled(connector, user_home)) "installed\n" else "not installed\n");
+        try out.writeAll(if (try autostart.isInstalled(connector, user_home)) "installed\n" else "not installed\n");
     } else {
         try out.writeAll(usage);
         return 2;
@@ -245,7 +245,7 @@ fn serviceCommand(connector: client_module.Connector, environ: *const std.proces
 }
 
 fn homeDirectory(arena: std.mem.Allocator, io: Io, environ: *const std.process.Environ.Map) ![]const u8 {
-    if (environ.get("RSS_HOME")) |path| return path;
+    if (environ.get("FYKE_HOME")) |path| return path;
     const user_home = environ.get("HOME") orelse return error.NoHomeDirectory;
     return data_home.resolve(arena, io, user_home);
 }
@@ -402,7 +402,9 @@ fn daemonCommand(app: App, args: Args) !void {
 }
 
 test {
-    _ = launchd;
+    _ = autostart;
+    _ = @import("launchd.zig");
+    _ = @import("systemd.zig");
     _ = data_move;
     _ = @import("pipeline.zig");
     _ = @import("store.zig");

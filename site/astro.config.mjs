@@ -4,10 +4,10 @@ import rehypeDocs from "./src/plugins/rehype-docs.mjs";
 
 // The public address defaults to the project's own domain. SITE_URL and SITE_BASE
 // let the site be hosted elsewhere, including under a sub-path such as
-// https://example.github.io/weir/.
-const site = process.env.SITE_URL || "https://weir.cinematicgenius007.com";
+// https://example.github.io/fyke/.
+const site = process.env.SITE_URL || "https://fyke.cinematicgenius007.com";
 const base = process.env.SITE_BASE || "/";
-const repo = process.env.SITE_REPO || "https://github.com/CinematicGenius007/rss_";
+const repo = process.env.SITE_REPO || "https://github.com/CinematicGenius007/fyke";
 
 export default defineConfig({
   site,

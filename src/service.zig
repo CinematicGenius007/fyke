@@ -62,7 +62,7 @@ const outage_host_count = 3;
 const outage_first_pause_ms = 60 * 1000;
 const outage_max_pause_ms = 5 * 60 * 1000;
 const robots_ttl_ms = 24 * 3600 * 1000;
-const robots_token = "rss_";
+const robots_token = "fyke";
 const page_accept = "text/html,application/xhtml+xml;q=0.9";
 const raw_bodies_kept = 20;
 /// Ticks are at most this often, since each finished fetch asks for one.

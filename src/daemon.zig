@@ -1,4 +1,4 @@
-//! `rss daemon`: owns the database and serves the operation registry on a Unix
+//! `fyke daemon`: owns the database and serves the operation registry on a Unix
 //! socket, as newline-delimited JSON-RPC 2.0. See docs/api.md ("Socket protocol").
 
 const std = @import("std");
@@ -16,10 +16,10 @@ const max_request = 1 << 20;
 /// A subscriber with nothing new still checks this often, in case a signal raced.
 const subscribe_poll_ms = 5000;
 
-pub const socket_name = "rssd.sock";
+pub const socket_name = "fyked.sock";
 
 pub const Options = struct {
-    /// Log to `rssd.log` in place of stderr, for a daemon started in the background.
+    /// Log to `fyked.log` in place of stderr, for a daemon started in the background.
     log_to_file: bool = false,
 };
 
@@ -30,10 +30,10 @@ const code_invalid_params = -32602;
 const code_failed = -32000;
 const code_tier_denied = -32001;
 
-/// Sends this process's stderr to `rssd.log`, emptied first. Only the lock holder
+/// Sends this process's stderr to `fyked.log`, emptied first. Only the lock holder
 /// may do this, or a client that lost the race to start a daemon would erase the log.
 fn redirectLog(io: Io, home: Io.Dir) !void {
-    var log = try home.createFile(io, "rssd.log", .{});
+    var log = try home.createFile(io, "fyked.log", .{});
     defer log.close(io);
     if (std.c.dup2(log.handle, std.posix.STDERR_FILENO) < 0) return error.LogUnavailable;
 }
@@ -48,7 +48,7 @@ pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem
 
     // The lock is what proves that no other daemon owns this database. The kernel
     // drops it if this process dies, so a stale lock is impossible.
-    var lock_file = try home.createFile(io, "rssd.lock", .{ .truncate = false });
+    var lock_file = try home.createFile(io, "fyked.lock", .{ .truncate = false });
     defer lock_file.close(io);
     if (!try lock_file.tryLock(io, .exclusive)) return error.AlreadyRunning;
     if (options.log_to_file) try redirectLog(io, home);
@@ -56,7 +56,7 @@ pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem
     const socket_path = try std.fmt.allocPrint(arena, "{s}/{s}", .{ home_path, socket_name });
     home.deleteFile(io, socket_name) catch {}; // Left behind by a crash.
 
-    const db_path = try std.fmt.allocPrintSentinel(arena, "{s}/rss.db", .{home_path}, 0);
+    const db_path = try std.fmt.allocPrintSentinel(arena, "{s}/fyke.db", .{home_path}, 0);
     const config = try readConfig(arena, io, home);
     var s: Service = .{
         .gpa = gpa,
@@ -83,7 +83,7 @@ pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem
     s.remove_read_after_days.store(s.config.remove_read_after_days, .monotonic);
     if (s.config.auto_poll) try group.concurrent(io, service.fullTextLoop, .{&s});
     try group.concurrent(io, acceptLoop, .{ &s, &server });
-    std.debug.print("rssd: listening on {s}\n", .{socket_path});
+    std.debug.print("fyked: listening on {s}\n", .{socket_path});
 
     s.stop.waitUncancelable(io);
 
@@ -92,7 +92,7 @@ pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem
     s.writer_lock.lockUncancelable(io);
     s.writer.close();
     home.deleteFile(io, socket_name) catch {};
-    std.debug.print("rssd: stopped\n", .{});
+    std.debug.print("fyked: stopped\n", .{});
     std.process.exit(0);
 }
 
@@ -136,7 +136,7 @@ fn serve(s: *Service, stream: Io.net.Stream) Io.Cancelable!void {
 
     // A connection may lower its own tier, never raise it. Anything that can open
     // this socket is already the owner. Tiers exist to bound what an agent can do
-    // through an adapter such as `rss mcp`, which restricts itself first.
+    // through an adapter such as `fyke mcp`, which restricts itself first.
     var tier: ops.Tier = .manage;
 
     while (true) {

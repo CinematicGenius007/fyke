@@ -550,7 +550,7 @@ struct MoveDialog: View {
     }
 
     private var summary: some View {
-        (Text("\(size) moves to ") + Text(place).font(.code(13)).foregroundStyle(p.ink) + Text(". rss_ restarts when it is done."))
+        (Text("\(size) moves to ") + Text(place).font(.code(13)).foregroundStyle(p.ink) + Text(". Fyke restarts when it is done."))
             .font(.ui(14)).foregroundStyle(p.inkSoft).fixedSize(horizontal: false, vertical: true)
     }
 

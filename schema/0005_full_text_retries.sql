@@ -1,4 +1,4 @@
--- rss_ schema, version 5: retrying articles that could not be fetched.
+-- Fyke schema, version 5: retrying articles that could not be fetched.
 --
 -- A timeout or a 503 says nothing about the page, so such an entry keeps `full_status`
 -- NULL and waits for `full_retry_at`. `full_attempts` counts tries that failed this way.

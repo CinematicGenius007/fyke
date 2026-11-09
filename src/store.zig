@@ -1322,7 +1322,7 @@ test "sandboxed queries can read but cannot escape" {
     defer arena.deinit();
     const a = arena.allocator();
 
-    const path = "/tmp/rss_-store-test.db";
+    const path = "/tmp/fyke-store-test.db";
     var writer: Db = try .open(path, .writer);
     defer {
         writer.close();
@@ -1561,7 +1561,7 @@ test "a retry waits for its time, and an edit starts over" {
 test "an old database is upgraded in place" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
-    const path = "/tmp/rss_-migrate-test.db";
+    const path = "/tmp/fyke-migrate-test.db";
     defer inline for (.{ path, path ++ "-wal", path ++ "-shm" }) |name| {
         _ = std.c.unlink(name);
     };

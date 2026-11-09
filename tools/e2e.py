@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""End-to-end test of the rss binary against a local HTTP server that records
+"""End-to-end test of the fyke binary against a local HTTP server that records
 every request it receives.
 
-Usage: e2e.py <path-to-rss>
+Usage: e2e.py <path-to-fyke>
 """
 import gzip, http.server, json, os, shutil, socketserver, sqlite3, subprocess, sys, tempfile, threading, time
 
 RSS = sys.argv[1]
-home = tempfile.mkdtemp(prefix="rss-e2e-", dir="/tmp")  # Short, for the socket path limit.
-env = dict(os.environ, RSS_HOME=home)
+home = tempfile.mkdtemp(prefix="fyke-e2e-", dir="/tmp")  # Short, for the socket path limit.
+env = dict(os.environ, FYKE_HOME=home)
 # Tests decide when fetches happen, so background polling stays off.
 open(os.path.join(home, "config.json"), "w").write('{"auto_poll": false}')
 requests = []
@@ -65,7 +65,7 @@ def rss(*args, ok=True):
     return p
 
 def db():
-    c = sqlite3.connect(os.path.join(home, "rss.db")); c.row_factory = sqlite3.Row; return c
+    c = sqlite3.connect(os.path.join(home, "fyke.db")); c.row_factory = sqlite3.Row; return c
 
 passed = 0
 def check(name, condition, detail=""):
@@ -86,7 +86,7 @@ check("file URL refused", p.returncode == 1)
 # First fetch and the content pipeline
 rss("add", base + "/feed", "--allow-private")
 r = requests[-1]
-check("sends our user agent", r["ua"].startswith("rss_/"), r)
+check("sends our user agent", r["ua"].startswith("fyke/"), r)
 check("asks for gzip", "gzip" in (r["ae"] or ""), r)
 c = db()
 f = c.execute("select * from feeds").fetchone()

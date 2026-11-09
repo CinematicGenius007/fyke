@@ -167,8 +167,8 @@ private struct GeneralPane: View {
                         }
                     }
                     .buttonStyle(Plain())
-                    // RSS_HOME names the folder for this run, so there is no default to repoint.
-                    .disabled(ProcessInfo.processInfo.environment["RSS_HOME"] != nil)
+                    // FYKE_HOME names the folder for this run, so there is no default to repoint.
+                    .disabled(ProcessInfo.processInfo.environment["FYKE_HOME"] != nil)
                 }
                 if let problem = prefs.fileProblem {
                     Text("config.json has a mistake, so the last good settings stay in use: \(problem)")
@@ -193,10 +193,10 @@ private struct GeneralPane: View {
     }
 }
 
-/// `rss service`, so polling continues after logging in with the app closed.
+/// `fyke service`, so polling continues after logging in with the app closed.
 enum LoginAgent {
     private static var file: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/LaunchAgents/local.rss_.daemon.plist")
+        FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/LaunchAgents/local.fyke.daemon.plist")
     }
 
     static var isInstalled: Bool { FileManager.default.fileExists(atPath: file.path) }
@@ -416,7 +416,7 @@ private struct AgentsPane: View {
     private var tier: String { Prefs.shared.ui.agentTier }
 
     private var snippet: String {
-        let binary = Bundle.main.executableURL!.deletingLastPathComponent().appending(path: "rss").path
+        let binary = Bundle.main.executableURL!.deletingLastPathComponent().appending(path: "fyke").path
         let args = tier == "read" ? "[\"mcp\"]" : "[\"mcp\", \"--tier\", \"\(tier)\"]"
         return "{ \"mcpServers\": { \"rss\": {\n    \"command\": \"\(binary)\",\n    \"args\": \(args) } } }"
     }

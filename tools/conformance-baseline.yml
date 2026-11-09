@@ -1,4 +1,4 @@
-# Scenarios of @modelcontextprotocol/conformance 0.1.16 that do not apply to rss_.
+# Scenarios of @modelcontextprotocol/conformance 0.1.16 that do not apply to Fyke.
 # A run fails on any failure not listed here, and on any listed scenario that passes.
 server:
   # Need the suite's own fixtures, such as the tool test_simple_text.
@@ -21,13 +21,13 @@ server:
   - prompts-get-with-args
   - prompts-get-embedded-resource
   - prompts-get-with-image
-  # Optional features that rss_ does not declare, so Method not found is correct.
+  # Optional features that Fyke does not declare, so Method not found is correct.
   - logging-set-level
   - tools-call-with-logging
   - completion-complete
   - resources-subscribe
   - resources-unsubscribe
-  # Test HTTP behavior: Host checks, sessions and SSE. rss_ opens no port, so these
+  # Test HTTP behavior: Host checks, sessions and SSE. Fyke opens no port, so these
   # would only measure the test bridge.
   - dns-rebinding-protection
   - server-sse-polling

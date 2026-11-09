@@ -27,7 +27,7 @@ Not used: A2A (agent-to-agent, no need here). Note that "ACP" also once meant IB
 
 An operation is declared once: name, tier, input type, output type, description. From that one declaration come the socket method, the MCP tool and its JSON Schema, and the wire types the CLI uses.
 
-The tables below list what exists. Each tier ends with what is planned, and `rss ops` always shows the truth.
+The tables below list what exists. Each tier ends with what is planned, and `fyke ops` always shows the truth.
 
 Pagination is keyset-based: list results return `next_cursor`.
 
@@ -51,7 +51,7 @@ Pagination is keyset-based: list results return `next_cursor`.
 
 Planned: `feeds.get`, `entries.similar`, `stories.list`, `stories.get`, `artifacts.list`, `artifacts.get`, `lenses.list`, `jobs.list`.
 
-`db.query` is deliberate, and it is the recommended path for agents. Opening the file directly is possible, but `sqlite3 -readonly` fails with error 14 after a clean daemon shutdown; use `file:rss.db?immutable=1` only while the daemon is stopped.
+`db.query` is deliberate, and it is the recommended path for agents. Opening the file directly is possible, but `sqlite3 -readonly` fails with error 14 after a clean daemon shutdown; use `file:fyke.db?immutable=1` only while the daemon is stopped.
 
 Registered operations cover the common paths, and SQL covers every question nobody predicted, which is what "access all the information" requires.
 
@@ -81,15 +81,15 @@ Planned: `lenses.put`, `lenses.run`, `runners.put`, `jobs.cancel`.
 
 | Tier | Grants | Default for |
 |---|---|---|
-| `read` | Read operations | `rss mcp`, ACP-launched agents |
-| `annotate` | Plus marks, tags, notes, artifacts | Opt in: `rss mcp --tier annotate` |
+| `read` | Read operations | `fyke mcp`, ACP-launched agents |
+| `annotate` | Plus marks, tags, notes, artifacts | Opt in: `fyke mcp --tier annotate` |
 | `manage` | Plus changing subscriptions and config | CLI, GUI, TUI. Opt in for MCP |
 
 Tiers are enforced in the `ops` layer on each call, not in the adapters. The reason is in [Security](architecture.md#security).
 
 ## Socket protocol
 
-JSON-RPC 2.0, newline-delimited, over the Unix socket at `$RSS_HOME/rssd.sock`. This is the same framing MCP specifies for stdio, and MCP recommends it for custom stream transports, so `rss mcp` needs no second framing layer.
+JSON-RPC 2.0, newline-delimited, over the Unix socket at `$FYKE_HOME/fyked.sock`. This is the same framing MCP specifies for stdio, and MCP recommends it for custom stream transports, so `fyke mcp` needs no second framing layer.
 
 ```json
 {"jsonrpc":"2.0","id":1,"method":"entries.search","params":{"query":"zig parser","limit":10}}
@@ -112,39 +112,39 @@ Requests are limited to 1 MiB per line. A longer one closes that connection.
 
 `events.subscribe` takes `since_seq` and turns the connection into a one-way stream, so a client keeps a second connection for requests. After a reconnect, it resumes from its last sequence number.
 
-`connection.restrict` takes a `tier` and lowers this connection for good. New connections start at `manage`, since anything that can open the socket already owns the data. `rss mcp` restricts itself before accepting any agent request.
+`connection.restrict` takes a `tier` and lowers this connection for good. New connections start at `manage`, since anything that can open the socket already owns the data. `fyke mcp` restricts itself before accepting any agent request.
 
 ## CLI
 
 Human output on a terminal, JSON with `--json` or when piped. Exit codes are stable.
 
 ```bash
-rss add https://example.com/feed.xml
-rss list --unread --feed 12 --limit 20
-rss search "zig parser" --json
-rss show 5120 --format markdown
-rss mark 5120 --read
-rss mark 5120 --hide
-rss import subscriptions.opml
-rss export
-rss status
-rss ops
-rss schema
-rss query "SELECT title FROM entries ORDER BY sort_at DESC LIMIT 5"
-rss tui
-rss mcp
-rss daemon
-rss daemon stop
-rss service install
-rss service uninstall
-rss service status
+fyke add https://example.com/feed.xml
+fyke list --unread --feed 12 --limit 20
+fyke search "zig parser" --json
+fyke show 5120 --format markdown
+fyke mark 5120 --read
+fyke mark 5120 --hide
+fyke import subscriptions.opml
+fyke export
+fyke status
+fyke ops
+fyke schema
+fyke query "SELECT title FROM entries ORDER BY sort_at DESC LIMIT 5"
+fyke tui
+fyke mcp
+fyke daemon
+fyke daemon stop
+fyke service install
+fyke service uninstall
+fyke service status
 ```
 
-Clients start the daemon when none is running, and give up on a daemon that does not answer within 120 s. `rss service install` runs it from login as a macOS launch agent, replacing any daemon already running, and launchd restarts it after a crash. Planned: `rss digest`.
+Clients start the daemon when none is running, and give up on a daemon that does not answer within 120 s. `fyke service install` runs it from login, replacing any daemon already running: a launch agent on macOS, a `systemd` user unit (`fyke.service`) on Linux. Either restarts it after a crash and not after a clean `fyke daemon stop`. On Linux the unit starts with the first login session, and starting at boot needs `loginctl enable-linger`, which `fyke` does not run for you. Other systems report `Unsupported`. Planned: `fyke digest`.
 
 ## MCP server
 
-`rss mcp` is a small stdio process that translates to the socket. Target revision: [2026-07-28](https://modelcontextprotocol.io/specification/latest). That revision is stateless, with protocol version and capabilities on each request and no server-initiated requests, so the server is a direct mapping with no session state. Older clients still use the `initialize` handshake, so we also implement the spec's backward-compatibility fallback.
+`fyke mcp` is a small stdio process that translates to the socket. Target revision: [2026-07-28](https://modelcontextprotocol.io/specification/latest). That revision is stateless, with protocol version and capabilities on each request and no server-initiated requests, so the server is a direct mapping with no session state. Older clients still use the `initialize` handshake, so we also implement the spec's backward-compatibility fallback.
 
 | MCP feature | Mapped to |
 |---|---|
@@ -155,7 +155,7 @@ Clients start the daemon when none is running, and give up on a daemon that does
 Example registration for any MCP client:
 
 ```json
-{ "mcpServers": { "rss": { "command": "/path/to/rss", "args": ["mcp"] } } }
+{ "mcpServers": { "fyke": { "command": "/path/to/fyke", "args": ["mcp"] } } }
 ```
 
 For more than reading, add `"--tier", "annotate"` or `"--tier", "manage"` to `args`.
@@ -173,7 +173,7 @@ Planned. The daemon will spawn the agent as a subprocess and speak JSON-RPC over
 | Step | Method | Our choice |
 |---|---|---|
 | Connect | `initialize` | Advertise no `fs` and no `terminal` capability |
-| Start | `session/new` | `cwd` is an empty scratch directory; `mcpServers` contains `rss mcp` at read tier |
+| Start | `session/new` | `cwd` is an empty scratch directory; `mcpServers` contains `fyke mcp` at read tier |
 | Ask | `session/prompt` | Task text and lens context |
 | Watch | `session/update` | Streamed into the UI and into the job log |
 | Authorize | `session/request_permission` | Deny unless allowlisted or approved in the UI |
@@ -188,5 +188,5 @@ ACP is built for coding agents, and its remote transport is still in progress. W
 An agent dropped into this project or connected over MCP can orient itself in three steps:
 
 1. `AGENTS.md` at the repo root gives the map in one page.
-2. `rss schema` or `schema.describe` gives the annotated data model.
-3. `rss --help` or the MCP tool list gives every operation, generated from the registry.
+2. `fyke schema` or `schema.describe` gives the annotated data model.
+3. `fyke --help` or the MCP tool list gives every operation, generated from the registry.

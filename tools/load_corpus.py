@@ -2,15 +2,15 @@
 """Pushes the whole corpus through the real binary, then checks what was stored
 against what the parser reported.
 
-Usage: load_corpus.py <path-to-rss> <corpus-dir> <dump.jsonl>
+Usage: load_corpus.py <path-to-fyke> <corpus-dir> <dump.jsonl>
 """
 import functools, http.server, json, os, shutil, socketserver, sqlite3, subprocess, sys, tempfile, threading, time
 
 rss, corpus, dump = sys.argv[1:4]
 rss = os.path.abspath(rss)
-home = tempfile.mkdtemp(prefix="rss-load-", dir="/tmp")  # Short, for the socket path limit.
+home = tempfile.mkdtemp(prefix="fyke-load-", dir="/tmp")  # Short, for the socket path limit.
 open(home + "/config.json", "w").write('{"auto_poll": false}')
-env = dict(os.environ, RSS_HOME=home)
+env = dict(os.environ, FYKE_HOME=home)
 
 class Quiet(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *args): pass
@@ -33,7 +33,7 @@ for name in sorted(expected):
     else: ok += 1
 seconds = time.time() - start
 
-db = sqlite3.connect(os.path.join(home, "rss.db"))
+db = sqlite3.connect(os.path.join(home, "fyke.db"))
 stored = dict(db.execute("select substr(url, instr(url, '.feed') - 16, 21), (select count(*) from entries e where e.feed_id = f.id) from feeds f"))
 short = [(n, expected[n], stored.get(n, 0)) for n in expected if stored.get(n, 0) != expected[n]]
 print(f"added {ok}, failed {failed}, crashed {crashed} in {seconds:.1f} s")

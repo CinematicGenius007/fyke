@@ -1,7 +1,7 @@
 flowchart LR
   subgraph inbound [Agents call us]
-    a1[Claude Code, Codex, Cursor, ...] -->|MCP tools and resources| m[rss mcp]
-    a2[Anything with a shell] -->|rss ... --json| c[rss CLI]
+    a1[Claude Code, Codex, Cursor, ...] -->|MCP tools and resources| m[fyke mcp]
+    a2[Anything with a shell] -->|fyke ... --json| c[fyke CLI]
   end
   m -->|operations| ops[Operation registry]
   c -->|operations| ops
@@ -11,4 +11,4 @@ flowchart LR
     r -->|JSON on stdin and stdout| e[Script using any agent SDK]
     r -->|ACP over stdio| p[Any ACP agent]
   end
-  p -->|given rss mcp at session/new| m
+  p -->|given fyke mcp at session/new| m

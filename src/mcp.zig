@@ -1,4 +1,4 @@
-//! `rss mcp`: an MCP server on stdio, for any agent. It holds no data and no logic
+//! `fyke mcp`: an MCP server on stdio, for any agent. It holds no data and no logic
 //! of its own. It translates MCP into the operation registry, through the same
 //! socket as every other client, and its tools are generated from that registry.
 //!
@@ -19,7 +19,7 @@ const Value = std.json.Value;
 
 const modern_version = "2026-07-28";
 const supported_versions = [_][]const u8{ modern_version, "2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05" };
-const server_info = "{\"name\":\"rss_\",\"version\":\"0.1.0\"}";
+const server_info = "{\"name\":\"fyke\",\"version\":\"0.1.0\"}";
 
 /// Longest accepted message.
 const max_message = 4 << 20;

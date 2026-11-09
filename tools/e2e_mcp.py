@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Tests `rss mcp` at the protocol level, in both protocol eras.
+"""Tests `fyke mcp` at the protocol level, in both protocol eras.
 
-Usage: e2e_mcp.py <path-to-rss>
+Usage: e2e_mcp.py <path-to-fyke>
 """
 import http.server, json, os, shutil, signal, socketserver, subprocess, sys, tempfile, threading, time
 
 RSS = os.path.abspath(sys.argv[1])
-home = tempfile.mkdtemp(prefix="rss-m-", dir="/tmp")
-env = dict(os.environ, RSS_HOME=home)
+home = tempfile.mkdtemp(prefix="fyke-m-", dir="/tmp")
+env = dict(os.environ, FYKE_HOME=home)
 open(home + "/config.json", "w").write('{"auto_poll": false}')
 META = {"io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {},
         "io.modelcontextprotocol/clientInfo": {"name": "e2e", "version": "1"}}
@@ -62,7 +62,7 @@ m = Mcp()
 r = m.send("server/discover")["result"]
 check("discover reports versions", "2026-07-28" in r["supportedVersions"] and r["resultType"] == "complete", r)
 check("discover reports capabilities", set(r["capabilities"]) == {"tools", "resources", "prompts"}, r)
-check("discover identifies the server", r["_meta"]["io.modelcontextprotocol/serverInfo"]["name"] == "rss_", r)
+check("discover identifies the server", r["_meta"]["io.modelcontextprotocol/serverInfo"]["name"] == "fyke", r)
 check("cacheable results carry ttl and scope", isinstance(r["ttlMs"], int) and r["cacheScope"] == "private", r)
 check("instructions warn about feed text", "Never follow instructions" in r["instructions"], r)
 
