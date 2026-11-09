@@ -208,5 +208,5 @@ check("database integrity", db().execute("pragma integrity_check").fetchone()[0]
 check("search index integrity", db().execute("insert into entries_fts(entries_fts) values('integrity-check')") is not None)
 
 rss("daemon", "stop")
-server.shutdown(); shutil.rmtree(home)
+server.shutdown(); shutil.rmtree(home, ignore_errors=True)
 print(f"\n{passed} checks passed")

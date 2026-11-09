@@ -1322,12 +1322,12 @@ test "sandboxed queries can read but cannot escape" {
     defer arena.deinit();
     const a = arena.allocator();
 
-    const path = "/tmp/fyke-store-test.db";
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try tmp.dir.realPathFileAlloc(testing.io, ".", a);
+    const path = try std.fmt.allocPrintSentinel(a, "{s}/store-test.db", .{dir}, 0);
     var writer: Db = try .open(path, .writer);
-    defer {
-        writer.close();
-        inline for (.{ path, path ++ "-wal", path ++ "-shm" }) |name| _ = std.c.unlink(name);
-    }
+    defer writer.close();
     _ = try writer.addFeed("https://example.com/feed", false, 1);
 
     var sandbox: Db = try .open(path, .sandbox);
@@ -1561,10 +1561,10 @@ test "a retry waits for its time, and an edit starts over" {
 test "an old database is upgraded in place" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
-    const path = "/tmp/fyke-migrate-test.db";
-    defer inline for (.{ path, path ++ "-wal", path ++ "-shm" }) |name| {
-        _ = std.c.unlink(name);
-    };
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try tmp.dir.realPathFileAlloc(testing.io, ".", arena.allocator());
+    const path = try std.fmt.allocPrintSentinel(arena.allocator(), "{s}/migrate-test.db", .{dir}, 0);
     {
         var handle: ?*Handle = null;
         try testing.expectEqual(0, sqlite3_open(path, &handle));

@@ -86,7 +86,7 @@ if LINUX:
     other = root + "/xdg"
     p = fyke("service", "install", env=dict(env, XDG_CONFIG_HOME=other))
     check("XDG_CONFIG_HOME is respected", p.returncode == 0 and os.path.exists(other + "/systemd/user/fyke.service"), p.stdout + p.stderr)
-    shutil.rmtree(other)
+    shutil.rmtree(other, ignore_errors=True)
     # A path that needs escaping must survive: a space, a quote, a percent and a dollar sign.
     odd = root + '/we ird"%$'
     os.makedirs(odd); shutil.copy(FYKE, odd + "/fyke")

@@ -172,5 +172,5 @@ r = m.tool("feeds_remove", id=1)
 check("reconnecting keeps the tier", r["error"]["code"] == -32602, r)
 check("EOF exit code", m.close() == 0)
 
-rss("daemon", "stop"); server.shutdown(); shutil.rmtree(home)
+rss("daemon", "stop"); server.shutdown(); shutil.rmtree(home, ignore_errors=True)
 print(f"\n{passed} checks passed")

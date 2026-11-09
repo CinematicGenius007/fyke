@@ -292,7 +292,7 @@ p = subprocess.run([RSS, "import", path + ".out", "--allow-private"], env=env2, 
 check("exported file imports elsewhere", "4 added" in p.stdout, p.stdout + p.stderr)
 again = subprocess.run([RSS, "export"], env=env2, capture_output=True, text=True, timeout=30).stdout
 check("export, import, export is stable", sorted(again.splitlines()) == sorted(exported.splitlines()), again)
-subprocess.run([RSS, "daemon", "stop"], env=env2, capture_output=True, timeout=30); shutil.rmtree(home2)
+subprocess.run([RSS, "daemon", "stop"], env=env2, capture_output=True, timeout=30); shutil.rmtree(home2, ignore_errors=True)
 rss("remove", "2"); rss("remove", "3"); rss("remove", "4")
 
 # Housekeeping
@@ -523,7 +523,7 @@ check("its entries stay", rows("SELECT count(*) FROM entries") == [[9]])
 check("deleting with contents removes feeds and subfolders", "result" in op("folders.remove", id=top, delete_contents=True) and rows("SELECT id FROM feeds") == [[3]], rows("SELECT id FROM feeds"))
 check("and their entries", rows("SELECT count(*) FROM entries") == [[3]])
 check("and the folders inside", rows("SELECT count(*) FROM folders WHERE id IN (%d, %d)" % (top, low)) == [[0]])
-subprocess.run([RSS, "daemon", "stop"], env=env_ops, capture_output=True, timeout=30); shutil.rmtree(ops_home)
+subprocess.run([RSS, "daemon", "stop"], env=env_ops, capture_output=True, timeout=30); shutil.rmtree(ops_home, ignore_errors=True)
 
 # A hand edit that breaks config.json
 broken = tempfile.mkdtemp(prefix="fyke-c-", dir=TMP)
@@ -537,7 +537,7 @@ with socket.socket(socket.AF_UNIX) as s:
     reply = json.loads(s.makefile().readline())
 check("config.get reports the problem", reply["result"]["config_error"] is not None, reply)
 check("and the file stays for the owner to fix", open(broken + "/config.json").read() == '{"auto_poll": false,')
-subprocess.run([RSS, "daemon", "stop"], env=env_broken, capture_output=True, timeout=30); shutil.rmtree(broken)
+subprocess.run([RSS, "daemon", "stop"], env=env_broken, capture_output=True, timeout=30); shutil.rmtree(broken, ignore_errors=True)
 
 # Moving data out of the legacy location, with its daemon still running
 user = tempfile.mkdtemp(prefix="fyke-m-", dir=TMP)
@@ -579,7 +579,7 @@ env_link = dict(env_new, HOME=user3)
 p = subprocess.run([RSS, "status"], env=env_link, capture_output=True, text=True, timeout=30)
 check("a link at the new path is left in place", p.returncode == 0 and os.path.islink(user3 + "/.fyke") and os.path.isfile(user3 + "/.rss_/fyke.db"), p.stdout + p.stderr)
 subprocess.run([RSS, "daemon", "stop"], env=env_link, capture_output=True, timeout=30)
-shutil.rmtree(user); shutil.rmtree(user2); shutil.rmtree(user3)
+shutil.rmtree(user, ignore_errors=True); shutil.rmtree(user2, ignore_errors=True); shutil.rmtree(user3, ignore_errors=True)
 
 # Data written by a build from before the name: old file names, found at ~/.rss_
 import fcntl
@@ -695,5 +695,5 @@ if sys.platform == "darwin":
 subprocess.run([RSS, "daemon", "stop"], env=env_mv, capture_output=True, timeout=30)
 shutil.rmtree(mv_home, ignore_errors=True)
 
-server.shutdown(); shutil.rmtree(home)
+server.shutdown(); shutil.rmtree(home, ignore_errors=True)
 print(f"\n{passed} checks passed")

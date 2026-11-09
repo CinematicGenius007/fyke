@@ -342,5 +342,5 @@ t.keys("\x03", 0.1)
 code, after = t.finish()
 check("and still exits cleanly", code == 0 and after == t.saved, code)
 
-rss("daemon", "stop"); server.shutdown(); shutil.rmtree(home); shutil.rmtree(shim)
+rss("daemon", "stop"); server.shutdown(); shutil.rmtree(home, ignore_errors=True); shutil.rmtree(shim, ignore_errors=True)
 print(f"\n{passed} checks passed")
