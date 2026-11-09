@@ -9,6 +9,7 @@ const data_home = @import("data_home.zig");
 const data_move = @import("data_move.zig");
 const autostart = @import("autostart.zig");
 const mcp = @import("mcp.zig");
+const platform = @import("platform.zig");
 const ops = @import("ops.zig");
 const tui = @import("tui.zig");
 
@@ -35,11 +36,11 @@ const usage =
     \\  tui                            read in the terminal
     \\  mcp [--tier read|annotate|manage]   MCP server on stdio, for agents
     \\  daemon [stop]                  run in the foreground, or stop it
-    \\  service install|uninstall|status   run the daemon from login, on macOS
+    \\  service install|uninstall|status   run the daemon from login, on macOS and Linux
     \\  data move <folder>             move the data folder, then restart
     \\
     \\Clients start the daemon when needed.
-    \\Data lives in $FYKE_HOME, by default ~/.fyke
+    \\Data lives in $FYKE_HOME, by default ~/.fyke (%LOCALAPPDATA%\\Fyke on Windows)
     \\
 ;
 
@@ -212,7 +213,7 @@ pub fn main(init: std.process.Init) !u8 {
 }
 
 fn dataCommand(connector: client_module.Connector, environ: *const std.process.Environ.Map, args: Args, out: *Io.Writer) !u8 {
-    const user_home = environ.get("HOME") orelse return error.NoHomeDirectory;
+    const user_home = try userHome(environ);
     const action = args.positional() orelse "";
     if (!std.mem.eql(u8, action, "move")) {
         try out.writeAll(usage);
@@ -227,7 +228,7 @@ fn dataCommand(connector: client_module.Connector, environ: *const std.process.E
 }
 
 fn serviceCommand(connector: client_module.Connector, environ: *const std.process.Environ.Map, args: Args, out: *Io.Writer) !u8 {
-    const user_home = environ.get("HOME") orelse return error.NoHomeDirectory;
+    const user_home = try userHome(environ);
     const action = args.positional() orelse "";
     if (std.mem.eql(u8, action, "install")) {
         try autostart.install(connector, user_home);
@@ -244,10 +245,20 @@ fn serviceCommand(connector: client_module.Connector, environ: *const std.proces
     return 0;
 }
 
+/// The person's home folder: `HOME` where it is set, and `USERPROFILE` on Windows.
+fn userHome(environ: *const std.process.Environ.Map) ![]const u8 {
+    return environ.get("HOME") orelse environ.get("USERPROFILE") orelse error.NoHomeDirectory;
+}
+
 fn homeDirectory(arena: std.mem.Allocator, io: Io, environ: *const std.process.Environ.Map) ![]const u8 {
     if (environ.get("FYKE_HOME")) |path| return path;
-    const user_home = environ.get("HOME") orelse return error.NoHomeDirectory;
-    return data_home.resolve(arena, io, user_home);
+    // The database is rewritten constantly and must not roam with the profile, so it goes
+    // in the local application data folder, which is also what a program there expects.
+    if (comptime platform.is_windows) {
+        const base = environ.get("LOCALAPPDATA") orelse return error.NoHomeDirectory;
+        return std.fmt.allocPrint(arena, "{s}\\Fyke", .{base});
+    }
+    return data_home.resolve(arena, io, try userHome(environ));
 }
 
 fn printOutcome(app: App, result: ops.RefreshResult) !void {

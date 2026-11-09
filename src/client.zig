@@ -3,6 +3,7 @@
 const std = @import("std");
 const daemon = @import("daemon.zig");
 const data_home = @import("data_home.zig");
+const platform = @import("platform.zig");
 
 const Io = std.Io;
 
@@ -38,6 +39,7 @@ pub const Client = struct {
 
     /// A daemon that stopped answering must surface as an error, not as a hang.
     fn waitForReply(c: *Client) !void {
+        if (comptime platform.is_windows) return c.waitForReplyRacing();
         var fds = [_]std.c.pollfd{.{ .fd = c.stream.socket.handle, .events = std.c.POLL.IN, .revents = 0 }};
         while (true) {
             const ready = std.c.poll(&fds, fds.len, reply_timeout_ms);
@@ -45,6 +47,30 @@ pub const Client = struct {
             if (ready == 0) return error.DaemonTimeout;
             if (std.posix.errno(ready) != .INTR) return error.DaemonUnavailable;
         }
+    }
+
+    const Wait = union(enum) {
+        ready: Io.Reader.Error!u8,
+        expired: Io.Cancelable!void,
+    };
+
+    /// Windows cannot poll a socket the standard library opened, so the wait is a race:
+    /// looking at the first byte of the reply against a timer. The loser is canceled.
+    fn waitForReplyRacing(c: *Client) !void {
+        var buffer: [2]Wait = undefined;
+        var select: Io.Select(Wait) = .init(c.io, &buffer);
+        try select.concurrent(.ready, Io.Reader.peekByte, .{&c.reader.interface});
+        try select.concurrent(.expired, sleepFor, .{ c.io, Io.Duration.fromMilliseconds(reply_timeout_ms) });
+        const first = try select.await();
+        select.cancelDiscard();
+        switch (first) {
+            .ready => |byte| _ = byte catch return error.DaemonUnavailable,
+            .expired => return error.DaemonTimeout,
+        }
+    }
+
+    fn sleepFor(io: Io, duration: Io.Duration) Io.Cancelable!void {
+        try io.sleep(duration, .awake);
     }
 
     /// Calls an operation and returns its typed result.
@@ -107,14 +133,16 @@ pub const Connector = struct {
         try data_home.ensure(k.io, k.home_path);
 
         const self = try std.process.executablePathAlloc(k.io, k.arena);
-        // Its own process group, so that it outlives this client and any terminal.
+        // Its own process group, so that it outlives this client and any terminal. On
+        // Windows it gets a console of its own that is never shown, and so does not
+        // receive the Ctrl+C meant for this client.
         _ = try std.process.spawn(k.io, .{
             .argv = &.{ self, "daemon", "--log" },
             .environ_map = k.environ,
             .stdin = .ignore,
             .stdout = .ignore,
             .stderr = .ignore,
-            .pgid = 0,
+            .pgid = if (platform.is_windows) null else 0,
         });
     }
 };

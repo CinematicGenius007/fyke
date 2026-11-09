@@ -6,12 +6,15 @@ Usage: e2e_tui.py <path-to-fyke> [monkey-keys]     (needs: pip install pyte)
 """
 import fcntl, http.server, json, os, pty, random, re, select, shutil, signal, socketserver, sqlite3, stat, struct
 import subprocess, sys, tempfile, termios, threading, time
+
+# Unix socket paths are short, so macOS and Linux use /tmp. Windows has no /tmp.
+TMP = tempfile.gettempdir() if os.name == "nt" else "/tmp"
 import pyte
 
 RSS = os.path.abspath(sys.argv[1])
 MONKEY = int(sys.argv[2]) if len(sys.argv) > 2 else 20000
-home = tempfile.mkdtemp(prefix="fyke-t-", dir="/tmp")
-shim = tempfile.mkdtemp(prefix="fyke-b-", dir="/tmp")
+home = tempfile.mkdtemp(prefix="fyke-t-", dir=TMP)
+shim = tempfile.mkdtemp(prefix="fyke-b-", dir=TMP)
 opened = shim + "/opened.txt"
 env = dict(os.environ, FYKE_HOME=home, TERM="xterm-256color", PATH=shim + ":" + os.environ["PATH"])
 open(home + "/config.json", "w").write('{"auto_poll": false}')

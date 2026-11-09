@@ -5,8 +5,11 @@ Usage: e2e_mcp.py <path-to-fyke>
 """
 import http.server, json, os, shutil, signal, socketserver, subprocess, sys, tempfile, threading, time
 
+# Unix socket paths are short, so macOS and Linux use /tmp. Windows has no /tmp.
+TMP = tempfile.gettempdir() if os.name == "nt" else "/tmp"
+
 RSS = os.path.abspath(sys.argv[1])
-home = tempfile.mkdtemp(prefix="fyke-m-", dir="/tmp")
+home = tempfile.mkdtemp(prefix="fyke-m-", dir=TMP)
 env = dict(os.environ, FYKE_HOME=home)
 open(home + "/config.json", "w").write('{"auto_poll": false}')
 META = {"io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {},

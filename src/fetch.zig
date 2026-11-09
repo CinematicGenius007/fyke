@@ -6,6 +6,7 @@
 
 const std = @import("std");
 const core = @import("core");
+const platform = @import("platform.zig");
 
 const Io = std.Io;
 const http = std.http;
@@ -68,13 +69,31 @@ var connect_vtable: Io.VTable = undefined;
 /// How often a connect in progress checks whether it was canceled.
 const connect_poll_ms = 200;
 
-/// Returns `io` with a TCP connect that can be canceled. The standard library's
-/// blocks in `connect(2)`, and `http.Client` offers no way to supply a socket, so
-/// the replacement goes in through the `Io` interface. Call this once, at startup.
+const ConnectFn = @FieldType(Io.VTable, "netConnectIp");
+var standard_connect: ConnectFn = undefined;
+
+/// Returns `io` with a TCP connect that can be canceled and that reports the address it
+/// connected to. Call this once, at startup.
+///
+/// On POSIX systems the standard library's connect blocks in `connect(2)`, and
+/// `http.Client` offers no way to supply a socket, so a replacement goes in through the
+/// `Io` interface. On Windows the standard library's connect can be canceled, but it
+/// returns the socket's own address, where the address check needs the peer's.
 pub fn withCancelableConnect(io: Io) Io {
     connect_vtable = io.vtable.*;
-    connect_vtable.netConnectIp = connectIp;
+    if (comptime platform.is_windows) {
+        standard_connect = io.vtable.netConnectIp;
+        connect_vtable.netConnectIp = connectIpRecordingPeer;
+    } else {
+        connect_vtable.netConnectIp = connectIp;
+    }
     return .{ .userdata = io.userdata, .vtable = &connect_vtable };
+}
+
+fn connectIpRecordingPeer(userdata: ?*anyopaque, address: *const Io.net.IpAddress, options: Io.net.IpAddress.ConnectOptions) Io.net.IpAddress.ConnectError!Io.net.Socket {
+    var socket = try standard_connect(userdata, address, options);
+    socket.address = address.*;
+    return socket;
 }
 
 fn connectIp(userdata: ?*anyopaque, address: *const Io.net.IpAddress, _: Io.net.IpAddress.ConnectOptions) Io.net.IpAddress.ConnectError!Io.net.Socket {
@@ -297,21 +316,11 @@ fn loadCertificates(client: *http.Client) !void {
     client.now = now;
 }
 
+/// The address the connection was made to. Both connects above report it in the
+/// socket, so this needs no system call and reads the same on every platform.
 fn isPublicPeer(connection: *http.Client.Connection) bool {
-    const fd = connection.stream_reader.stream.socket.handle;
-    var storage: [128]u8 align(8) = undefined;
-    var length: std.posix.socklen_t = storage.len;
-    const address: *std.posix.sockaddr = @ptrCast(&storage);
-    std.posix.getpeername(fd, address, &length) catch return false;
-    return switch (address.family) {
-        std.posix.AF.INET => {
-            const ip4: *const std.posix.sockaddr.in = @ptrCast(&storage);
-            return url.isPublicIp4(std.mem.asBytes(&ip4.addr).*);
-        },
-        std.posix.AF.INET6 => {
-            const ip6: *const std.posix.sockaddr.in6 = @ptrCast(&storage);
-            return url.isPublicIp6(ip6.addr);
-        },
-        else => false,
+    return switch (connection.stream_reader.stream.socket.address) {
+        .ip4 => |ip| url.isPublicIp4(ip.bytes),
+        .ip6 => |ip| url.isPublicIp6(ip.bytes),
     };
 }

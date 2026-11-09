@@ -8,9 +8,12 @@ read, since opening an article is the one effect that outlives the window.
 """
 import http.server, json, os, pathlib, shutil, socketserver, subprocess, sys, tempfile, threading
 
+# Unix socket paths are short, so macOS and Linux use /tmp. Windows has no /tmp.
+TMP = tempfile.gettempdir() if os.name == "nt" else "/tmp"
+
 root = pathlib.Path(__file__).resolve().parent.parent
 app = root / "zig-out/Fyke.app/Contents/MacOS"
-home = tempfile.mkdtemp(prefix="fyke-g-", dir="/tmp")
+home = tempfile.mkdtemp(prefix="fyke-g-", dir=TMP)
 env = dict(os.environ, FYKE_HOME=home, FYKE_BIN=str(app / "fyke"))
 passed = 0
 
@@ -110,7 +113,7 @@ passed += 1
 # The data folder move. FYKE_HOME is set, so the command refuses, which is the failure
 # path: it must hand control back, and leave the data and the daemon as they were.
 before = rss("feeds", "--json")
-moved = tempfile.mkdtemp(prefix="fyke-mv-", dir="/tmp")
+moved = tempfile.mkdtemp(prefix="fyke-mv-", dir=TMP)
 subprocess.run([str(app / "Reader")], env=dict(env, FYKE_SCREEN="settings", FYKE_TAB="General", FYKE_MOVE=moved + "/data", FYKE_MOVE_RUN="1", FYKE_KEYS="wait wait wait wait"),
                capture_output=True, timeout=60)
 if rss("feeds", "--json") != before or os.path.exists(moved + "/data"):

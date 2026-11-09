@@ -6,8 +6,11 @@ Usage: e2e.py <path-to-fyke>
 """
 import gzip, http.server, json, os, shutil, socketserver, sqlite3, subprocess, sys, tempfile, threading, time
 
+# Unix socket paths are short, so macOS and Linux use /tmp. Windows has no /tmp.
+TMP = tempfile.gettempdir() if os.name == "nt" else "/tmp"
+
 RSS = sys.argv[1]
-home = tempfile.mkdtemp(prefix="fyke-e2e-", dir="/tmp")  # Short, for the socket path limit.
+home = tempfile.mkdtemp(prefix="fyke-e2e-", dir=TMP)  # Short, for the socket path limit.
 env = dict(os.environ, FYKE_HOME=home)
 # Tests decide when fetches happen, so background polling stays off.
 open(os.path.join(home, "config.json"), "w").write('{"auto_poll": false}')

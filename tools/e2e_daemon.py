@@ -6,8 +6,11 @@ Usage: e2e_daemon.py <path-to-fyke>
 """
 import collections, http.server, json, os, shutil, signal, socket, socketserver, sqlite3, stat, subprocess, sys, tempfile, threading, time
 
+# Unix socket paths are short, so macOS and Linux use /tmp. Windows has no /tmp.
+TMP = tempfile.gettempdir() if os.name == "nt" else "/tmp"
+
 RSS = os.path.abspath(sys.argv[1])
-home = tempfile.mkdtemp(prefix="fyke-d-", dir="/tmp")  # Short, for the socket path limit.
+home = tempfile.mkdtemp(prefix="fyke-d-", dir=TMP)  # Short, for the socket path limit.
 env = dict(os.environ, FYKE_HOME=home)
 requests = []
 posts = {"count": 1}
@@ -282,7 +285,7 @@ check("import is repeatable", "0 added, 3 already" in out, out)
 exported = rss("export").stdout
 open(path + ".out", "w").write(exported)
 check("export keeps nesting and escapes", 'text="Zig"' in exported and "a?x=1&amp;y=2" in exported and "<outline text=\"Tech\">" in exported, exported)
-home2 = tempfile.mkdtemp(prefix="fyke-e-", dir="/tmp")
+home2 = tempfile.mkdtemp(prefix="fyke-e-", dir=TMP)
 env2 = dict(os.environ, FYKE_HOME=home2)
 open(home2 + "/config.json", "w").write('{"auto_poll": false}')
 p = subprocess.run([RSS, "import", path + ".out", "--allow-private"], env=env2, capture_output=True, text=True, timeout=30)
@@ -419,7 +422,7 @@ check("and costs at most the two tries before it was noticed", sum(tries for _, 
 rss("daemon", "stop")
 
 # Folders, feeds and storage
-ops_home = tempfile.mkdtemp(prefix="fyke-o-", dir="/tmp")
+ops_home = tempfile.mkdtemp(prefix="fyke-o-", dir=TMP)
 env_ops = dict(os.environ, FYKE_HOME=ops_home)
 open(ops_home + "/config.json", "w").write('{"auto_poll": false, "owner_key": 7}')
 subprocess.run([RSS, "status"], env=env_ops, capture_output=True, timeout=30)
@@ -523,7 +526,7 @@ check("and the folders inside", rows("SELECT count(*) FROM folders WHERE id IN (
 subprocess.run([RSS, "daemon", "stop"], env=env_ops, capture_output=True, timeout=30); shutil.rmtree(ops_home)
 
 # A hand edit that breaks config.json
-broken = tempfile.mkdtemp(prefix="fyke-c-", dir="/tmp")
+broken = tempfile.mkdtemp(prefix="fyke-c-", dir=TMP)
 env_broken = dict(os.environ, FYKE_HOME=broken)
 open(broken + "/config.json", "w").write('{"auto_poll": false,')
 p = subprocess.run([RSS, "status"], env=env_broken, capture_output=True, text=True, timeout=30)
@@ -537,7 +540,7 @@ check("and the file stays for the owner to fix", open(broken + "/config.json").r
 subprocess.run([RSS, "daemon", "stop"], env=env_broken, capture_output=True, timeout=30); shutil.rmtree(broken)
 
 # Moving data out of the legacy location, with its daemon still running
-user = tempfile.mkdtemp(prefix="fyke-m-", dir="/tmp")
+user = tempfile.mkdtemp(prefix="fyke-m-", dir=TMP)
 legacy = user + "/.rss_"
 os.makedirs(legacy)
 open(legacy + "/config.json", "w").write('{"auto_poll": false}')
@@ -558,7 +561,7 @@ check("a new daemon starts at the new path", p.returncode == 0 and os.path.exist
 subprocess.run([RSS, "daemon", "stop"], env=env_new, capture_output=True, timeout=30)
 
 # Both locations already hold data
-user2 = tempfile.mkdtemp(prefix="fyke-m-", dir="/tmp")
+user2 = tempfile.mkdtemp(prefix="fyke-m-", dir=TMP)
 os.makedirs(user2 + "/.rss_"); os.makedirs(user2 + "/.fyke")
 open(user2 + "/.rss_/keep", "w").write("old")
 open(user2 + "/.fyke/config.json", "w").write('{"auto_poll": false}')
@@ -568,7 +571,7 @@ check("with data in both, the old folder is left alone", p.returncode == 0 and o
 subprocess.run([RSS, "daemon", "stop"], env=env_both, capture_output=True, timeout=30)
 
 # A link at ~/.fyke to data that could not move, as a second volume leaves it
-user3 = tempfile.mkdtemp(prefix="fyke-m-", dir="/tmp")
+user3 = tempfile.mkdtemp(prefix="fyke-m-", dir=TMP)
 os.makedirs(user3 + "/.rss_")
 open(user3 + "/.rss_/config.json", "w").write('{"auto_poll": false}')
 os.symlink(user3 + "/.rss_", user3 + "/.fyke")
@@ -592,7 +595,7 @@ def earlier_build_data(folder):
         if os.path.exists(f"{folder}/{new}"): os.rename(f"{folder}/{new}", f"{folder}/{old}")
     if os.path.exists(folder + "/fyked.sock"): os.remove(folder + "/fyked.sock")
 
-user4 = tempfile.mkdtemp(prefix="fyke-m-", dir="/tmp")
+user4 = tempfile.mkdtemp(prefix="fyke-m-", dir=TMP)
 earlier_build_data(user4 + "/.rss_")
 env_old_names = dict(env_new, HOME=user4)
 p = subprocess.run([RSS, "feeds", "--json"], env=env_old_names, capture_output=True, text=True, timeout=30)
@@ -602,8 +605,8 @@ check("the earlier daemon's leftovers are gone", not any(os.path.exists(user4 + 
 subprocess.run([RSS, "daemon", "stop"], env=env_old_names, capture_output=True, timeout=30)
 
 # A link at ~/.rss_ that `data move` made: the data stays where the person put it
-user5 = tempfile.mkdtemp(prefix="fyke-m-", dir="/tmp")
-elsewhere = tempfile.mkdtemp(prefix="fyke-e-", dir="/tmp") + "/data"
+user5 = tempfile.mkdtemp(prefix="fyke-m-", dir=TMP)
+elsewhere = tempfile.mkdtemp(prefix="fyke-e-", dir=TMP) + "/data"
 earlier_build_data(elsewhere)
 os.symlink(elsewhere, user5 + "/.rss_")
 env_linked = dict(env_new, HOME=user5)
@@ -615,7 +618,7 @@ check("the data did not move", os.path.isfile(elsewhere + "/fyke.db"))
 subprocess.run([RSS, "daemon", "stop"], env=env_linked, capture_output=True, timeout=30)
 
 # An earlier daemon still running: its lock is held, so nothing is renamed beneath it
-user6 = tempfile.mkdtemp(prefix="fyke-m-", dir="/tmp")
+user6 = tempfile.mkdtemp(prefix="fyke-m-", dir=TMP)
 earlier_build_data(user6 + "/.rss_")
 held = open(user6 + "/.rss_/rssd.lock", "a+"); fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
 p = subprocess.run([RSS, "feeds", "--json"], env=dict(env_new, HOME=user6), capture_output=True, text=True, timeout=30)
@@ -628,7 +631,7 @@ subprocess.run([RSS, "daemon", "stop"], env=dict(env_new, HOME=user6), capture_o
 for d in (user4, user5, os.path.dirname(elsewhere), user6): shutil.rmtree(d, ignore_errors=True)
 
 # fyke data move, with a throwaway HOME so that nothing real is touched
-mv_home = tempfile.mkdtemp(prefix="fyke-v-", dir="/tmp")
+mv_home = tempfile.mkdtemp(prefix="fyke-v-", dir=TMP)
 env_mv = {k: v for k, v in os.environ.items() if k != "FYKE_HOME"}
 env_mv["HOME"] = mv_home
 def move(*args):
