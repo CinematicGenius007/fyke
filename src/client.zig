@@ -136,6 +136,7 @@ pub const Connector = struct {
         // Its own process group, so that it outlives this client and any terminal. On
         // Windows it gets a console of its own that is never shown, and so does not
         // receive the Ctrl+C meant for this client.
+        platform.keepStdHandlesFromChildren();
         _ = try std.process.spawn(k.io, .{
             .argv = &.{ self, "daemon", "--log" },
             .environ_map = k.environ,
