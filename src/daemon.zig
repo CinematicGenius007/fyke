@@ -34,9 +34,11 @@ const code_tier_denied = -32001;
 /// Sends this process's stderr to `fyked.log`, emptied first. Only the lock holder
 /// may do this, or a client that lost the race to start a daemon would erase the log.
 fn redirectLog(io: Io, home: Io.Dir) !void {
-    var log = try home.createFile(io, "fyked.log", .{});
-    defer log.close(io);
+    const log = try home.createFile(io, "fyked.log", .{});
     try platform.redirectStderr(log);
+    // `dup2` copies the file, so the original can go. Windows makes the handle itself
+    // the standard error, so it stays open until the process ends.
+    if (!platform.is_windows) log.close(io);
 }
 
 pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem.Allocator, options: Options) !void {
