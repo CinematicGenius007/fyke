@@ -44,10 +44,69 @@ def rss(*args, ok=True):
     if ok and p.returncode != 0: raise AssertionError(f"{args}: exit {p.returncode}: {p.stdout} {p.stderr}")
     return p
 
+class WinUnixSocket:
+    """Python's socket module has no AF_UNIX on Windows, though the system does, so this
+    calls Winsock directly. It offers the few methods the checks use."""
+    def __init__(self):
+        import ctypes
+        from ctypes import wintypes
+        self.c = ctypes
+        self.w = ctypes.WinDLL("ws2_32", use_last_error=True)
+        self.w.socket.restype = ctypes.c_size_t
+        self.w.socket.argtypes = [ctypes.c_int] * 3
+        self.w.connect.argtypes = [ctypes.c_size_t, ctypes.c_void_p, ctypes.c_int]
+        self.w.send.argtypes = [ctypes.c_size_t, ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
+        self.w.recv.argtypes = [ctypes.c_size_t, ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+        self.w.setsockopt.argtypes = [ctypes.c_size_t, ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_int]
+        self.w.closesocket.argtypes = [ctypes.c_size_t]
+        data = ctypes.create_string_buffer(400)
+        if self.w.WSAStartup(0x0202, data) != 0: raise OSError("WSAStartup")
+        self.h = self.w.socket(1, 1, 0)  # AF_UNIX, SOCK_STREAM
+        if self.h == ctypes.c_size_t(-1).value: raise OSError("socket", ctypes.get_last_error())
+    def fail(self, what):
+        code = self.c.get_last_error()
+        if code == 10060: raise TimeoutError(what)
+        raise OSError(code, what)
+    def settimeout(self, seconds):
+        ms = self.c.c_uint32(int(seconds * 1000))
+        for opt in (0x1005, 0x1006):  # SO_SNDTIMEO, SO_RCVTIMEO
+            self.w.setsockopt(self.h, 0xFFFF, opt, self.c.byref(ms), 4)
+    def connect(self, path):
+        raw = path.encode()
+        addr = self.c.create_string_buffer(2 + 108)
+        addr[0:2] = (1).to_bytes(2, "little")
+        addr[2:2 + len(raw)] = raw
+        if self.w.connect(self.h, addr, 110) != 0: self.fail("connect")
+    def sendall(self, data):
+        while data:
+            n = self.w.send(self.h, data, min(len(data), 1 << 20), 0)
+            if n <= 0: self.fail("send")
+            data = data[n:]
+    def recv(self, n):
+        buf = self.c.create_string_buffer(n)
+        got = self.w.recv(self.h, buf, n, 0)
+        if got < 0: self.fail("recv")
+        return buf.raw[:got]
+    def makefile(self, mode="r"):
+        import io
+        sock = self
+        class R(io.RawIOBase):
+            def readable(self): return True
+            def readinto(self, b):
+                data = sock.recv(len(b)); b[:len(data)] = data; return len(data)
+        raw = io.BufferedReader(R())
+        return raw if "b" in mode else io.TextIOWrapper(raw)
+    def close(self): self.w.closesocket(self.h)
+    def __enter__(self): return self
+    def __exit__(self, *a): self.close()
+
+def unix_socket():
+    return WinUnixSocket() if os.name == "nt" else socket.socket(socket.AF_UNIX)
+
 class Raw:
     """A hand-written client, to send what the CLI never would."""
     def __init__(self):
-        self.s = socket.socket(socket.AF_UNIX); self.s.settimeout(10); self.s.connect(home + "/fyked.sock"); self.f = self.s.makefile("rb")
+        self.s = unix_socket(); self.s.settimeout(10); self.s.connect(home + "/fyked.sock"); self.f = self.s.makefile("rb")
     def line(self, text):
         self.s.sendall(text.encode() + b"\n"); return json.loads(self.f.readline())
     def call(self, method, **params):
@@ -99,7 +158,7 @@ check("connection survives errors", "result" in c.call("stats.get"))
 names = [i["name"] for i in c.call("ops.list")["result"]["items"]]
 check("ops.list describes the registry", "entries.search" in names and "db.query" in names, names)
 
-big = socket.socket(socket.AF_UNIX); big.settimeout(10); big.connect(home + "/fyked.sock")
+big = unix_socket(); big.settimeout(10); big.connect(home + "/fyked.sock")
 try:
     big.sendall(b"x" * (3 << 20) + b"\n")
 except OSError:
@@ -431,7 +490,7 @@ env_ops = dict(os.environ, FYKE_HOME=ops_home)
 open(ops_home + "/config.json", "w").write('{"auto_poll": false, "owner_key": 7}')
 subprocess.run([RSS, "status"], env=env_ops, capture_output=True, timeout=30)
 def op(method, **params):
-    with socket.socket(socket.AF_UNIX) as s:
+    with unix_socket() as s:
         s.settimeout(30)
         s.connect(ops_home + "/fyked.sock")
         s.sendall(json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode() + b"\n")
@@ -535,7 +594,7 @@ env_broken = dict(os.environ, FYKE_HOME=broken)
 open(broken + "/config.json", "w").write('{"auto_poll": false,')
 p = subprocess.run([RSS, "status"], env=env_broken, capture_output=True, text=True, timeout=30)
 check("a broken config.json does not stop the daemon", p.returncode == 0, p.stdout + p.stderr)
-with socket.socket(socket.AF_UNIX) as s:
+with unix_socket() as s:
     s.connect(broken + "/fyked.sock")
     s.sendall(b'{"jsonrpc":"2.0","id":1,"method":"config.get"}\n')
     reply = json.loads(s.makefile().readline())
