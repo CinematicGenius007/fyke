@@ -237,7 +237,7 @@ At every step the documents, this roadmap and the task list are updated together
 
 ## Platforms (planned)
 
-Nothing here is built except what is marked. The core is one Zig codebase: `zig build -Dtarget=...` already produces `fyke` for `x86_64-linux-gnu`, `aarch64-linux-musl` and `aarch64-macos`. `x86_64-windows-gnu` does not build yet.
+Nothing here is built except what is marked. The core is one Zig codebase: `zig build -Dtarget=...` already produces `fyke` for `x86_64-linux-gnu`, `aarch64-linux-musl` and `aarch64-macos`. `x86_64-windows-gnu` does not build yet: see Windows below.
 
 ### Linux
 
@@ -255,15 +255,32 @@ Measured 2026-11-09 with `tools/e2e_container.py`: a static `aarch64-linux-musl`
 
 ### Windows
 
+Measured 2026-11-09 with `zig build -Dtarget=x86_64-windows-gnu`. Zig analyzes only the code a build reaches, so errors show up in layers, and each layer was stubbed to expose the next. `feedcheck.exe` builds today. `fyke.exe` does not.
+
+| Layer | Where | What fails |
+|---|---|---|
+| 1 | `src/daemon.zig` | `Permissions.fromMode`, used for mode `0700` on the data folder and `0600` on the socket, does not exist on Windows. `dup2`, used to send the log to a file, has no equivalent |
+| 2 | `src/tui.zig` | The whole terminal layer: `termios`, `ioctl` for the size, `sigaction`, and a `pipe` plus `poll` loop over standard input, the wake pipe and the daemon connection |
+| 2 | `src/fetch.zig` | The connect with a deadline is built from `socket`, `fcntl`, `poll` and `getsockopt` on a file descriptor, and `isPublicPeer` calls `std.posix.getpeername`, which the standard library refuses on Windows with "use std.Io instead" |
+| 3 | `src/client.zig` | `poll` on the daemon socket for the reply timeout, and `.pgid = 0` to start the daemon in its own process group |
+
+More layers may be behind these. Not obstacles:
+
+- The standard library supports Unix sockets on Windows 10 build 17063 and later (`netListenUnixWindows`), and file locks (`File.tryLock`). So the daemon keeps its Unix socket and its lock file, and a named pipe is not needed. The minimum is Windows 10 1803.
+- The vendored SQLite compiles for `x86_64-windows-gnu` (a 6 MB object in 23 s).
+- The operation registry, MCP server, OPML code and store were reached by the build and produced no errors.
+
 | Piece | Plan |
 |---|---|
-| File permissions | `src/daemon.zig` sets mode `0700` on the data folder, which Windows has no equivalent for. The first of several compile errors |
-| Daemon connection | `AF_UNIX` sockets exist on Windows 10 1803 and later. If the standard library does not expose them well, a named pipe behind a small `ipc` interface |
-| Single instance | A lock with `LockFileEx` in place of the file lock the daemon uses today |
-| Terminal reader | Virtual terminal processing, console size and a Ctrl handler in place of `termios` and `sigaction`. The reader already writes escape sequences, which Windows Terminal understands |
-| Data folder | `%APPDATA%\Fyke`. Socket and pipe paths follow their own length limits |
-| Background service | Task Scheduler or a Startup entry |
+| File permissions | Skip the mode calls on Windows. A folder under `%APPDATA%` inherits the user's own access list, which already keeps other accounts out. Say so in the architecture document, since it replaces a stated guarantee |
+| Log file | Redirect with `SetStdHandle` on Windows, in place of `dup2` |
+| Connect with a deadline | Keep one implementation behind a small interface, with a Winsock one (`ioctlsocket`, `WSAPoll`) beside the POSIX one. `isPublicPeer` needs the socket address on both |
+| Reply timeout and detached daemon | The same interface for waiting on a socket. Start the daemon with `DETACHED_PROCESS` and a new process group |
+| Terminal reader | Set `ENABLE_VIRTUAL_TERMINAL_INPUT` and `ENABLE_VIRTUAL_TERMINAL_PROCESSING`, so that keys and mouse reports arrive as the escape sequences the reader already parses. The standard library has only the constant for the second, so the console functions are declared by hand. Replace the `poll` loop with a thread that reads standard input and a wake event, and check the window size on a timer, since there is no `SIGWINCH`. A control handler replaces the signal handlers |
+| Data folder | `%APPDATA%\Fyke`, found from `APPDATA`. `homeDirectory` reads `HOME` only today |
+| Background service | Task Scheduler or a Startup entry, behind the same interface as `launchd` and `systemd` |
 | Signing | An unsigned program triggers SmartScreen. Free signing for open-source projects is to be checked |
+| Tests | `e2e.py`, `e2e_daemon.py` and `e2e_mcp.py` use `lsof`, `fcntl`, `os.symlink` and `AF_UNIX`. `e2e_tui.py` needs a Windows pseudo-console (ConPTY) in place of `pty`. Each gets a Windows branch, run on a Windows runner |
 
 ### Native GUIs
 
