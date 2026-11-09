@@ -41,7 +41,9 @@ base = f"http://127.0.0.1:{server.server_address[1]}"
 
 def rss(*args, ok=True):
     p = subprocess.run([RSS, *args], env=env, capture_output=True, text=True, timeout=60)
-    if ok and p.returncode != 0: raise AssertionError(f"{args}: exit {p.returncode}: {p.stdout} {p.stderr}")
+    if ok and p.returncode != 0:
+        if os.path.exists(home + "/fyked.log"): print(open(home + "/fyked.log").read()[-2000:])
+        raise AssertionError(f"{args}: exit {p.returncode}: {p.stdout} {p.stderr}")
     return p
 
 class WinUnixSocket:
