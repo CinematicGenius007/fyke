@@ -86,6 +86,10 @@ pub fn install(connector: client_module.Connector, user_home: []const u8) !void 
     const io = connector.io;
     const path = try unitPath(arena, connector.environ, user_home);
 
+    // Without a user manager (a container, or an SSH session with no user bus) nothing
+    // below can work, and the running daemon must not be stopped for nothing.
+    if (!try user(io, &.{"show-environment"})) return error.NoUserServiceManager;
+
     var client: client_module.Client = undefined;
     if (connector.connect(&client, false)) |_| {
         _ = client.call(ops.DaemonStop, .{}) catch {};
@@ -98,6 +102,7 @@ pub fn install(connector: client_module.Connector, user_home: []const u8) !void 
     try cwd.createDirPath(io, std.fs.path.dirname(path).?);
     try data_home.ensure(io, connector.home_path);
     try cwd.writeFile(io, .{ .sub_path = path, .data = out.written() });
+    errdefer cwd.deleteFile(io, path) catch {};
 
     if (!try user(io, &.{"daemon-reload"})) return error.SystemctlFailed;
     if (!try user(io, &.{ "enable", unit_name })) return error.SystemctlFailed;
@@ -109,8 +114,12 @@ pub fn uninstall(connector: client_module.Connector, user_home: []const u8) !voi
     if (builtin.os.tag != .linux) return error.Unsupported;
     const io = connector.io;
     const path = try unitPath(connector.arena, connector.environ, user_home);
-    _ = try user(io, &.{ "disable", "--now", unit_name });
-    Io.Dir.cwd().deleteFile(io, path) catch |err| switch (err) {
+    const cwd = Io.Dir.cwd();
+    const present = if (cwd.access(io, path, .{})) true else |_| false;
+    // Disabling a unit that was never installed fails, and that is fine. Failing to
+    // disable one that is there would leave it running with its definition deleted.
+    if (!try user(io, &.{ "disable", "--now", unit_name }) and present) return error.SystemctlFailed;
+    cwd.deleteFile(io, path) catch |err| switch (err) {
         error.FileNotFound => {},
         else => return err,
     };

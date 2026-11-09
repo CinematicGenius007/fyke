@@ -12,6 +12,10 @@ const Io = std.Io;
 
 const label = "local.fyke.daemon";
 
+/// The label builds before the project's name used. A person who installed that agent
+/// would otherwise keep a second daemon that `service uninstall` never finds.
+const legacy_label = "local.rss_.daemon";
+
 /// Writes the agent's property list. A clean `fyke daemon stop` is respected, and
 /// launchd restarts the daemon only after a crash.
 pub fn writePlist(w: *Io.Writer, program: []const u8, home: []const u8) !void {
@@ -66,6 +70,15 @@ fn paths(arena: std.mem.Allocator, user_home: []const u8) !Paths {
     };
 }
 
+/// Unloads and deletes an agent of the earlier label, if there is one.
+fn removeLegacy(io: Io, arena: std.mem.Allocator, user_home: []const u8) !void {
+    const target = try std.fmt.allocPrint(arena, "gui/{d}/{s}", .{ std.c.getuid(), legacy_label });
+    const plist = try std.fmt.allocPrint(arena, "{s}/Library/LaunchAgents/{s}.plist", .{ user_home, legacy_label });
+    Io.Dir.cwd().access(io, plist, .{}) catch return;
+    _ = try launchctl(io, &.{ "launchctl", "bootout", target });
+    Io.Dir.cwd().deleteFile(io, plist) catch {};
+}
+
 fn launchctl(io: Io, argv: []const []const u8) !bool {
     var child = try std.process.spawn(io, .{ .argv = argv, .stdin = .ignore, .stdout = .ignore, .stderr = .ignore });
     return (try child.wait(io)).success();
@@ -77,6 +90,8 @@ pub fn install(connector: client_module.Connector, user_home: []const u8) !void 
     const arena = connector.arena;
     const io = connector.io;
     const where = try paths(arena, user_home);
+
+    try removeLegacy(io, arena, user_home);
 
     var client: client_module.Client = undefined;
     if (connector.connect(&client, false)) |_| {
@@ -98,6 +113,7 @@ pub fn install(connector: client_module.Connector, user_home: []const u8) !void 
 pub fn uninstall(connector: client_module.Connector, user_home: []const u8) !void {
     if (builtin.os.tag != .macos) return error.Unsupported;
     const where = try paths(connector.arena, user_home);
+    try removeLegacy(connector.io, connector.arena, user_home);
     _ = try launchctl(connector.io, &.{ "launchctl", "bootout", where.target });
     Io.Dir.cwd().deleteFile(connector.io, where.plist) catch |err| switch (err) {
         error.FileNotFound => {},

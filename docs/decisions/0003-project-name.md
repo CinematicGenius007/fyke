@@ -24,7 +24,7 @@ A fyke is a funnel-shaped fishing net: fish swim in and cannot swim out. The rea
 | MCP server name | `fyke` |
 | Repository and links in documents | `fyke` |
 
-Data from builds made before the rename lives in `~/.rss_`. The first `fyke` command moves it to `~/.fyke` and leaves a link behind. If both folders hold data, `~/.fyke` is used and the old folder is untouched.
+Data from builds made before the rename lives in `~/.rss_`, under the old file names. The first `fyke` command moves it to `~/.fyke`, renames the database files, and leaves a link behind. If both folders hold data, `~/.fyke` is used and the old folder is untouched. [The architecture document](../architecture.md) lists the cases.
 
 ## Not changed
 

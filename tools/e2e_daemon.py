@@ -578,6 +578,55 @@ check("a link at the new path is left in place", p.returncode == 0 and os.path.i
 subprocess.run([RSS, "daemon", "stop"], env=env_link, capture_output=True, timeout=30)
 shutil.rmtree(user); shutil.rmtree(user2); shutil.rmtree(user3)
 
+# Data written by a build from before the name: old file names, found at ~/.rss_
+import fcntl
+def earlier_build_data(folder):
+    """A data folder as an earlier build left it: one feed, with the old file names."""
+    os.makedirs(folder)
+    open(folder + "/config.json", "w").write('{"auto_poll": false}')
+    env_b = dict(os.environ, FYKE_HOME=folder)
+    subprocess.run([RSS, "add", f"http://127.0.0.1:{server.server_address[1]}/feed.xml", "--allow-private"], env=env_b, capture_output=True, timeout=30)
+    subprocess.run([RSS, "daemon", "stop"], env=env_b, capture_output=True, timeout=30)
+    time.sleep(0.3)
+    for new, old in (("fyke.db", "rss.db"), ("fyke.db-wal", "rss.db-wal"), ("fyke.db-shm", "rss.db-shm"), ("fyked.lock", "rssd.lock"), ("fyked.log", "rssd.log")):
+        if os.path.exists(f"{folder}/{new}"): os.rename(f"{folder}/{new}", f"{folder}/{old}")
+    if os.path.exists(folder + "/fyked.sock"): os.remove(folder + "/fyked.sock")
+
+user4 = tempfile.mkdtemp(prefix="fyke-m-", dir="/tmp")
+earlier_build_data(user4 + "/.rss_")
+env_old_names = dict(env_new, HOME=user4)
+p = subprocess.run([RSS, "feeds", "--json"], env=env_old_names, capture_output=True, text=True, timeout=30)
+check("data under the old file names is still there after the rename", p.returncode == 0 and len(json.loads(p.stdout)["items"]) == 1, p.stdout + p.stderr)
+check("the database was renamed, not copied", os.path.isfile(user4 + "/.fyke/fyke.db") and not os.path.exists(user4 + "/.fyke/rss.db"))
+check("the earlier daemon's leftovers are gone", not any(os.path.exists(user4 + "/.fyke/" + n) for n in ("rssd.sock", "rssd.lock", "rssd.log")))
+subprocess.run([RSS, "daemon", "stop"], env=env_old_names, capture_output=True, timeout=30)
+
+# A link at ~/.rss_ that `data move` made: the data stays where the person put it
+user5 = tempfile.mkdtemp(prefix="fyke-m-", dir="/tmp")
+elsewhere = tempfile.mkdtemp(prefix="fyke-e-", dir="/tmp") + "/data"
+earlier_build_data(elsewhere)
+os.symlink(elsewhere, user5 + "/.rss_")
+env_linked = dict(env_new, HOME=user5)
+p = subprocess.run([RSS, "feeds", "--json"], env=env_linked, capture_output=True, text=True, timeout=30)
+check("a moved folder reached through the old link is migrated", p.returncode == 0 and len(json.loads(p.stdout)["items"]) == 1, p.stdout + p.stderr)
+check("the new anchor links to the same folder", os.path.islink(user5 + "/.fyke") and os.path.realpath(user5 + "/.fyke") == os.path.realpath(elsewhere))
+check("the old anchor still reaches it", os.path.islink(user5 + "/.rss_") and os.path.realpath(user5 + "/.rss_") == os.path.realpath(elsewhere))
+check("the data did not move", os.path.isfile(elsewhere + "/fyke.db"))
+subprocess.run([RSS, "daemon", "stop"], env=env_linked, capture_output=True, timeout=30)
+
+# An earlier daemon still running: its lock is held, so nothing is renamed beneath it
+user6 = tempfile.mkdtemp(prefix="fyke-m-", dir="/tmp")
+earlier_build_data(user6 + "/.rss_")
+held = open(user6 + "/.rss_/rssd.lock", "a+"); fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+p = subprocess.run([RSS, "feeds", "--json"], env=dict(env_new, HOME=user6), capture_output=True, text=True, timeout=30)
+check("a running earlier daemon stops the migration with a clear error", p.returncode != 0 and "EarlierDaemonRunning" in p.stderr, p.stdout + p.stderr)
+check("and nothing was renamed", os.path.isfile(user6 + "/.fyke/rss.db") and not os.path.exists(user6 + "/.fyke/fyke.db"))
+held.close()
+p = subprocess.run([RSS, "feeds", "--json"], env=dict(env_new, HOME=user6), capture_output=True, text=True, timeout=30)
+check("once it has stopped, the migration goes through", p.returncode == 0 and len(json.loads(p.stdout)["items"]) == 1, p.stdout + p.stderr)
+subprocess.run([RSS, "daemon", "stop"], env=dict(env_new, HOME=user6), capture_output=True, timeout=30)
+for d in (user4, user5, os.path.dirname(elsewhere), user6): shutil.rmtree(d, ignore_errors=True)
+
 # fyke data move, with a throwaway HOME so that nothing real is touched
 mv_home = tempfile.mkdtemp(prefix="fyke-v-", dir="/tmp")
 env_mv = {k: v for k, v in os.environ.items() if k != "FYKE_HOME"}

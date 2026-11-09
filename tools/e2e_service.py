@@ -27,6 +27,7 @@ with open(f"{shim}/{manager}", "w") as f:
     f.write(f"""#!/bin/sh
 echo "$@" >> '{log}'
 for a in "$@"; do
+  [ "$a" = "$SHIM_FAIL" ] && exit 1
   case "$a" in
     {"|".join(set_words)}) touch '{flag}'; exit 0;;
     {"|".join(clear_words)}) rm -f '{flag}'; exit 0;;
@@ -93,6 +94,21 @@ if LINUX:
     bare = root + "/emptybin"; os.makedirs(bare)
     p = fyke("service", "status", env=dict(env, PATH=bare))
     check("a machine without systemd gets a plain error", p.returncode != 0 and "SystemdMissing" in p.stderr, p.stderr)
+
+if LINUX:
+    before = len(calls())
+    p = fyke("service", "install", env=dict(env, SHIM_FAIL="show-environment"))
+    check("install stops early when there is no user service manager", p.returncode != 0 and "NoUserServiceManager" in p.stderr, p.stdout + p.stderr)
+    check("and issues nothing else", calls()[before:] == ["--user show-environment"], calls()[before:])
+    p = fyke("service", "uninstall", env=dict(env, SHIM_FAIL="disable"))
+    check("a failed disable is reported and the definition stays", p.returncode != 0 and os.path.exists(unit), p.stdout + p.stderr)
+if MACOS:
+    legacy_plist = f"{user}/Library/LaunchAgents/local.rss_.daemon.plist"
+    open(legacy_plist, "w").write("<plist/>")
+    before = len(calls())
+    p = fyke("service", "install")
+    check("an agent installed under the earlier name is unloaded and removed",
+          p.returncode == 0 and not os.path.exists(legacy_plist) and any("local.rss_.daemon" in c and c.startswith("bootout") for c in calls()[before:]), calls()[before:])
 
 p = fyke("service", "uninstall")
 check("uninstall succeeds", p.returncode == 0, p.stdout + p.stderr)

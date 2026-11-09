@@ -66,6 +66,8 @@ with open(app / "Contents/Info.plist", "wb") as out:
 run("codesign", "--force", "--deep", "--sign", "-", app)
 
 if "--install" in sys.argv:
+    # An app installed under the earlier name would otherwise stay beside the new one.
+    shutil.rmtree("/Applications/rss_.app", ignore_errors=True)
     target = pathlib.Path("/Applications/Fyke.app")
     shutil.rmtree(target, ignore_errors=True)
     shutil.copytree(app, target, symlinks=True)

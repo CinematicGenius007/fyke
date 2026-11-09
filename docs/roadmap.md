@@ -245,9 +245,9 @@ Measured 2026-11-09 with `tools/e2e_container.py`: a static `aarch64-linux-musl`
 
 | Piece | Status |
 |---|---|
-| Command line, daemon, MCP | Built. `e2e.py` 49 checks, `e2e_daemon.py` 160, `e2e_mcp.py` 57 |
+| Command line, daemon, MCP | Built. `e2e.py` 49 checks, `e2e_daemon.py` 170, `e2e_mcp.py` 57 |
 | Terminal reader | Built. `e2e_tui.py` passes 71 checks under a real pseudo-terminal |
-| Background service | Built: `systemd --user` unit `fyke.service`, behind the same `service install`, `uninstall` and `status` commands as `launchd`. `e2e_service.py` passes 19 checks against a stand-in `systemctl`. A real systemd manager has not run it yet |
+| Background service | Built: `systemd --user` unit `fyke.service`, behind the same `service install`, `uninstall` and `status` commands as `launchd`. `e2e_service.py` passes 22 checks against a stand-in `systemctl`. A real systemd manager has not run it yet |
 | Real HTTPS feeds | 4 of 4 live feeds fetched, and an expired and a self-signed certificate were refused with `TlsInitializationFailed` |
 | `x86_64` | Compiles. The scripts have only run on `aarch64` |
 | Continuous integration | Planned. `tools/e2e_container.py` holds the steps |
