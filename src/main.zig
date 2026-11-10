@@ -36,7 +36,7 @@ const usage =
     \\  tui                            read in the terminal
     \\  mcp [--tier read|annotate|manage]   MCP server on stdio, for agents
     \\  daemon [stop]                  run in the foreground, or stop it
-    \\  service install|uninstall|status   run the daemon from login, on macOS and Linux
+    \\  service install|uninstall|status   run the daemon from login
     \\  data move <folder>             move the data folder, then restart
     \\
     \\Clients start the daemon when needed.
@@ -83,7 +83,7 @@ const Args = struct {
 };
 
 fn takesValue(flag: []const u8) bool {
-    const flags = [_][]const u8{ "--feed", "--limit", "--before", "--format", "--tier" };
+    const flags = [_][]const u8{ "--feed", "--limit", "--before", "--format", "--tier", "--home" };
     for (flags) |candidate| {
         if (std.mem.eql(u8, flag, candidate)) return true;
     }
@@ -124,9 +124,14 @@ pub fn main(init: std.process.Init) !u8 {
         return 2;
     }
 
-    const home_path = try homeDirectory(arena, io, init.environ_map);
     const command = argv[1];
     const args: Args = .{ .items = argv[2..] };
+    // A service has no environment of its own to carry `FYKE_HOME`, so the daemon also
+    // takes its data folder as an argument.
+    const home_path = if (std.mem.eql(u8, command, "daemon") and args.value("--home") != null)
+        args.value("--home").?
+    else
+        try homeDirectory(arena, io, init.environ_map);
 
     if (std.mem.eql(u8, command, "daemon") and args.positional() == null) {
         daemon.run(init.gpa, io, home_path, arena, .{ .log_to_file = args.has("--log") }) catch |err| {

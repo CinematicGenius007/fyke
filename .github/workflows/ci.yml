@@ -45,6 +45,9 @@ jobs:
       - name: e2e_mcp
         if: ${{ !cancelled() }}
         run: python tools/e2e_mcp.py zig-out/bin/fyke.exe
+      - name: e2e_service
+        if: ${{ !cancelled() }}
+        run: python tools/e2e_service_windows.py zig-out/bin/fyke.exe
       # The terminal reader runs in a Windows pseudo-console (ConPTY), through pywinpty.
       - name: Install terminal test dependencies
         if: ${{ !cancelled() }}
