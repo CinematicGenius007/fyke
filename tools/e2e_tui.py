@@ -4,8 +4,16 @@ independent terminal emulator.
 
 Usage: e2e_tui.py <path-to-fyke> [monkey-keys]     (needs: pip install pyte)
 """
-import fcntl, http.server, json, os, pty, random, re, select, shutil, signal, socketserver, sqlite3, stat, struct
-import subprocess, sys, tempfile, termios, threading, time
+import http.server, json, os, random, re, shutil, signal, socketserver, sqlite3, stat, struct
+import subprocess, sys, tempfile, threading, time
+IS_WIN = os.name == "nt"
+if IS_WIN:
+    import queue
+    import winpty  # pywinpty, a pseudo-console (ConPTY) for Python
+else:
+    import fcntl, pty, select, termios
+# The browser stand-in is a script found through PATH, which Windows' opener does not use.
+OPENER = not IS_WIN
 
 # Unix socket paths are short, so macOS and Linux use /tmp. Windows has no /tmp.
 TMP = tempfile.gettempdir() if os.name == "nt" else "/tmp"
@@ -16,10 +24,10 @@ MONKEY = int(sys.argv[2]) if len(sys.argv) > 2 else 20000
 home = tempfile.mkdtemp(prefix="fyke-t-", dir=TMP)
 shim = tempfile.mkdtemp(prefix="fyke-b-", dir=TMP)
 opened = shim + "/opened.txt"
-env = dict(os.environ, FYKE_HOME=home, TERM="xterm-256color", PATH=shim + ":" + os.environ["PATH"])
+env = dict(os.environ, FYKE_HOME=home, TERM="xterm-256color", PATH=shim + os.pathsep + os.environ["PATH"])
 open(home + "/config.json", "w").write('{"auto_poll": false}')
 # A stand-in for the browser opener, which records exactly what it was given.
-for name in ("open", "xdg-open", "terminal-browser"):
+for name in () if IS_WIN else ("open", "xdg-open", "terminal-browser"):
     path = f"{shim}/{name}"
     open(path, "w").write(f'#!/bin/sh\nprintf "%s\\n" "$#:$*" >> {opened}\n')
     os.chmod(path, 0o755)
@@ -65,40 +73,79 @@ def check(name, condition, detail=""):
         rss("daemon", "stop"); shutil.rmtree(home, ignore_errors=True); shutil.rmtree(shim, ignore_errors=True); sys.exit(1)
     passed += 1; print(f"ok   {name}")
 
+class WinProcess:
+    """The few `Popen` methods the checks use, over a pseudo-console process."""
+    def __init__(self, pty_process): self.pty = pty_process
+    def poll(self): return None if self.pty.isalive() else (self.pty.exitstatus or 0)
+    def wait(self, timeout=None):
+        end = time.time() + (timeout or 10)
+        while self.pty.isalive() and time.time() < end: time.sleep(0.02)
+        return self.pty.exitstatus or 0
+    def send_signal(self, sig): pass
+
 class Term:
     def __init__(self, columns=130, rows=40):
+        self.raw = b""
+        self.columns, self.rows = columns, rows
+        self.screen = pyte.Screen(columns, rows)
+        self.stream = pyte.ByteStream(self.screen)
+        if IS_WIN:
+            self.pty = winpty.PtyProcess.spawn([RSS, "tui"], env=env, dimensions=(rows, columns))
+            self.p = WinProcess(self.pty)
+            self.chunks = queue.Queue()
+            threading.Thread(target=self.read_forever, daemon=True).start()
+            self.saved = None
+            return
         self.master, self.slave = pty.openpty()
         self.resize(columns, rows, signal_child=False)
         self.saved = termios.tcgetattr(self.slave)
-        self.raw = b""
         self.p = subprocess.Popen([RSS, "tui"], env=env, stdin=self.slave, stdout=self.slave, stderr=self.slave, start_new_session=True)
+    def read_forever(self):
+        while True:
+            try: data = self.pty.read(1 << 16)
+            except (EOFError, OSError): break
+            if data: self.chunks.put(data.encode() if isinstance(data, str) else data)
+            elif not self.pty.isalive(): break
     def resize(self, columns, rows, signal_child=True):
         self.columns, self.rows = columns, rows
-        fcntl.ioctl(self.master, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))
         self.screen = pyte.Screen(columns, rows)
         self.stream = pyte.ByteStream(self.screen)
-        if hasattr(self, "raw"): self.stream.feed(self.raw_since_reset())
+        if IS_WIN:
+            self.pty.setwinsize(rows, columns)
+            return
+        fcntl.ioctl(self.master, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))
         if signal_child: self.p.send_signal(signal.SIGWINCH)
-    def raw_since_reset(self):
-        return b""
     def pump(self, seconds=0.12):
         end = time.time() + seconds
         got = b""
         while True:
             wait = max(end - time.time(), 0)
-            r, _, _ = select.select([self.master], [], [], wait)
-            if r:
+            if IS_WIN:
+                try: data = self.chunks.get(timeout=wait)
+                except queue.Empty: break
+            else:
+                r, _, _ = select.select([self.master], [], [], wait)
+                if not r:
+                    if time.time() >= end: break
+                    continue
                 try: data = os.read(self.master, 1 << 16)
                 except OSError: break
-                got += data; self.raw += data; self.stream.feed(data)
-                end = max(end, time.time() + 0.03)
-            elif time.time() >= end: break
+            got += data; self.raw += data; self.stream.feed(data)
+            end = max(end, time.time() + 0.03)
         return got
+    def send(self, data):
+        if IS_WIN: self.pty.write(data.decode("utf-8", errors="replace") if isinstance(data, bytes) else data)
+        else: os.write(self.master, data if isinstance(data, bytes) else data.encode())
     def keys(self, text, seconds=0.12):
-        os.write(self.master, text if isinstance(text, bytes) else text.encode())
+        self.send(text)
         return self.pump(seconds)
     def drain_write(self, data):
         """Writes while reading, since the program blocks if nobody reads its output."""
+        if IS_WIN:
+            for i in range(0, len(data), 256):
+                self.send(data[i:i + 256]); self.pump(0.001)
+            self.raw = self.raw[-4096:]
+            return
         os.set_blocking(self.master, False)
         try:
             while data:
@@ -127,6 +174,7 @@ class Term:
             self.pump(0.05)
             if self.p.poll() is not None: break
         code = self.p.wait(timeout=1); self.pump(0.05)
+        if IS_WIN: return code, None
         after = termios.tcgetattr(self.slave)
         # The kernel itself sets PENDIN when a terminal returns to canonical mode.
         after[3] &= ~0x20000000
@@ -177,11 +225,12 @@ check("position is shown", "100%" in t.screen.display[-1], t.screen.display[-1])
 
 t.keys("1", 0.5)
 print("     status:", t.screen.display[-1].strip())
-check("a number opens that link", os.path.exists(opened) and open(opened).read().strip() == "1:https://example.com/link", t.screen.display[-1])
-os.remove(opened)
-t.keys("o", 0.3)
-got = open(opened).read().strip()
-check("a hostile URL reaches the browser as one inert argument", got == "1:https://example.com/one?a=1&b=$(touch /tmp/pwned)" and not os.path.exists("/tmp/pwned"), got)
+if OPENER:
+    check("a number opens that link", os.path.exists(opened) and open(opened).read().strip() == "1:https://example.com/link", t.screen.display[-1])
+    os.remove(opened)
+    t.keys("o", 0.3)
+    got = open(opened).read().strip()
+    check("a hostile URL reaches the browser as one inert argument", got == "1:https://example.com/one?a=1&b=$(touch /tmp/pwned)" and not os.path.exists("/tmp/pwned"), got)
 t.keys("7", 0.1)
 check("a missing link number is reported", "No link 7" in t.screen.display[-1], t.screen.display[-1])
 
@@ -234,10 +283,11 @@ wheel(t, "Section", 65, 4)
 check("the wheel scrolls the article", t.text() != before and "Section" not in t.text(), t.text())
 wheel(t, "Paragraph", 64, 8)
 check("and back up", "Section" in t.text(), t.text())
-os.path.exists(opened) and os.remove(opened)
-t.keys("O", 0.5)
-got = open(opened).read().strip() if os.path.exists(opened) else ""
-check("O opens the terminal browser beside the reader", got.startswith("6:open https://example.com/one") and got.endswith("--split right --size 0.6"), got)
+if OPENER:
+    os.path.exists(opened) and os.remove(opened)
+    t.keys("O", 0.5)
+    got = open(opened).read().strip() if os.path.exists(opened) else ""
+    check("O opens the terminal browser beside the reader", got.startswith("6:open https://example.com/one") and got.endswith("--split right --size 0.6"), got)
 t.keys("q", 0.2)
 t.keys("g", 0.1)
 t.keys(b"\x1b[<0;9999;9999M\x1b[<65;9999;9999M\x1b[<0;1;1M", 0.2)
@@ -284,13 +334,21 @@ check("refresh all finishes", t.wait_for("Refresh finished", 6), t.screen.displa
 for columns, rows, needle in ((200, 50, "Main Feed"), (90, 30, "Feeds"), (60, 20, "Main Feed"), (30, 10, "Live story"), (15, 4, "window too"), (130, 40, "Feeds")):
     t.resize(columns, rows)
     t.pump(0.3)
-    t.keys("\x0c", 0.2)  # Ctrl-L repaints, since pyte starts blank after a resize.
+    # Ctrl-L repaints, since pyte starts blank after a resize. The Windows reader finds
+    # the new size by polling, so the first repaint can still be at the old one.
+    for _ in range(8 if IS_WIN else 1):
+        t.keys("\x0c", 0.5 if IS_WIN else 0.2)
+        if needle.lower() in t.text().lower(): break
     check(f"resize to {columns}x{rows}", needle.lower() in t.text().lower(), t.text())
     check(f"borders stay straight at {columns}x{rows}", len(separators(t)) <= 2, separators(t))
 
 # Daemon loss
-pid = int(subprocess.run(["lsof", "-t", home + "/fyked.lock"], capture_output=True, text=True).stdout.split()[0])
-os.kill(pid, signal.SIGKILL)
+if IS_WIN:
+    # The reader holds no daemon process of its own, so the only other fyke.exe is the daemon.
+    subprocess.run(["taskkill", "/F", "/FI", f"PID ne {t.pty.pid}", "/IM", "fyke.exe"], capture_output=True)
+else:
+    pid = int(subprocess.run(["lsof", "-t", home + "/fyked.lock"], capture_output=True, text=True).stdout.split()[0])
+    os.kill(pid, signal.SIGKILL)
 time.sleep(0.2)
 t.keys("j", 0.5); t.keys("k", 0.5)
 check("survives the daemon dying", t.p.poll() is None)
@@ -300,12 +358,15 @@ check("and the daemon came back", "Main Feed" in rss("feeds").stdout)
 t.keys("\x03", 0.1)
 code, after = t.finish()
 check("Ctrl-C exits cleanly", code == 0, code)
-check("the alternate screen is left", t.raw.rstrip().endswith(b"\x1b[?1049l"), t.raw[-120:])
-check("terminal settings are restored", after == t.saved)
+# ConPTY redraws the screen itself, so the last bytes it passes on are not the program's own.
+if not IS_WIN:
+    check("the alternate screen is left", t.raw.rstrip().endswith(b"\x1b[?1049l"), t.raw[-120:])
+if not IS_WIN:
+    check("terminal settings are restored", after == t.saved)
 
-t = Term(); t.wait_for("FEEDS"); t.p.send_signal(signal.SIGTERM)
-code, after = t.finish()
-check("SIGTERM restores the terminal", after == t.saved and code != 0, code)
+    t = Term(); t.wait_for("FEEDS"); t.p.send_signal(signal.SIGTERM)
+    code, after = t.finish()
+    check("SIGTERM restores the terminal", after == t.saved and code != 0, code)
 
 p = subprocess.run([RSS, "tui"], env=env, input="", capture_output=True, text=True, timeout=10)
 check("no terminal is a clear error", p.returncode == 1 and "NotATerminal" in p.stderr and "\x1b" not in p.stdout, p.stderr)
@@ -340,7 +401,7 @@ t.keys("\x0c", 0.5)
 check("it still responds after all that", "help" in t.text() or "unread" in t.text() or "%" in t.text(), t.text())
 t.keys("\x03", 0.1)
 code, after = t.finish()
-check("and still exits cleanly", code == 0 and after == t.saved, code)
+check("and still exits cleanly", code == 0 and (IS_WIN or after == t.saved), code)
 
 rss("daemon", "stop"); server.shutdown(); shutil.rmtree(home, ignore_errors=True); shutil.rmtree(shim, ignore_errors=True)
 print(f"\n{passed} checks passed")

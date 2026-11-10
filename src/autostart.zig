@@ -8,6 +8,7 @@ const client_module = @import("client.zig");
 const backend = switch (builtin.os.tag) {
     .macos => @import("launchd.zig"),
     .linux => @import("systemd.zig"),
+    .windows => @import("windows_startup.zig"),
     else => struct {
         pub fn install(_: client_module.Connector, _: []const u8) !void {
             return error.Unsupported;

@@ -53,6 +53,7 @@ python3 tools/e2e.py ./zig-out/bin/fyke      # full behavior against a recording
 python3 tools/e2e_daemon.py ./zig-out/bin/fyke  # socket, tiers, events, OPML, crash recovery
 python3 tools/e2e_mcp.py ./zig-out/bin/fyke     # MCP protocol, both eras
 python3 tools/e2e_service.py ./zig-out/bin/fyke  # service install, status, uninstall, with a stand-in service manager
+python3 tools/e2e_service_windows.py ./zig-out/bin/fyke.exe  # Windows: service install, status, uninstall, in the real Run key
 python3 tools/e2e_container.py                  # builds for Linux and runs every script above in Docker
 python3 -m venv .venv && .venv/bin/pip install pyte mcp  # Python test dependencies
 .venv/bin/python tools/e2e_tui.py ./zig-out/bin/fyke  # real pseudo-terminal
