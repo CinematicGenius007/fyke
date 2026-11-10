@@ -5,6 +5,7 @@ const std = @import("std");
 const fetch = @import("fetch.zig");
 const ops = @import("ops.zig");
 const data_home = @import("data_home.zig");
+const platform = @import("platform.zig");
 const service = @import("service.zig");
 const store = @import("store.zig");
 
@@ -33,16 +34,18 @@ const code_tier_denied = -32001;
 /// Sends this process's stderr to `fyked.log`, emptied first. Only the lock holder
 /// may do this, or a client that lost the race to start a daemon would erase the log.
 fn redirectLog(io: Io, home: Io.Dir) !void {
-    var log = try home.createFile(io, "fyked.log", .{});
-    defer log.close(io);
-    if (std.c.dup2(log.handle, std.posix.STDERR_FILENO) < 0) return error.LogUnavailable;
+    const log = try home.createFile(io, "fyked.log", .{});
+    try platform.redirectStderr(log);
+    // `dup2` copies the file, so the original can go. Windows makes the handle itself
+    // the standard error, so it stays open until the process ends.
+    if (!platform.is_windows) log.close(io);
 }
 
 pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem.Allocator, options: Options) !void {
     const cwd = Io.Dir.cwd();
     try data_home.ensure(io, home_path);
     // Feed choices, notes and API references are private, so the whole directory is.
-    try cwd.setFilePermissions(io, home_path, .fromMode(0o700), .{});
+    try platform.makePrivate(io, cwd, home_path, 0o700);
     var home = try cwd.openDir(io, home_path, .{});
     defer home.close(io);
 
@@ -74,7 +77,7 @@ pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem
 
     const address = try Io.net.UnixAddress.init(socket_path);
     var server = try address.listen(io, .{});
-    try home.setFilePermissions(io, socket_name, .fromMode(0o600), .{});
+    try platform.makePrivate(io, home, socket_name, 0o600);
 
     var group: Io.Group = .init;
     for (0..s.config.workers) |_| try group.concurrent(io, service.workerLoop, .{&s});

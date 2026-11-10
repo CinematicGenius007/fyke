@@ -5,8 +5,11 @@ Usage: e2e_mcp.py <path-to-fyke>
 """
 import http.server, json, os, shutil, signal, socketserver, subprocess, sys, tempfile, threading, time
 
+# Unix socket paths are short, so macOS and Linux use /tmp. Windows has no /tmp.
+TMP = tempfile.gettempdir() if os.name == "nt" else "/tmp"
+
 RSS = os.path.abspath(sys.argv[1])
-home = tempfile.mkdtemp(prefix="fyke-m-", dir="/tmp")
+home = tempfile.mkdtemp(prefix="fyke-m-", dir=TMP)
 env = dict(os.environ, FYKE_HOME=home)
 open(home + "/config.json", "w").write('{"auto_poll": false}')
 META = {"io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientCapabilities": {},
@@ -169,5 +172,5 @@ r = m.tool("feeds_remove", id=1)
 check("reconnecting keeps the tier", r["error"]["code"] == -32602, r)
 check("EOF exit code", m.close() == 0)
 
-rss("daemon", "stop"); server.shutdown(); shutil.rmtree(home)
+rss("daemon", "stop"); server.shutdown(); shutil.rmtree(home, ignore_errors=True)
 print(f"\n{passed} checks passed")

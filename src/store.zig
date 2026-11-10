@@ -346,7 +346,7 @@ pub const Db = struct {
     }
 
     fn exec(db: *Db, sql: [*:0]const u8) Error!void {
-        if (sqlite3_exec(db.handle, sql, null, null, null) != 0) return error.Sqlite;
+        if (sqlite3_exec(db.handle, sql, null, null, null) != 0) return db.fail(sql);
     }
 
     fn migrate(db: *Db) Error!void {
@@ -364,7 +364,7 @@ pub const Db = struct {
 
     fn prepare(db: *Db, sql: [*:0]const u8, args: anytype) Error!*Stmt {
         var stmt: ?*Stmt = null;
-        if (sqlite3_prepare_v2(db.handle, sql, -1, &stmt, null) != 0) return error.Sqlite;
+        if (sqlite3_prepare_v2(db.handle, sql, -1, &stmt, null) != 0) return db.fail(sql);
         inline for (args, 1..) |arg, index| {
             if (bindValue(stmt.?, index, arg) != 0) {
                 _ = sqlite3_finalize(stmt.?);
@@ -378,7 +378,16 @@ pub const Db = struct {
     fn run(db: *Db, sql: [*:0]const u8, args: anytype) Error!void {
         const stmt = try db.prepare(sql, args);
         defer _ = sqlite3_finalize(stmt);
-        if (sqlite3_step(stmt) != SQLITE_DONE) return error.Sqlite;
+        if (sqlite3_step(stmt) != SQLITE_DONE) return db.fail(sql);
+    }
+
+    /// Leaves SQLite's message in the log, since the error that reaches a client carries
+    /// none. Only the first line of the statement is logged, never its values.
+    fn fail(db: *Db, sql: [*:0]const u8) error{Sqlite} {
+        const text = std.mem.span(sql);
+        const head = text[0 .. std.mem.indexOfScalar(u8, text, '\n') orelse text.len];
+        std.debug.print("sqlite: {s}: {s}\n", .{ std.mem.span(sqlite3_errmsg(db.handle)), head });
+        return error.Sqlite;
     }
 
     pub fn addFeed(db: *Db, url: []const u8, allow_private_network: bool, now: i64) Error!i64 {
@@ -1322,12 +1331,12 @@ test "sandboxed queries can read but cannot escape" {
     defer arena.deinit();
     const a = arena.allocator();
 
-    const path = "/tmp/fyke-store-test.db";
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try tmp.dir.realPathFileAlloc(testing.io, ".", a);
+    const path = try std.fmt.allocPrintSentinel(a, "{s}/store-test.db", .{dir}, 0);
     var writer: Db = try .open(path, .writer);
-    defer {
-        writer.close();
-        inline for (.{ path, path ++ "-wal", path ++ "-shm" }) |name| _ = std.c.unlink(name);
-    }
+    defer writer.close();
     _ = try writer.addFeed("https://example.com/feed", false, 1);
 
     var sandbox: Db = try .open(path, .sandbox);
@@ -1561,10 +1570,10 @@ test "a retry waits for its time, and an edit starts over" {
 test "an old database is upgraded in place" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
-    const path = "/tmp/fyke-migrate-test.db";
-    defer inline for (.{ path, path ++ "-wal", path ++ "-shm" }) |name| {
-        _ = std.c.unlink(name);
-    };
+    var tmp = testing.tmpDir(.{});
+    defer tmp.cleanup();
+    const dir = try tmp.dir.realPathFileAlloc(testing.io, ".", arena.allocator());
+    const path = try std.fmt.allocPrintSentinel(arena.allocator(), "{s}/migrate-test.db", .{dir}, 0);
     {
         var handle: ?*Handle = null;
         try testing.expectEqual(0, sqlite3_open(path, &handle));

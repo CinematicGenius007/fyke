@@ -20,7 +20,7 @@ const terminal = core.terminal;
 const Screen = terminal.Screen;
 const Style = terminal.Style;
 const Key = terminal.Key;
-const c = std.c;
+const console = @import("console.zig");
 
 const page_size = 100;
 /// A lone ESC byte could be the Escape key or the start of a sequence.
@@ -38,72 +38,17 @@ const max_screen_rows = 512;
 const min_columns = 20;
 const min_rows = 6;
 
-// Terminal state, global because the panic and signal handlers need it.
-var original_termios: ?std.posix.termios = null;
-var wake_write_fd: c.fd_t = -1;
-
 // 1000 asks for clicks and the wheel, and 1006 for reports that work at any size.
 // Terminals keep text selection available with a modifier, usually Shift or Option.
 const enter_sequence = "\x1b[?1049h\x1b[?25l\x1b[?1000h\x1b[?1006h";
 const leave_sequence = "\x1b[?1006l\x1b[?1000l\x1b[?25h\x1b[0m\x1b[?1049l";
 
-/// Puts the terminal back. Safe from a signal handler: it makes only system calls.
+/// Puts the terminal back. Safe from a signal handler on POSIX systems.
 pub fn restoreTerminal() void {
-    const saved = original_termios orelse return;
-    original_termios = null;
-    _ = c.write(1, leave_sequence, leave_sequence.len);
-    // NOW, not FLUSH: FLUSH waits for output to drain, which would hang here if the
-    // terminal had stopped reading, and this code runs inside signal handlers.
-    _ = c.tcsetattr(0, .NOW, &saved);
+    console.restore();
 }
 
-fn enterRawMode() !void {
-    if (c.isatty(0) == 0 or c.isatty(1) == 0) return error.NotATerminal;
-    var raw: std.posix.termios = undefined;
-    if (c.tcgetattr(0, &raw) != 0) return error.NotATerminal;
-    original_termios = raw;
-    raw.iflag.ICRNL = false;
-    raw.iflag.IXON = false;
-    raw.iflag.BRKINT = false;
-    raw.iflag.ISTRIP = false;
-    raw.lflag.ECHO = false;
-    raw.lflag.ICANON = false;
-    raw.lflag.ISIG = false;
-    raw.lflag.IEXTEN = false;
-    if (c.tcsetattr(0, .FLUSH, &raw) != 0) return error.NotATerminal;
-    _ = c.write(1, enter_sequence, enter_sequence.len);
-}
-
-fn terminalSize() struct { columns: usize, rows: usize } {
-    var size: std.posix.winsize = undefined;
-    if (c.ioctl(1, std.posix.T.IOCGWINSZ, &size) != 0 or size.col == 0) return .{ .columns = 80, .rows = 24 };
-    return .{ .columns = size.col, .rows = size.row };
-}
-
-/// Signal handlers may do almost nothing, so they write one byte to a pipe, which
-/// turns the signal into an ordinary readable event for the main loop.
-fn onWinch(_: std.posix.SIG) callconv(.c) void {
-    wake('w');
-}
-
-fn onTerminate(sig: std.posix.SIG) callconv(.c) void {
-    restoreTerminal();
-    c._exit(128 + @as(c_int, @intCast(@backingInt(sig))));
-}
-
-fn wake(reason: u8) void {
-    const byte = [1]u8{reason};
-    _ = c.write(wake_write_fd, &byte, 1);
-}
-
-fn installSignals() void {
-    const winch: std.posix.Sigaction = .{ .handler = .{ .handler = onWinch }, .mask = std.posix.sigemptyset(), .flags = 0 };
-    std.posix.sigaction(.WINCH, &winch, null);
-    const terminate: std.posix.Sigaction = .{ .handler = .{ .handler = onTerminate }, .mask = std.posix.sigemptyset(), .flags = 0 };
-    std.posix.sigaction(.TERM, &terminate, null);
-    std.posix.sigaction(.HUP, &terminate, null);
-    std.posix.sigaction(.INT, &terminate, null);
-}
+const wake = console.wake;
 
 const Pane = enum { feeds, entries, reader };
 
@@ -402,8 +347,13 @@ const App = struct {
             app.say("Not a web link", .{});
             return;
         }
-        const opener = if (builtin.os.tag == .macos) "open" else "xdg-open";
-        _ = std.process.spawn(app.io, .{ .argv = &.{ opener, url }, .stdin = .ignore, .stdout = .ignore, .stderr = .ignore }) catch {
+        // rundll32 takes the address as one argument and does not parse it as a command.
+        const argv: []const []const u8 = switch (builtin.os.tag) {
+            .macos => &.{ "open", url },
+            .windows => &.{ "rundll32", "url.dll,FileProtocolHandler", url },
+            else => &.{ "xdg-open", url },
+        };
+        _ = std.process.spawn(app.io, .{ .argv = argv, .stdin = .ignore, .stdout = .ignore, .stderr = .ignore }) catch {
             app.say("Could not open a browser", .{});
             return;
         };
@@ -769,7 +719,7 @@ const App = struct {
     }
 
     fn draw(app: *App) !void {
-        const size = terminalSize();
+        const size = console.size();
         if (size.columns != app.screen.width or size.rows != app.screen.height) {
             app.screen.deinit(app.gpa);
             app.previous.deinit(app.gpa);
@@ -1117,7 +1067,7 @@ fn scrollInto(top: *usize, index: usize, rows: usize) void {
 fn writeAll(bytes: []const u8) void {
     var rest = bytes;
     while (rest.len != 0) {
-        const written = c.write(1, rest.ptr, rest.len);
+        const written = console.write(rest);
         if (written <= 0) return;
         rest = rest[@intCast(written)..];
     }
@@ -1182,13 +1132,11 @@ fn eventThread(app: *App) void {
 }
 
 pub fn run(gpa: std.mem.Allocator, connector: client_module.Connector) !void {
-    var pipe_fds: [2]c.fd_t = undefined;
-    if (c.pipe(&pipe_fds) != 0) return error.NoPipe;
-    wake_write_fd = pipe_fds[1];
-    // A full pipe must drop wake-ups rather than block a signal handler.
-    _ = c.fcntl(pipe_fds[1], c.F.SETFL, @as(c_int, @bitCast(c.O{ .NONBLOCK = true })));
+    try console.start();
+    console.enter_sequence = enter_sequence;
+    console.leave_sequence = leave_sequence;
 
-    const size = terminalSize();
+    const size = console.size();
     var app: App = .{
         .gpa = gpa,
         .io = connector.io,
@@ -1205,9 +1153,9 @@ pub fn run(gpa: std.mem.Allocator, connector: client_module.Connector) !void {
     defer app.deinit();
 
     try app.connect();
-    try enterRawMode();
+    try console.enterRaw();
     defer restoreTerminal();
-    installSignals();
+    console.installHandlers();
 
     app.readConfig();
     app.loadFeeds();
@@ -1225,25 +1173,21 @@ pub fn run(gpa: std.mem.Allocator, connector: client_module.Connector) !void {
 
     while (app.running) {
         const now = Io.Clock.awake.now(app.io).toMilliseconds();
-        var timeout: c_int = -1;
+        var timeout: i32 = -1;
         if (app.live_pending) timeout = @intCast(@max(live_refresh_ms - (now - last_live), 0));
         if (app.watching_fetches) {
-            const wait: c_int = @intCast(@max(fetch_watch_ms - (now - last_watch), 0));
+            const wait: i32 = @intCast(@max(fetch_watch_ms - (now - last_watch), 0));
             timeout = if (timeout < 0) wait else @min(timeout, wait);
         }
         if (pending != 0) timeout = escape_wait_ms;
 
-        var fds = [_]c.pollfd{
-            .{ .fd = 0, .events = c.POLL.IN, .revents = 0 },
-            .{ .fd = pipe_fds[0], .events = c.POLL.IN, .revents = 0 },
-        };
-        const ready = c.poll(&fds, fds.len, timeout);
+        const ready = console.wait(timeout);
         var dirty = false;
 
-        if (ready > 0 and fds[1].revents != 0) {
+        if (ready.woke) {
             var reasons: [256]u8 = undefined;
-            const count = c.read(pipe_fds[0], &reasons, reasons.len);
-            for (reasons[0..@intCast(@max(count, 0))]) |reason| {
+            const count = console.drainWake(&reasons);
+            for (reasons[0..count]) |reason| {
                 if (reason == 'e') app.live_pending = true;
                 if (reason == 'w') dirty = true;
                 if (reason == 'a') {
@@ -1253,8 +1197,8 @@ pub fn run(gpa: std.mem.Allocator, connector: client_module.Connector) !void {
             }
         }
 
-        if (ready > 0 and fds[0].revents != 0) {
-            const count = c.read(0, input[pending..].ptr, input.len - pending);
+        if (ready.input) {
+            const count = console.readInput(input[pending..]);
             if (count <= 0) break; // The terminal went away.
             pending += @intCast(count);
             var used: usize = 0;
@@ -1267,7 +1211,7 @@ pub fn run(gpa: std.mem.Allocator, connector: client_module.Connector) !void {
             }
             std.mem.copyForwards(u8, input[0 .. pending - used], input[used..pending]);
             pending -= used;
-        } else if (ready == 0 and pending != 0) {
+        } else if (ready.timed_out and pending != 0) {
             // Nothing followed, so this really was the Escape key.
             for (input[0..pending]) |byte| {
                 if (byte == 0x1B) app.handleKey(.escape);

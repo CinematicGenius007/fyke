@@ -1,0 +1,84 @@
+# Builds and tests Fyke where it ships. Zig is downloaded from ziglang.org and checked
+# against the SHA-256 it publishes, so the compiler is the pinned release and nothing else.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  ZIG_VERSION: "0.17.1"
+
+jobs:
+  windows:
+    timeout-minutes: 20
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP "zig.zip"
+          Invoke-WebRequest "https://ziglang.org/download/$env:ZIG_VERSION/zig-x86_64-windows-$env:ZIG_VERSION.zip" -OutFile $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne "b03f477a1943673e02aca0f570e8030dffd536ce1f45cbc4d3326ec31159562e") { throw "Zig checksum mismatch: $hash" }
+          $target = Join-Path $env:RUNNER_TEMP "zig"
+          Expand-Archive $zip -DestinationPath $target
+          Add-Content $env:GITHUB_PATH (Get-ChildItem $target -Directory | Select-Object -First 1).FullName
+
+      - run: zig version
+      - run: zig build test
+      - run: zig build -Drelease
+
+      # Each script is its own step, so that one failure does not hide the others.
+      - name: e2e
+        if: ${{ !cancelled() }}
+        run: python tools/e2e.py zig-out/bin/fyke.exe
+      - name: e2e_daemon
+        if: ${{ !cancelled() }}
+        run: python tools/e2e_daemon.py zig-out/bin/fyke.exe
+      - name: e2e_mcp
+        if: ${{ !cancelled() }}
+        run: python tools/e2e_mcp.py zig-out/bin/fyke.exe
+      # tools/e2e_tui.py drives a pseudo-terminal with pty and fcntl. It has no Windows
+      # version yet, so the terminal reader is not tested on this runner.
+
+  linux:
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        run: |
+          curl -fsSL "https://ziglang.org/download/$ZIG_VERSION/zig-x86_64-linux-$ZIG_VERSION.tar.xz" -o "$RUNNER_TEMP/zig.tar.xz"
+          echo "3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a  $RUNNER_TEMP/zig.tar.xz" | sha256sum -c -
+          mkdir "$RUNNER_TEMP/zig"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+          echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
+
+      - run: zig fmt --check src tools build.zig
+      - run: zig build test
+      - run: zig build -Drelease
+      - name: Python test dependencies
+        run: python3 -m pip install pyte
+      - name: e2e
+        if: ${{ !cancelled() }}
+        run: python3 tools/e2e.py zig-out/bin/fyke
+      - name: e2e_daemon
+        if: ${{ !cancelled() }}
+        run: python3 tools/e2e_daemon.py zig-out/bin/fyke
+      - name: e2e_mcp
+        if: ${{ !cancelled() }}
+        run: python3 tools/e2e_mcp.py zig-out/bin/fyke
+      - name: e2e_service
+        if: ${{ !cancelled() }}
+        run: python3 tools/e2e_service.py zig-out/bin/fyke
+      - name: e2e_tui
+        if: ${{ !cancelled() }}
+        run: python3 tools/e2e_tui.py zig-out/bin/fyke

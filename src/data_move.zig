@@ -11,6 +11,7 @@ const client_module = @import("client.zig");
 const daemon = @import("daemon.zig");
 const autostart = @import("autostart.zig");
 const ops = @import("ops.zig");
+const platform = @import("platform.zig");
 
 const Io = std.Io;
 
@@ -220,6 +221,9 @@ pub fn run(
     const io = connector.io;
     const cwd = Io.Dir.cwd();
 
+    // The move leaves `~/.fyke` as a link, and creating a link on Windows needs a
+    // privilege that most accounts do not hold.
+    if (comptime platform.is_windows) return error.Unsupported;
     if (connector.environ.get("FYKE_HOME") != null) return error.HomeIsOverridden;
     if (target_arg.len == 0 or target_arg[0] != '/') return error.NotAbsolute;
     const target = trimSlashes(target_arg);

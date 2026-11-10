@@ -9,13 +9,16 @@ Usage: e2e_service.py <path-to-fyke>
 """
 import os, shutil, subprocess, sys, tempfile
 
+# Unix socket paths are short, so macOS and Linux use /tmp. Windows has no /tmp.
+TMP = tempfile.gettempdir() if os.name == "nt" else "/tmp"
+
 FYKE = os.path.abspath(sys.argv[1])
 LINUX = sys.platform.startswith("linux")
 MACOS = sys.platform == "darwin"
 if not (LINUX or MACOS):
     print("service tests run on macOS and Linux only"); sys.exit(0)
 
-root = tempfile.mkdtemp(prefix="fyke-s-", dir="/tmp")
+root = tempfile.mkdtemp(prefix="fyke-s-", dir=TMP)
 user = root + "/home"; shim = root + "/bin"; log = root + "/calls.log"; flag = root + "/enabled"
 os.makedirs(user); os.makedirs(shim)
 manager = "systemctl" if LINUX else "launchctl"
@@ -83,7 +86,7 @@ if LINUX:
     other = root + "/xdg"
     p = fyke("service", "install", env=dict(env, XDG_CONFIG_HOME=other))
     check("XDG_CONFIG_HOME is respected", p.returncode == 0 and os.path.exists(other + "/systemd/user/fyke.service"), p.stdout + p.stderr)
-    shutil.rmtree(other)
+    shutil.rmtree(other, ignore_errors=True)
     # A path that needs escaping must survive: a space, a quote, a percent and a dollar sign.
     odd = root + '/we ird"%$'
     os.makedirs(odd); shutil.copy(FYKE, odd + "/fyke")

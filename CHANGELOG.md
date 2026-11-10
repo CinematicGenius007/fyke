@@ -8,7 +8,8 @@ There are no releases yet. Everything below is built from source and is unreleas
 
 ### Added
 
-- **Linux.** `fyke`, `fyke tui` and `fyke mcp` build for Linux. `fyke service install` writes a `systemd` user unit, `fyke.service`, that starts the daemon at login and restarts it after a crash. Windows is not supported yet.
+- **Windows (preview).** `fyke.exe` builds for Windows 10 1803 and later, and runs the daemon, the command line and `fyke mcp`, checked in continuous integration. The terminal reader is written but not tested there. `fyke data move` and `fyke service` are not available yet.
+- **Linux.** `fyke`, `fyke tui` and `fyke mcp` build for Linux. `fyke service install` writes a `systemd` user unit, `fyke.service`, that starts the daemon at login and restarts it after a crash.
 - **Daemon.** One background process owns the database, polls feeds in the background and serves every client over a local socket. It starts on demand, and `fyke service install` runs it from login as a `launchd` agent (macOS) or a `systemd` user unit (Linux).
 - **Feeds.** RSS 0.90, 0.91, 1.0 and 2.0, Atom 1.0 and JSON Feed 1.0 and 1.1. Conditional requests send validators and accept `304`. Redirects, `410`, `Retry-After`, compressed bodies, feed discovery from a page address, and OPML import and export are handled. Private addresses are refused.
 - **Content.** Article HTML is converted to blocks when it is stored, so no surface renders raw HTML. When a feed gives only a summary, the daemon fetches the full article and retries temporary failures after 1, 6 and 24 hours.

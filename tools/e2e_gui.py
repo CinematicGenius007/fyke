@@ -8,9 +8,12 @@ read, since opening an article is the one effect that outlives the window.
 """
 import http.server, json, os, pathlib, shutil, socketserver, subprocess, sys, tempfile, threading
 
+# Unix socket paths are short, so macOS and Linux use /tmp. Windows has no /tmp.
+TMP = tempfile.gettempdir() if os.name == "nt" else "/tmp"
+
 root = pathlib.Path(__file__).resolve().parent.parent
 app = root / "zig-out/Fyke.app/Contents/MacOS"
-home = tempfile.mkdtemp(prefix="fyke-g-", dir="/tmp")
+home = tempfile.mkdtemp(prefix="fyke-g-", dir=TMP)
 env = dict(os.environ, FYKE_HOME=home, FYKE_BIN=str(app / "fyke"))
 passed = 0
 
@@ -49,7 +52,7 @@ def play(name, keys, expected):
     got = read_titles()
     if got != expected:
         print(f"FAIL {name}: expected {expected}, got {got}")
-        rss("daemon", "stop"); shutil.rmtree(home); sys.exit(1)
+        rss("daemon", "stop"); shutil.rmtree(home, ignore_errors=True); sys.exit(1)
     print(f"ok   {name}")
     passed += 1
 
@@ -81,7 +84,7 @@ def themes(name, start, keys, check):
     ui = json.loads(path.read_text())["ui"]
     if not check(ui):
         print(f"FAIL {name}: {ui}")
-        rss("daemon", "stop"); shutil.rmtree(home); sys.exit(1)
+        rss("daemon", "stop"); shutil.rmtree(home, ignore_errors=True); sys.exit(1)
     print(f"ok   {name}")
     passed += 1
 
@@ -103,23 +106,23 @@ subprocess.run([str(app / "Reader")], env=dict(env, FYKE_SCREEN="feed", FYKE_FEE
 width = json.loads(config_path.read_text()).get("ui", {}).get("list_width")
 if width is None or abs(width - (before_width + 80)) > 2:
     print(f"FAIL the divider drags: {before_width} to {width}")
-    rss("daemon", "stop"); shutil.rmtree(home); sys.exit(1)
+    rss("daemon", "stop"); shutil.rmtree(home, ignore_errors=True); sys.exit(1)
 print("ok   dragging the divider widens the article list and saves it")
 passed += 1
 
 # The data folder move. FYKE_HOME is set, so the command refuses, which is the failure
 # path: it must hand control back, and leave the data and the daemon as they were.
 before = rss("feeds", "--json")
-moved = tempfile.mkdtemp(prefix="fyke-mv-", dir="/tmp")
+moved = tempfile.mkdtemp(prefix="fyke-mv-", dir=TMP)
 subprocess.run([str(app / "Reader")], env=dict(env, FYKE_SCREEN="settings", FYKE_TAB="General", FYKE_MOVE=moved + "/data", FYKE_MOVE_RUN="1", FYKE_KEYS="wait wait wait wait"),
                capture_output=True, timeout=60)
 if rss("feeds", "--json") != before or os.path.exists(moved + "/data"):
     print("FAIL a refused move changes nothing")
-    rss("daemon", "stop"); shutil.rmtree(home); sys.exit(1)
+    rss("daemon", "stop"); shutil.rmtree(home, ignore_errors=True); sys.exit(1)
 print("ok   a refused move changes nothing, and the daemon answers afterwards")
 passed += 1
-shutil.rmtree(moved)
+shutil.rmtree(moved, ignore_errors=True)
 
 rss("daemon", "stop")
-shutil.rmtree(home)
+shutil.rmtree(home, ignore_errors=True)
 print(f"\n{passed} checks passed")

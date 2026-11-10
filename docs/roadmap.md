@@ -15,7 +15,7 @@ No deadlines. Each milestone produces something you can use, and each has a test
 | 8 | **Runners** | Model APIs, job queues | Morning brief with validated citations through `http` and `exec` |
 | 9 | **ACP** | Agent protocols | Any ACP agent runs a lens, with progress streaming into the UI; "ask my feeds" chat |
 | 10 | **Linux** (planned) | systemd, XDG paths, Linux packaging | `fyke`, `fyke tui` and `fyke mcp` run on Linux, every end-to-end script passes there in continuous integration, and `fyke service install` uses `systemd --user` |
-| 11 | **Windows** (planned) | Win32 consoles, named pipes or `AF_UNIX`, file locking | The same programs run on Windows 10 and later, with the end-to-end scripts passing in continuous integration |
+| 11 | **Windows** (in progress) | Win32 consoles, named pipes or `AF_UNIX`, file locking | The same programs run on Windows 10 and later, with the end-to-end scripts passing in continuous integration |
 | 12 | **Native GUIs** (planned) | One native toolkit per platform | A Linux app and a Windows app, each written against the socket API in the platform's own toolkit |
 
 **You can stop after milestone 5 and already have** a reader that every agent on the machine can use.
@@ -237,7 +237,7 @@ At every step the documents, this roadmap and the task list are updated together
 
 ## Platforms (planned)
 
-Nothing here is built except what is marked. The core is one Zig codebase: `zig build -Dtarget=...` already produces `fyke` for `x86_64-linux-gnu`, `aarch64-linux-musl` and `aarch64-macos`. `x86_64-windows-gnu` does not build yet: see Windows below.
+Nothing here is built except what is marked. The core is one Zig codebase: `zig build -Dtarget=...` already produces `fyke` for `x86_64-linux-gnu`, `aarch64-linux-musl` and `aarch64-macos`. `x86_64-windows-gnu` builds and passes the unit tests and three end-to-end scripts in continuous integration: see Windows below.
 
 ### Linux
 
@@ -255,32 +255,29 @@ Measured 2026-11-09 with `tools/e2e_container.py`: a static `aarch64-linux-musl`
 
 ### Windows
 
-Measured 2026-11-09 with `zig build -Dtarget=x86_64-windows-gnu`. Zig analyzes only the code a build reaches, so errors show up in layers, and each layer was stubbed to expose the next. `feedcheck.exe` builds today. `fyke.exe` does not.
+`fyke.exe` builds for `x86_64-windows-gnu`, and a Windows runner in continuous integration (2026-11-10) runs the unit tests and `e2e.py`, `e2e_daemon.py` and `e2e_mcp.py` against it. Windows 10 1803 or later is needed, since the standard library's Unix sockets and file locks start there. No named pipe is used: the daemon keeps its Unix socket `fyked.sock` and its lock file.
 
-| Layer | Where | What fails |
-|---|---|---|
-| 1 | `src/daemon.zig` | `Permissions.fromMode`, used for mode `0700` on the data folder and `0600` on the socket, does not exist on Windows. `dup2`, used to send the log to a file, has no equivalent |
-| 2 | `src/tui.zig` | The whole terminal layer: `termios`, `ioctl` for the size, `sigaction`, and a `pipe` plus `poll` loop over standard input, the wake pipe and the daemon connection |
-| 2 | `src/fetch.zig` | The connect with a deadline is built from `socket`, `fcntl`, `poll` and `getsockopt` on a file descriptor, and `isPublicPeer` calls `std.posix.getpeername`, which the standard library refuses on Windows with "use std.Io instead" |
-| 3 | `src/client.zig` | `poll` on the daemon socket for the reply timeout, and `.pgid = 0` to start the daemon in its own process group |
+How each POSIX-only piece is done:
 
-More layers may be behind these. Not obstacles:
+| Piece | Windows |
+|---|---|
+| File permissions | Not set. A folder under the user's profile inherits an access list that admits only that user, the system and administrators. The mode checks in `e2e_daemon.py` are skipped |
+| Log file | `SetStdHandle` makes the log the standard error, and the file stays open for the life of the process (`dup2` copies it, so POSIX can close it) |
+| Connect with a deadline | The standard library's connect, wrapped so that the peer address is recorded for `isPublicPeer` |
+| Reply timeout | The read races a timer with `Io.Select` |
+| Detached daemon | Started without a process group. The client first marks its standard handles non-inheritable, so that a daemon started by a client whose output is captured does not hold the capturing pipe open |
+| Terminal reader | `src/console_windows.zig`: virtual-terminal input and output modes, so keys and mouse reports arrive as the escape sequences `terminal.zig` parses. A thread reads standard input, another checks the window size every 250 ms, and a control handler restores the console |
+| Data folder | `%LOCALAPPDATA%\Fyke` |
+| Tests | Python has no `AF_UNIX` on Windows, so `e2e_daemon.py` calls Winsock through `ctypes`, and kills the daemon with `taskkill` |
 
-- The standard library supports Unix sockets on Windows 10 build 17063 and later (`netListenUnixWindows`), and file locks (`File.tryLock`). So the daemon keeps its Unix socket and its lock file, and a named pipe is not needed. The minimum is Windows 10 1803.
-- The vendored SQLite compiles for `x86_64-windows-gnu` (a 6 MB object in 23 s).
-- The operation registry, MCP server, OPML code and store were reached by the build and produced no errors.
+Not done yet:
 
 | Piece | Plan |
 |---|---|
-| File permissions | Skip the mode calls on Windows. A folder under `%APPDATA%` inherits the user's own access list, which already keeps other accounts out. Say so in the architecture document, since it replaces a stated guarantee |
-| Log file | Redirect with `SetStdHandle` on Windows, in place of `dup2` |
-| Connect with a deadline | Keep one implementation behind a small interface, with a Winsock one (`ioctlsocket`, `WSAPoll`) beside the POSIX one. `isPublicPeer` needs the socket address on both |
-| Reply timeout and detached daemon | The same interface for waiting on a socket. Start the daemon with `DETACHED_PROCESS` and a new process group |
-| Terminal reader | Set `ENABLE_VIRTUAL_TERMINAL_INPUT` and `ENABLE_VIRTUAL_TERMINAL_PROCESSING`, so that keys and mouse reports arrive as the escape sequences the reader already parses. The standard library has only the constant for the second, so the console functions are declared by hand. Replace the `poll` loop with a thread that reads standard input and a wake event, and check the window size on a timer, since there is no `SIGWINCH`. A control handler replaces the signal handlers |
-| Data folder | `%APPDATA%\Fyke`, found from `APPDATA`. `homeDirectory` reads `HOME` only today |
+| `fyke data move` | Returns `Unsupported`: it relies on symlinks. The legacy-folder moves in `e2e_daemon.py` are skipped for the same reason |
+| Terminal reader test | `e2e_tui.py` needs a Windows pseudo-console (ConPTY) in place of `pty`. Until then the Windows terminal reader is untested |
 | Background service | Task Scheduler or a Startup entry, behind the same interface as `launchd` and `systemd` |
 | Signing | An unsigned program triggers SmartScreen. Free signing for open-source projects is to be checked |
-| Tests | `e2e.py`, `e2e_daemon.py` and `e2e_mcp.py` use `lsof`, `fcntl`, `os.symlink` and `AF_UNIX`. `e2e_tui.py` needs a Windows pseudo-console (ConPTY) in place of `pty`. Each gets a Windows branch, run on a Windows runner |
 
 ### Native GUIs
 
