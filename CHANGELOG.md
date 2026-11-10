@@ -8,6 +8,7 @@ There are no releases yet. Everything below is built from source and is unreleas
 
 ### Added
 
+- **`fyke --version`** prints the release number, which comes from the `VERSION` file.
 - **Windows (preview).** `fyke.exe` builds for Windows 10 1803 and later, and runs the daemon, the command line and `fyke mcp`, checked in continuous integration. `fyke tui` runs in the Windows console, and `fyke service install` starts the daemon at sign-in through the `Run` key. `fyke data move` works there too, through a pointer file in `%LOCALAPPDATA%\Fyke`. Releases are not signed, so SmartScreen warns the first time: choose More info, then Run anyway.
 - **Linux.** `fyke`, `fyke tui` and `fyke mcp` build for Linux. `fyke service install` writes a `systemd` user unit, `fyke.service`, that starts the daemon at login and restarts it after a crash.
 - **Daemon.** One background process owns the database, polls feeds in the background and serves every client over a local socket. It starts on demand, and `fyke service install` runs it from login as a `launchd` agent (macOS) or a `systemd` user unit (Linux).

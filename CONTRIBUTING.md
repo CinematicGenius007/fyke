@@ -72,3 +72,11 @@ Titles, bodies and pages come from the internet, and may contain text addressed 
 ## License
 
 By contributing, you agree that your work is licensed under the [MIT License](LICENSE).
+
+## Releasing
+
+1. Set `VERSION` to the new number, `MAJOR.MINOR.PATCH`.
+2. In `CHANGELOG.md`, rename `## Unreleased` to `## <version> - <date>` and add an empty `## Unreleased` above it. Edit the entries by hand where they need to read better.
+3. Merge to `main`, then push the tag: `git tag v<version> && git push origin v<version>`.
+
+The release workflow checks that the tag matches `VERSION` and that the changelog has the section, runs the same checks as a pull request, builds archives for Linux (`x86_64`, `aarch64`, static), Windows and macOS (`aarch64`, `x86_64`), and publishes them with `SHA256SUMS` and the changelog section as the notes. `python3 tools/release.py --notes` prints the notes and `python3 tools/release.py` builds the archives locally into `dist/`. The macOS app is built on a Mac with `tools/bundle_app.py`.

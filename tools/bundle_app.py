@@ -11,7 +11,7 @@ import pathlib, plistlib, shutil, subprocess, sys, tempfile
 
 root = pathlib.Path(__file__).resolve().parent.parent
 identifier = "local.fyke.app"
-version = "0.1"
+version = (root / "VERSION").read_text().strip()
 
 
 def run(*command):

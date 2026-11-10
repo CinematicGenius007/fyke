@@ -388,6 +388,9 @@ for _ in range(25):
     rss("status")
     p = rss("daemon", "stop", ok=False)
     if p.returncode != 0: break
+    # The daemon deletes its socket last. A client that connected before then would be
+    # talking to a daemon that is already on its way out, which is not what this checks.
+    wait_for(lambda: not os.path.exists(home + "/fyked.sock"))
 check("stop always answers", p.returncode == 0, p.stderr)
 
 # Background polling

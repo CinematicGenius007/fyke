@@ -77,6 +77,10 @@ def check(name, condition, detail=""):
         print(f"FAIL {name} {detail}"); sys.exit(1)
     passed += 1; print(f"ok   {name}")
 
+# Version
+expected = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "VERSION")).read().strip()
+check("--version prints the release number", rss("--version").stdout.strip() == f"fyke {expected}", rss("--version").stdout)
+
 # SSRF
 p = rss("add", base + "/feed", ok=False)
 check("private address refused by default", p.returncode == 1 and "PrivateAddress" in p.stderr, p.stderr)
