@@ -334,7 +334,11 @@ check("refresh all finishes", t.wait_for("Refresh finished", 6), t.screen.displa
 for columns, rows, needle in ((200, 50, "Main Feed"), (90, 30, "Feeds"), (60, 20, "Main Feed"), (30, 10, "Live story"), (15, 4, "window too"), (130, 40, "Feeds")):
     t.resize(columns, rows)
     t.pump(0.3)
-    t.keys("\x0c", 0.2)  # Ctrl-L repaints, since pyte starts blank after a resize.
+    # Ctrl-L repaints, since pyte starts blank after a resize. The Windows reader finds
+    # the new size by polling, so the first repaint can still be at the old one.
+    for _ in range(8 if IS_WIN else 1):
+        t.keys("\x0c", 0.5 if IS_WIN else 0.2)
+        if needle.lower() in t.text().lower(): break
     check(f"resize to {columns}x{rows}", needle.lower() in t.text().lower(), t.text())
     check(f"borders stay straight at {columns}x{rows}", len(separators(t)) <= 2, separators(t))
 
