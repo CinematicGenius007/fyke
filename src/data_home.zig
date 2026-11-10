@@ -17,6 +17,33 @@ pub fn resolve(arena: std.mem.Allocator, io: Io, user_home: []const u8) ![]const
     return path;
 }
 
+/// The file in the default Windows data folder that names the folder `fyke data move`
+/// chose. A link would do the same on other systems, but making one on Windows needs a
+/// privilege most accounts lack, and a folder cannot be renamed while the daemon's lock
+/// file is open in it. A pointer needs neither.
+pub const location_file = "location";
+
+/// Where the data is, if `anchor` holds a pointer to somewhere else.
+pub fn readLocation(arena: std.mem.Allocator, io: Io, anchor: []const u8) !?[]const u8 {
+    const path = try std.fmt.allocPrint(arena, "{s}\\{s}", .{ anchor, location_file });
+    const text = Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(4096)) catch |err| switch (err) {
+        error.FileNotFound => return null,
+        else => return err,
+    };
+    const trimmed = std.mem.trim(u8, text, " \t\r\n");
+    return if (trimmed.len == 0) null else trimmed;
+}
+
+/// Writes the pointer whole or not at all, since a half-written one would send every
+/// client to the wrong folder.
+pub fn writeLocation(arena: std.mem.Allocator, io: Io, anchor: []const u8, target: []const u8) !void {
+    const cwd = Io.Dir.cwd();
+    const path = try std.fmt.allocPrint(arena, "{s}\\{s}", .{ anchor, location_file });
+    const temporary = try std.fmt.allocPrint(arena, "{s}.tmp", .{path});
+    try cwd.writeFile(io, .{ .sub_path = temporary, .data = target });
+    try Io.Dir.renameAbsolute(temporary, path, io);
+}
+
 /// Files an earlier build named for the working name. A pair is renamed only when the
 /// new name is free, so data that was already migrated is never replaced.
 const legacy_files = [_][2][]const u8{

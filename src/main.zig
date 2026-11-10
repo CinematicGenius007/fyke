@@ -261,7 +261,8 @@ fn homeDirectory(arena: std.mem.Allocator, io: Io, environ: *const std.process.E
     // in the local application data folder, which is also what a program there expects.
     if (comptime platform.is_windows) {
         const base = environ.get("LOCALAPPDATA") orelse return error.NoHomeDirectory;
-        return std.fmt.allocPrint(arena, "{s}\\Fyke", .{base});
+        const anchor = try std.fmt.allocPrint(arena, "{s}\\Fyke", .{base});
+        return try data_home.readLocation(arena, io, anchor) orelse anchor;
     }
     return data_home.resolve(arena, io, try userHome(environ));
 }
