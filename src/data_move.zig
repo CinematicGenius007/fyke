@@ -66,9 +66,11 @@ fn isAbsoluteWindows(path: []const u8) bool {
     return path.len >= 3 and path[0] == '\\' and path[1] == '\\';
 }
 
-/// Files that belong to a running daemon and mean nothing in a copy.
+/// Files that belong to a running daemon and mean nothing in a copy, and on Windows the
+/// pointer, which is not data and is present in the default folder when moving back.
 fn leftBehind(path: []const u8) bool {
-    return platform.is_windows and (std.mem.eql(u8, path, "fyked.lock") or std.mem.eql(u8, path, "fyked.sock"));
+    if (!platform.is_windows) return false;
+    return std.mem.eql(u8, path, "fyked.lock") or std.mem.eql(u8, path, "fyked.sock") or std.mem.eql(u8, path, data_home.location_file);
 }
 
 const Kind = enum { missing, folder, link, other };
