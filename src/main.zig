@@ -38,6 +38,7 @@ const usage =
     \\  daemon [stop]                  run in the foreground, or stop it
     \\  service install|uninstall|status   run the daemon from login
     \\  data move <folder>             move the data folder, then restart
+    \\  version                       print the release number
     \\
     \\Clients start the daemon when needed.
     \\Data lives in $FYKE_HOME, by default ~/.fyke (%LOCALAPPDATA%\\Fyke on Windows)
@@ -109,6 +110,9 @@ fn onPanic(message: []const u8, return_address: ?usize) noreturn {
     std.debug.defaultPanic(message, return_address);
 }
 
+/// The release number, from the `VERSION` file at the root of the repository.
+pub const version = std.mem.trim(u8, @embedFile("version"), " \t\r\n");
+
 pub fn main(init: std.process.Init) !u8 {
     const arena = init.arena.allocator();
     const io = init.io;
@@ -125,6 +129,10 @@ pub fn main(init: std.process.Init) !u8 {
     }
 
     const command = argv[1];
+    if (std.mem.eql(u8, command, "--version") or std.mem.eql(u8, command, "version")) {
+        try out.print("fyke {s}\n", .{version});
+        return 0;
+    }
     const args: Args = .{ .items = argv[2..] };
     // A service has no environment of its own to carry `FYKE_HOME`, so the daemon also
     // takes its data folder as an argument.

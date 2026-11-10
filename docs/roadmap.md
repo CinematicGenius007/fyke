@@ -179,7 +179,7 @@ The reading default is Newsreader, which ships in the app. Any other installed f
 
 ## Releases (planned)
 
-None of this is built. There are no releases yet: the app is built from source, as the [README](../README.md) describes.
+Most of this is not built. There are no releases yet: the app is built from source, as the [README](../README.md) describes. Built so far: the `VERSION` file, `fyke --version`, `tools/release.py` (cross-compiled archives for five targets, `SHA256SUMS`, release notes from the changelog) and the tag workflow `.github/workflows/release.yml`, which has not run on a real tag yet. Not built: the macOS app archive, signing, the in-app updater, the install script and the Homebrew tap.
 
 People who use the app should never need a terminal. Moving the data folder is already done inside the app, and updating is meant to be too. That means releases carry a prebuilt app, with its own signature in place of Apple's.
 
@@ -199,14 +199,14 @@ People who use the app should never need a terminal. Moving the data folder is a
 | Step | Work |
 |---|---|
 | Name | Done: the project is Fyke, see [decision 0003](decisions/0003-project-name.md). Builds made before the rename kept data in `~/.rss_`, and the first `fyke` command moves it to `~/.fyke` |
-| One version number | `tools/bundle_app.py` hard-codes `0.1`. One source feeds the app, `Info.plist` and a new `fyke --version` |
+| One version number | Done: the `VERSION` file feeds `fyke --version`, `Info.plist` and the release archives. `e2e.py` checks that the program reports it |
 | Changelog | `CHANGELOG.md`, one section per release, drawn from Conventional Commits |
 | Continuous integration | A macOS runner on every pull request: `zig fmt --check`, `zig build test`, the end-to-end scripts, `tools/bundle_app.py` and `tools/e2e_gui.py`. Zig is pinned to the version `CONTRIBUTING.md` names |
 | Install script | `tools/install.sh` checks for Zig and Xcode's command line tools, builds, installs to `/Applications` and restarts the daemon, for people who build from source |
 
 ### Releasing
 
-A release is a tag, `vMAJOR.MINOR.PATCH`, on `main`. Pushing it runs the full checks, builds and signs the app, and publishes a GitHub Release with the changelog section, the archive, its signature and its SHA-256.
+A release is a tag, `vMAJOR.MINOR.PATCH`, on `main`. Pushing it runs the full checks, builds the command line archives (and, once built, signs the app), and publishes a GitHub Release with the changelog section, the archive, its signature and its SHA-256.
 
 Version numbers follow what a user would notice. A patch fixes behavior. A minor version adds features and may add schema migrations, which run on their own at the daemon's next start. A major version would change the data folder or the config format, and says so in the changelog. Raising `api_version` in `src/ops.zig` and `Daemon.apiVersion` in the app together is part of any change that clients rely on.
 

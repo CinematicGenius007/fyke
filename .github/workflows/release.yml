@@ -1,0 +1,47 @@
+# Publishes a release when a tag v<MAJOR>.<MINOR>.<PATCH> is pushed. The tag must match
+# VERSION and CHANGELOG.md must have a section for it, or nothing is published. The
+# checks that run on every pull request run again first, on the tagged commit.
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    env:
+      ZIG_VERSION: 0.17.1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag
+        run: python3 tools/release.py --check "$GITHUB_REF_NAME"
+
+      - name: Install Zig
+        run: |
+          curl -fsSL "https://ziglang.org/download/$ZIG_VERSION/zig-x86_64-linux-$ZIG_VERSION.tar.xz" -o "$RUNNER_TEMP/zig.tar.xz"
+          echo "3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a  $RUNNER_TEMP/zig.tar.xz" | sha256sum -c -
+          mkdir "$RUNNER_TEMP/zig"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+          echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
+
+      - name: Build every target
+        run: python3 tools/release.py
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/*.zip dist/SHA256SUMS \
+            --title "Fyke ${GITHUB_REF_NAME#v}" --notes-file dist/NOTES.md --verify-tag

@@ -17,6 +17,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
         .imports = &.{.{ .name = "core", .module = core }},
     });
+    app.addAnonymousImport("version", .{ .root_source_file = b.path("VERSION") });
     app.addAnonymousImport("schema", .{ .root_source_file = b.path("schema/0001_init.sql") });
     app.addAnonymousImport("schema2", .{ .root_source_file = b.path("schema/0002_full_text.sql") });
     app.addAnonymousImport("schema3", .{ .root_source_file = b.path("schema/0003_skip_hints.sql") });
