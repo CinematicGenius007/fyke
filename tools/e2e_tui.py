@@ -358,7 +358,9 @@ check("and the daemon came back", "Main Feed" in rss("feeds").stdout)
 t.keys("\x03", 0.1)
 code, after = t.finish()
 check("Ctrl-C exits cleanly", code == 0, code)
-check("the alternate screen is left", t.raw.rstrip().endswith(b"\x1b[?1049l"), t.raw[-120:])
+# ConPTY redraws the screen itself, so the last bytes it passes on are not the program's own.
+if not IS_WIN:
+    check("the alternate screen is left", t.raw.rstrip().endswith(b"\x1b[?1049l"), t.raw[-120:])
 if not IS_WIN:
     check("terminal settings are restored", after == t.saved)
 
