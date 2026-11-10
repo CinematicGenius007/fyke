@@ -267,7 +267,8 @@ How each POSIX-only piece is done:
 | Reply timeout | The read races a timer with `Io.Select` |
 | Detached daemon | Started without a process group. The client first marks its standard handles non-inheritable, so that a daemon started by a client whose output is captured does not hold the capturing pipe open |
 | Terminal reader | `src/console_windows.zig`: virtual-terminal input and output modes, so keys and mouse reports arrive as the escape sequences `terminal.zig` parses. A thread reads standard input, another checks the window size every 250 ms, and a control handler restores the console |
-| Data folder | `%LOCALAPPDATA%\Fyke` |
+| Data folder | `%LOCALAPPDATA%\Fyke`, or the folder that its `location` file names after `fyke data move` |
+| `fyke data move` | Copies, verifies counts and sizes, writes the pointer last, then deletes the original. It does not rename, since the daemon's lock file is open in the folder, and does not link, since that needs a privilege. A target whose socket path would pass 107 bytes is refused. `e2e_daemon.py` moves out and back |
 | Background service | `fyke service` adds a value named Fyke to the user's `Run` key (`src/windows_startup.zig`), with the data folder passed as `daemon --home`. Nothing restarts the daemon after a crash: the next client starts it. `tools/e2e_service_windows.py` checks it against the real key |
 | Terminal reader test | `tools/e2e_tui.py` runs in a ConPTY through `pywinpty`. It skips what depends on POSIX terminal settings, `SIGTERM`, the browser stand-in (Windows opens links through `rundll32`) and the raw bytes at exit, since ConPTY redraws the screen itself |
 | Tests | Python has no `AF_UNIX` on Windows, so `e2e_daemon.py` calls Winsock through `ctypes`, and kills the daemon with `taskkill` |
@@ -276,8 +277,7 @@ Not done yet:
 
 | Piece | Plan |
 |---|---|
-| `fyke data move` | Returns `Unsupported`: it relies on symlinks. The legacy-folder moves in `e2e_daemon.py` are skipped for the same reason |
-| Signing | An unsigned program triggers SmartScreen. Free signing for open-source projects is to be checked |
+| Signing | Releases are unsigned, so Windows SmartScreen warns on the first run ("Windows protected your PC" > More info > Run anyway). The install instructions must say so. Free signing for open-source projects is to be checked |
 
 ### Native GUIs
 

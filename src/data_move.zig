@@ -3,6 +3,11 @@
 //! to the chosen folder, which keeps socket paths short, whatever the folder's name,
 //! and needs no pointer file for clients to read.
 //!
+//! Windows cannot do that. Making a link there needs a privilege most accounts lack,
+//! and a folder cannot be renamed while a file in it is open, which the daemon's lock
+//! always is. So the data is copied, and `%LOCALAPPDATA%\Fyke` keeps one small file,
+//! `location`, naming the folder that holds it.
+//!
 //! Nothing is deleted until the data is verified in its new place, and a failure at
 //! any step leaves the old folder as it was.
 
@@ -12,6 +17,7 @@ const daemon = @import("daemon.zig");
 const autostart = @import("autostart.zig");
 const ops = @import("ops.zig");
 const platform = @import("platform.zig");
+const data_home = @import("data_home.zig");
 
 const Io = std.Io;
 
@@ -26,19 +32,45 @@ pub const Error = error{
     TargetNotEmpty,
     TargetNotFolder,
     VerifyFailed,
+    /// The daemon's socket lives in the folder, and a Unix socket address holds 107 bytes.
+    PathTooLong,
     DaemonStillRunning,
 };
 
 /// True when `path` is `folder` or lies inside it.
 pub fn isInside(path: []const u8, folder: []const u8) bool {
-    if (!std.mem.startsWith(u8, path, folder)) return false;
-    return path.len == folder.len or path[folder.len] == '/';
+    if (path.len < folder.len) return false;
+    if (!samePath(path[0..folder.len], folder)) return false;
+    return path.len == folder.len or isSeparator(path[folder.len]);
+}
+
+fn isSeparator(c: u8) bool {
+    return c == '/' or (platform.is_windows and c == '\\');
+}
+
+/// Paths compare without regard to case on Windows, where `D:\Data` and `d:\data` are
+/// one folder.
+fn samePath(a: []const u8, b: []const u8) bool {
+    return if (platform.is_windows) std.ascii.eqlIgnoreCase(a, b) else std.mem.eql(u8, a, b);
 }
 
 fn trimSlashes(path: []const u8) []const u8 {
     var end = path.len;
-    while (end > 1 and path[end - 1] == '/') end -= 1;
+    while (end > 1 and isSeparator(path[end - 1])) end -= 1;
     return path[0..end];
+}
+
+/// `C:\folder` or `\\server\share\folder`.
+fn isAbsoluteWindows(path: []const u8) bool {
+    if (path.len >= 3 and std.ascii.isAlphabetic(path[0]) and path[1] == ':' and isSeparator(path[2])) return true;
+    return path.len >= 3 and path[0] == '\\' and path[1] == '\\';
+}
+
+/// Files that belong to a running daemon and mean nothing in a copy, and on Windows the
+/// pointer, which is not data and is present in the default folder when moving back.
+fn leftBehind(path: []const u8) bool {
+    if (!platform.is_windows) return false;
+    return std.mem.eql(u8, path, "fyked.lock") or std.mem.eql(u8, path, "fyked.sock") or std.mem.eql(u8, path, data_home.location_file);
 }
 
 const Kind = enum { missing, folder, link, other };
@@ -55,11 +87,15 @@ fn kindOf(io: Io, path: []const u8, follow: bool) !Kind {
     };
 }
 
-fn isEmptyFolder(io: Io, path: []const u8) !bool {
+fn isEmptyFolder(io: Io, path: []const u8, except: ?[]const u8) !bool {
     var folder = try Io.Dir.cwd().openDir(io, path, .{ .iterate = true });
     defer folder.close(io);
     var entries = folder.iterate();
-    return (try entries.next(io)) == null;
+    while (try entries.next(io)) |entry| {
+        if (except) |name| if (std.mem.eql(u8, entry.name, name)) continue;
+        return false;
+    }
+    return true;
 }
 
 const Totals = struct { files: u64 = 0, bytes: u64 = 0 };
@@ -72,6 +108,7 @@ fn measure(arena: std.mem.Allocator, io: Io, path: []const u8) !Totals {
     var totals: Totals = .{};
     while (try walker.next(io)) |entry| switch (entry.kind) {
         .file => {
+            if (leftBehind(entry.path)) continue;
             const stat = try entry.dir.statFile(io, entry.basename, .{});
             totals.files += 1;
             totals.bytes += stat.size;
@@ -94,7 +131,7 @@ fn copyTree(arena: std.mem.Allocator, io: Io, from: []const u8, to: []const u8) 
     defer walker.deinit();
     while (try walker.next(io)) |entry| switch (entry.kind) {
         .directory => try destination.createDirPath(io, entry.path),
-        .file => try source.copyFile(entry.path, destination, entry.path, io, .{ .make_path = true }),
+        .file => if (!leftBehind(entry.path)) try source.copyFile(entry.path, destination, entry.path, io, .{ .make_path = true }),
         .sym_link => {
             var buffer: [std.fs.max_path_bytes]u8 = undefined;
             const length = try source.readLink(io, entry.path, &buffer);
@@ -106,7 +143,7 @@ fn copyTree(arena: std.mem.Allocator, io: Io, from: []const u8, to: []const u8) 
 }
 
 /// Empties a folder this command filled, so that a failed copy leaves nothing behind.
-fn clear(io: Io, path: []const u8, remove_folder: bool) void {
+fn clear(io: Io, path: []const u8, remove_folder: bool, keep: ?[]const u8) void {
     const cwd = Io.Dir.cwd();
     if (remove_folder) {
         cwd.deleteTree(io, path) catch {};
@@ -115,7 +152,10 @@ fn clear(io: Io, path: []const u8, remove_folder: bool) void {
     var folder = cwd.openDir(io, path, .{ .iterate = true }) catch return;
     defer folder.close(io);
     var entries = folder.iterate();
-    while (entries.next(io) catch null) |entry| folder.deleteTree(io, entry.name) catch {};
+    while (entries.next(io) catch null) |entry| {
+        if (keep) |name| if (std.mem.eql(u8, entry.name, name)) continue;
+        folder.deleteTree(io, entry.name) catch {};
+    }
 }
 
 /// Waits for the daemon to let go of the data directory, and holds the same lock the
@@ -182,7 +222,7 @@ fn relocate(arena: std.mem.Allocator, io: Io, out: *Io.Writer, l: Layout) !void 
         return;
     }
 
-    errdefer clear(io, l.target, !l.target_existed);
+    errdefer clear(io, l.target, !l.target_existed, null);
     try copyTree(arena, io, l.current, l.target);
     try progress(out, "verifying");
     const before = try measure(arena, io, l.current);
@@ -221,9 +261,7 @@ pub fn run(
     const io = connector.io;
     const cwd = Io.Dir.cwd();
 
-    // The move leaves `~/.fyke` as a link, and creating a link on Windows needs a
-    // privilege that most accounts do not hold.
-    if (comptime platform.is_windows) return error.Unsupported;
+    if (comptime platform.is_windows) return runWindows(connector, target_arg, out);
     if (connector.environ.get("FYKE_HOME") != null) return error.HomeIsOverridden;
     if (target_arg.len == 0 or target_arg[0] != '/') return error.NotAbsolute;
     const target = trimSlashes(target_arg);
@@ -254,7 +292,7 @@ pub fn run(
     const target_kind = if (to_anchor) Kind.missing else try kindOf(io, target, false);
     switch (target_kind) {
         .missing => {},
-        .folder => if (!try isEmptyFolder(io, target)) return error.TargetNotEmpty,
+        .folder => if (!try isEmptyFolder(io, target, null)) return error.TargetNotEmpty,
         else => return error.TargetNotFolder,
     }
 
@@ -284,6 +322,81 @@ pub fn run(
     } else {
         var started: client_module.Client = undefined;
         try connector.connect(&started, true);
+    }
+    try progress(out, "done");
+}
+
+/// The Windows move: copy, verify, then point `%LOCALAPPDATA%\Fyke\location` at the
+/// copy and remove the original. The pointer is written last, so that a failure at any
+/// earlier step leaves the data where clients already look.
+fn runWindows(connector: client_module.Connector, target_arg: []const u8, out: *Io.Writer) !void {
+    const arena = connector.arena;
+    const io = connector.io;
+    const cwd = Io.Dir.cwd();
+
+    if (connector.environ.get("FYKE_HOME") != null) return error.HomeIsOverridden;
+    if (!isAbsoluteWindows(target_arg)) return error.NotAbsolute;
+    const base = connector.environ.get("LOCALAPPDATA") orelse return error.NoHomeDirectory;
+    const anchor = try std.fmt.allocPrint(arena, "{s}\\Fyke", .{base});
+    const target = trimSlashes(target_arg);
+    const current = connector.home_path;
+
+    if (try kindOf(io, current, true) != .folder) return error.NoData;
+    if (samePath(target, current)) return error.SameFolder;
+    if (isInside(target, current)) return error.InsideCurrentFolder;
+    if (target.len + "\\fyked.sock".len > 107) return error.PathTooLong;
+    // Moving back puts the data in the default folder, which holds the pointer.
+    const to_anchor = samePath(target, anchor);
+    if (!to_anchor) {
+        const parent = std.fs.path.dirname(target) orelse return error.ParentMissing;
+        if (try kindOf(io, parent, true) != .folder) return error.ParentMissing;
+    }
+    const target_kind = try kindOf(io, target, false);
+    switch (target_kind) {
+        .missing => {},
+        .folder => if (!try isEmptyFolder(io, target, if (to_anchor) data_home.location_file else null)) return error.TargetNotEmpty,
+        else => return error.TargetNotFolder,
+    }
+
+    try progress(out, "stopping");
+    var client: client_module.Client = undefined;
+    if (connector.connect(&client, false)) {
+        _ = client.call(ops.DaemonStop, .{}) catch {};
+    } else |_| {}
+    const lock = try holdLock(io, current, arena);
+
+    try progress(out, "copying");
+    {
+        errdefer if (to_anchor) clear(io, target, false, data_home.location_file) else clear(io, target, target_kind == .missing, null);
+        try copyTree(arena, io, current, target);
+        try progress(out, "verifying");
+        const before = try measure(arena, io, current);
+        const after = try measure(arena, io, target);
+        if (before.files != after.files or before.bytes != after.bytes) return error.VerifyFailed;
+
+        try progress(out, "linking");
+        if (to_anchor) {
+            const pointer = try std.fmt.allocPrint(arena, "{s}\\{s}", .{ anchor, data_home.location_file });
+            try cwd.deleteFile(io, pointer);
+        } else {
+            try data_home.writeLocation(arena, io, anchor, target);
+        }
+    }
+    lock.unlock(io);
+    lock.close(io);
+
+    // The original can go now that nothing points to it. The default folder is the
+    // original on a first move, and must keep the pointer just written.
+    if (samePath(current, anchor)) clear(io, current, false, data_home.location_file) else cwd.deleteTree(io, current) catch {};
+
+    try progress(out, "starting");
+    var moved = connector;
+    moved.home_path = if (to_anchor) anchor else target;
+    if (autostart.isInstalled(moved, "") catch false) {
+        try autostart.install(moved, "");
+    } else {
+        var started: client_module.Client = undefined;
+        try moved.connect(&started, true);
     }
     try progress(out, "done");
 }

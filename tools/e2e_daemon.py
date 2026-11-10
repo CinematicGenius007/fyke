@@ -762,5 +762,39 @@ if os.name != "nt":
     subprocess.run([RSS, "daemon", "stop"], env=env_mv, capture_output=True, timeout=30)
     shutil.rmtree(mv_home, ignore_errors=True)
 
+if os.name == "nt":
+    # fyke data move: a pointer file in %LOCALAPPDATA%\\Fyke names the folder that holds the data.
+    wm = tempfile.mkdtemp(prefix="fyke-w-", dir=TMP)
+    anchor = wm + "\\Fyke"
+    env_w = dict(os.environ, LOCALAPPDATA=wm); env_w.pop("FYKE_HOME", None)
+    def wfyke(*args):
+        return subprocess.run([RSS, *args], env=env_w, capture_output=True, text=True, timeout=60)
+    def wstatus():
+        return json.loads(wfyke("status", "--json").stdout)
+    wfyke("add", f"http://127.0.0.1:{server.server_address[1]}/feed.xml", "--allow-private")
+    check("the default folder holds the data", os.path.exists(anchor + "\\fyke.db"), os.listdir(wm))
+    feeds = wstatus()["entries"]
+    check("a feed was added", feeds > 0, feeds)
+    check("the move refuses a relative folder", wfyke("data", "move", "elsewhere").returncode != 0)
+    check("nor the folder it is in", wfyke("data", "move", anchor).returncode != 0)
+    target = wm + "\\moved"
+    p = wfyke("data", "move", target)
+    check("data move succeeds", p.returncode == 0 and "done" in p.stdout, p.stdout + p.stderr)
+    check("the data is in the new folder", os.path.exists(target + "\\fyke.db"))
+    check("the default folder keeps only the pointer", os.listdir(anchor) == ["location"], os.listdir(anchor))
+    check("the pointer names the folder", open(anchor + "\\location").read().strip().lower() == target.lower())
+    check("clients find the data there", wstatus()["entries"] == feeds, wstatus())
+    check("and the daemon runs from there", os.path.exists(target + "\\fyked.sock"))
+    blocked = wm + "\\blocked"; os.makedirs(blocked); open(blocked + "\\x", "w").write("x")
+    check("a folder with files in it is refused", wfyke("data", "move", blocked).returncode != 0)
+    check("and nothing changed", wstatus()["entries"] == feeds)
+    p = wfyke("data", "move", anchor)
+    check("moving back succeeds", p.returncode == 0 and "done" in p.stdout, p.stdout + p.stderr)
+    check("the data is in the default folder again", os.path.exists(anchor + "\\fyke.db") and not os.path.exists(anchor + "\\location"), os.listdir(anchor))
+    check("the other folder is gone", not os.path.exists(target))
+    check("and the data is intact", wstatus()["entries"] == feeds)
+    wfyke("daemon", "stop")
+    shutil.rmtree(wm, ignore_errors=True)
+
 server.shutdown(); shutil.rmtree(home, ignore_errors=True)
 print(f"\n{passed} checks passed")
