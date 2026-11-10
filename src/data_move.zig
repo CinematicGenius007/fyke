@@ -32,6 +32,8 @@ pub const Error = error{
     TargetNotEmpty,
     TargetNotFolder,
     VerifyFailed,
+    /// The daemon's socket lives in the folder, and a Unix socket address holds 107 bytes.
+    PathTooLong,
     DaemonStillRunning,
 };
 
@@ -340,6 +342,7 @@ fn runWindows(connector: client_module.Connector, target_arg: []const u8, out: *
     if (try kindOf(io, current, true) != .folder) return error.NoData;
     if (samePath(target, current)) return error.SameFolder;
     if (isInside(target, current)) return error.InsideCurrentFolder;
+    if (target.len + "\\fyked.sock".len > 107) return error.PathTooLong;
     // Moving back puts the data in the default folder, which holds the pointer.
     const to_anchor = samePath(target, anchor);
     if (!to_anchor) {
