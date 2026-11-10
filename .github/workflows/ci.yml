@@ -45,8 +45,13 @@ jobs:
       - name: e2e_mcp
         if: ${{ !cancelled() }}
         run: python tools/e2e_mcp.py zig-out/bin/fyke.exe
-      # tools/e2e_tui.py drives a pseudo-terminal with pty and fcntl. It has no Windows
-      # version yet, so the terminal reader is not tested on this runner.
+      # The terminal reader runs in a Windows pseudo-console (ConPTY), through pywinpty.
+      - name: Install terminal test dependencies
+        if: ${{ !cancelled() }}
+        run: python -m pip install pyte pywinpty
+      - name: e2e_tui
+        if: ${{ !cancelled() }}
+        run: python tools/e2e_tui.py zig-out/bin/fyke.exe
 
   linux:
     timeout-minutes: 20
