@@ -255,7 +255,7 @@ Measured 2026-11-09 with `tools/e2e_container.py`: a static `aarch64-linux-musl`
 
 ### Windows
 
-`fyke.exe` builds for `x86_64-windows-gnu`, and a Windows runner in continuous integration (2026-11-10) runs the unit tests and `e2e.py`, `e2e_daemon.py` and `e2e_mcp.py` against it. Windows 10 1803 or later is needed, since the standard library's Unix sockets and file locks start there. No named pipe is used: the daemon keeps its Unix socket `fyked.sock` and its lock file.
+`fyke.exe` builds for `x86_64-windows-gnu`, and a Windows runner in continuous integration (2026-11-10) runs the unit tests and `e2e.py`, `e2e_daemon.py`, `e2e_mcp.py`, `e2e_service_windows.py` and `e2e_tui.py` against it. Windows 10 1803 or later is needed, since the standard library's Unix sockets and file locks start there. No named pipe is used: the daemon keeps its Unix socket `fyked.sock` and its lock file.
 
 How each POSIX-only piece is done:
 
@@ -268,6 +268,8 @@ How each POSIX-only piece is done:
 | Detached daemon | Started without a process group. The client first marks its standard handles non-inheritable, so that a daemon started by a client whose output is captured does not hold the capturing pipe open |
 | Terminal reader | `src/console_windows.zig`: virtual-terminal input and output modes, so keys and mouse reports arrive as the escape sequences `terminal.zig` parses. A thread reads standard input, another checks the window size every 250 ms, and a control handler restores the console |
 | Data folder | `%LOCALAPPDATA%\Fyke` |
+| Background service | `fyke service` adds a value named Fyke to the user's `Run` key (`src/windows_startup.zig`), with the data folder passed as `daemon --home`. Nothing restarts the daemon after a crash: the next client starts it. `tools/e2e_service_windows.py` checks it against the real key |
+| Terminal reader test | `tools/e2e_tui.py` runs in a ConPTY through `pywinpty`. It skips what depends on POSIX terminal settings, `SIGTERM`, the browser stand-in (Windows opens links through `rundll32`) and the raw bytes at exit, since ConPTY redraws the screen itself |
 | Tests | Python has no `AF_UNIX` on Windows, so `e2e_daemon.py` calls Winsock through `ctypes`, and kills the daemon with `taskkill` |
 
 Not done yet:
@@ -275,8 +277,6 @@ Not done yet:
 | Piece | Plan |
 |---|---|
 | `fyke data move` | Returns `Unsupported`: it relies on symlinks. The legacy-folder moves in `e2e_daemon.py` are skipped for the same reason |
-| Terminal reader test | `e2e_tui.py` needs a Windows pseudo-console (ConPTY) in place of `pty`. Until then the Windows terminal reader is untested |
-| Background service | Task Scheduler or a Startup entry, behind the same interface as `launchd` and `systemd` |
 | Signing | An unsigned program triggers SmartScreen. Free signing for open-source projects is to be checked |
 
 ### Native GUIs
@@ -288,7 +288,7 @@ Each platform gets its own toolkit, written against the socket API, because lear
 | Gap | Where |
 |---|---|
 | The cross-volume `data move` block only runs on macOS | Add a Linux version using a second mount, or a loop device in a container |
-| `e2e_tui.py` runs on macOS and Linux | Run it in continuous integration, then add Windows |
+| `e2e_tui.py` skips the browser opener checks on Windows | Let the opener be set by an environment variable, so a stand-in can record it on every system |
 | Real HTTPS feed | A check against a local TLS server with a private certificate authority, so no internet is needed |
 | `fyke service` on a real manager | A container running systemd as PID 1, so that `enable` and `restart` really run. The stand-in covers what is written and which commands run |
 | A fresh install | Download, unpack, run `service install`, add a feed, reboot the service |
