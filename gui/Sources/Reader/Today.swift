@@ -13,7 +13,7 @@ struct BriefList: View {
             ListHeader(title: "Today", trailing: Date.now.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)))
             Rule()
             ScrollView {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     SectionLabel(text: "Briefs").padding(.horizontal, 12).padding(.top, 20).padding(.bottom, 8)
                     if let job = model.briefJob {
                         WritingRow(job: job)
@@ -56,9 +56,9 @@ private struct WritingRow: View {
     @Environment(\.palette) private var p
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Spinner(size: 12)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("Writing a brief…").font(.ui(14, .medium))
                 Text(job.writer.map { "\($0.capitalized) · started \(job.createdAt.map { Dates.relative($0) } ?? "now")" } ?? "Started just now")
                     .font(.ui(12)).foregroundStyle(p.muted)
@@ -96,7 +96,7 @@ private struct BriefRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
-            .background(selected ? p.selected : hovering ? p.selected.opacity(0.5) : .clear, in: RoundedRectangle(cornerRadius: 8))
+            .background(selected ? p.selected : hovering ? p.selected.opacity(0.5) : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -120,6 +120,7 @@ struct TodayReader: View {
             if model.article != nil || model.web != nil {
                 ReaderPane().overlay(alignment: .topLeading) {
                     BackBar(title: "Brief") { model.back() }
+                        .padding(.top, Metrics.barControlTop).padding(.leading, Metrics.barEdge)
                 }
             } else {
                 content
@@ -141,7 +142,7 @@ struct TodayReader: View {
         let state = stateView
         if let state {
             ScrollView {
-                state.padding(.horizontal, 48).padding(.top, 96).frame(maxWidth: 736, alignment: .leading).frame(maxWidth: .infinity)
+                state.padding(.horizontal, Metrics.pageGutter).padding(.top, 96).frame(maxWidth: Metrics.readingColumn + 2 * Metrics.pageGutter, alignment: .leading).frame(maxWidth: .infinity)
             }
             .overlay(alignment: .topTrailing) { toolbar }
         } else if let brief {
@@ -208,12 +209,12 @@ struct TodayReader: View {
             SymbolButton(symbol: "arrow.clockwise", label: "Write a new brief (⌘R)") { model.runBrief() }
                 .disabled(model.briefJob != nil || !model.library.available)
             Button { model.openRecipe(selected?.recipeId, from: selected?.id) } label: {
-                HStack(spacing: 6) { Image(systemName: "doc.text").font(.system(size: 12)); Text("Recipe") }
+                HStack(spacing: 4) { Image(systemName: "doc.text").font(.system(size: 12)); Text("Recipe") }
             }
-            .buttonStyle(ActionStyle(kind: .secondary, height: 28))
+            .buttonStyle(ActionStyle(kind: .secondary, height: Metrics.compactControl))
             .disabled(model.library.recipes.isEmpty)
         }
-        .padding(.top, 11).padding(.trailing, 16)
+        .padding(.top, Metrics.barControlTop).padding(.trailing, Metrics.barEdge)
     }
 }
 
@@ -225,12 +226,12 @@ struct BackBar: View {
     @Environment(\.palette) private var p
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             Button(action: run) {
                 HStack(spacing: 4) { Image(systemName: "chevron.left").font(.system(size: 11, weight: .semibold)); Text(title) }
                     .foregroundStyle(p.unread)
             }
-            .buttonStyle(ActionStyle(kind: .quiet, height: 28))
+            .buttonStyle(ActionStyle(kind: .quiet, height: Metrics.compactControl))
             .accessibilityLabel("Back to \(title)")
             if let trailing {
                 Text("/").foregroundStyle(p.control)
@@ -238,6 +239,5 @@ struct BackBar: View {
             }
         }
         .font(.ui(13))
-        .padding(.top, 11).padding(.leading, 14)
     }
 }

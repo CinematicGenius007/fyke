@@ -168,9 +168,11 @@ public enum SentencePart: Equatable, Sendable {
 }
 
 public enum RuleSentence {
+    /// The sentence's first word. With no state the subject is the plain noun, so the
+    /// sentence still reads as one: "Articles from all feeds about needle".
     public static func stateWord(_ state: Rule.State?) -> String {
         switch state ?? .any {
-        case .any: "All"
+        case .any: "Articles"
         case .unread: "Unread"
         case .starred: "Starred"
         case .later: "Later"
@@ -236,7 +238,7 @@ public enum RuleSentence {
 public enum ViewName {
     public static func suggest(for rule: Rule) -> String {
         let rule = rule.normalized
-        guard let words = rule.words else { return RuleSentence.stateWord(rule.state) == "All" ? "New view" : RuleSentence.stateWord(rule.state) }
+        guard let words = rule.words else { return rule.state == nil ? "New view" : RuleSentence.stateWord(rule.state) }
         let joined = words.split(separator: " ").joined(separator: rule.anyWords == true ? " or " : " ")
         return joined.prefix(1).uppercased() + joined.dropFirst()
     }

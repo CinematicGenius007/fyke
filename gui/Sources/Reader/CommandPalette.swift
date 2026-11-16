@@ -185,7 +185,7 @@ struct CommandPalette: View {
                             ForEach(sections, id: \.title) { section in
                                 if !section.title.isEmpty {
                                     SectionLabel(text: section.title + (section.title == "Articles" ? " · \(commands.articles.count)" : ""))
-                                        .padding(.horizontal, 20).padding(.top, 14).padding(.bottom, 6)
+                                        .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 4)
                                 } else {
                                     Rule().padding(.top, 8)
                                 }
@@ -256,15 +256,15 @@ struct CommandPalette: View {
                     .frame(height: 36)
                 case .article(let entry):
                     HStack(alignment: .top, spacing: 12) {
-                        Circle().fill(entry.read ? .clear : p.unread).frame(width: 6, height: 6).frame(width: 16).padding(.top, 8)
-                        VStack(alignment: .leading, spacing: 2) {
+                        Circle().fill(entry.read ? .clear : p.unread).frame(width: Metrics.dot, height: Metrics.dot).frame(width: 16).padding(.top, 8)
+                        VStack(alignment: .leading, spacing: 4) {
                             Text(entry.title ?? "Untitled").font(.custom(titleFamily, fixedSize: 16).weight(.medium))
                                 .foregroundStyle(entry.read ? p.read : p.unread).lineLimit(1)
                             Text([entry.feedTitle, Dates.relative(entry.date)].compactMap { $0 }.joined(separator: " · ")).font(.ui(12)).foregroundStyle(p.muted)
                         }
                         Spacer()
                     }
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 8)
                 case .ask(let query):
                     HStack(spacing: 12) {
                         Image(systemName: "sparkle").font(.system(size: 13)).foregroundStyle(p.unread).frame(width: 16)

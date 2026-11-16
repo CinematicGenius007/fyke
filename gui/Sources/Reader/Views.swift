@@ -16,7 +16,7 @@ struct ViewSentence: View {
     }
 
     var body: some View {
-        Flow(spacing: 5, lineHeight: 28) {
+        Flow(spacing: 4, lineHeight: Metrics.compactControl) {
             ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
                 switch part {
                 case .joiner(let text):
@@ -158,7 +158,7 @@ private struct ScopeEditor: View {
             HStack {
                 Spacer()
                 Button("Apply") { done(Array(feeds).sorted(), Array(folders).sorted()) }
-                    .buttonStyle(ActionStyle(kind: .primary, height: 28))
+                    .buttonStyle(ActionStyle(kind: .primary, height: Metrics.compactControl))
                     .keyboardShortcut(.defaultAction)
             }
             .padding(4)
@@ -197,7 +197,7 @@ private struct TextClauseEditor: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             Text(title).font(.ui(12, .medium)).foregroundStyle(p.muted)
             Field(placeholder: placeholder, text: $text, submit: { done(text, on) }, autofocus: true)
             if let toggle {
@@ -207,9 +207,9 @@ private struct TextClauseEditor: View {
                 }
             }
             HStack {
-                Button("Remove", action: remove).buttonStyle(ActionStyle(kind: .quiet, height: 28)).padding(.leading, -10)
+                Button("Remove", action: remove).buttonStyle(ActionStyle(kind: .quiet, height: Metrics.compactControl)).padding(.leading, -10)
                 Spacer()
-                Button("Apply") { done(text, on) }.buttonStyle(ActionStyle(kind: .primary, height: 28))
+                Button("Apply") { done(text, on) }.buttonStyle(ActionStyle(kind: .primary, height: Metrics.compactControl))
             }
         }
         .padding(8)
@@ -233,10 +233,10 @@ struct ViewMenu: View {
             } }
             MenuRow(title: "Make a routine…") { act { model.newRoutine(view: view.id) } }
             MenuRow(title: "Mark all read") { act { model.markAllRead(view: view.id) } }
-            Rule().padding(.vertical, 3)
+            Rule().padding(.vertical, 4)
             MenuRow(title: "Move up") { act { model.moveView(view.id, by: -1) } }
             MenuRow(title: "Move down") { act { model.moveView(view.id, by: 1) } }
-            Rule().padding(.vertical, 3)
+            Rule().padding(.vertical, 4)
             MenuRow(title: "Remove view") { act { model.removeView(view.id) } }
         }
         .frame(width: 220, alignment: .leading)

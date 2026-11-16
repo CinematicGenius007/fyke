@@ -206,6 +206,7 @@ extension AppModel {
         case "palette":
             commands.show()
             commands.query = environment["FYKE_QUERY"] ?? ""
+            commands.searchArticles()
         case "recipe":
             go(to: .today)
             openRecipe(library.briefs.first?.recipeId, from: library.briefs.first?.id)

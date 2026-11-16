@@ -35,9 +35,9 @@ struct ActivityPanel: View {
             HStack {
                 Text("Activity").font(.ui(14, .semibold))
                 Spacer()
-                Button("Refresh feeds") { model.refresh() }.buttonStyle(ActionStyle(kind: .quiet, height: 26))
+                Button("Refresh feeds") { model.refresh() }.buttonStyle(ActionStyle(kind: .quiet, height: Metrics.compactControl))
             }
-            .padding(.leading, 16).padding(.trailing, 8).frame(height: 44)
+            .padding(.leading, Metrics.panelEdge).padding(.trailing, 8).frame(height: Metrics.panelHeader)
             Rule()
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -69,13 +69,13 @@ struct ActivityPanel: View {
                     layer.close()
                     model.go(to: .routines)
                 }
-                .buttonStyle(ActionStyle(kind: .link, height: 26))
+                .buttonStyle(ActionStyle(kind: .link, height: Metrics.compactControl))
                 Spacer()
                 if let next = model.library.nextRoutine, let at = next.nextRunAt {
                     Text("Next: \(next.name), \(at.formatted(.dateTime.hour().minute()))").font(.ui(12)).foregroundStyle(p.muted).lineLimit(1)
                 }
             }
-            .padding(.leading, 6).padding(.trailing, 16).frame(height: 40)
+            .padding(.leading, 8).padding(.trailing, Metrics.panelEdge).frame(height: Metrics.panelHeader)
         }
         .frame(width: 360)
         .popoverPanel()
@@ -84,39 +84,39 @@ struct ActivityPanel: View {
     }
 
     private func group<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            SectionLabel(text: title).padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 6)
+        VStack(alignment: .leading, spacing: 4) {
+            SectionLabel(text: title).padding(.horizontal, Metrics.panelEdge).padding(.top, 12).padding(.bottom, 4)
             content()
         }
     }
 
     private func line(_ text: String) -> some View {
-        Text(text).font(.ui(13)).foregroundStyle(p.muted).padding(.horizontal, 16).padding(.vertical, 4)
+        Text(text).font(.ui(13)).foregroundStyle(p.muted).padding(.horizontal, Metrics.panelEdge).padding(.vertical, 4)
     }
 
     private func running(_ job: Job) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
                 Spinner(size: 12)
                 Text(model.library.describe(job)).font(.ui(13)).lineLimit(1)
                 Spacer()
                 Text([job.writer?.capitalized, job.createdAt.map { "\(Int(Date.now.timeIntervalSince($0))) s" }].compactMap { $0 }.joined(separator: " · "))
                     .font(.ui(12)).foregroundStyle(p.muted)
-                SymbolButton(symbol: "xmark", label: "Cancel \(job.title.lowercased())", size: 22) { Task { await model.library.cancel(job.id) } }
+                SymbolButton(symbol: "xmark", label: "Cancel \(job.title.lowercased())", size: 24) { Task { await model.library.cancel(job.id) } }
             }
             if let total = job.total, total > 0 {
-                ProgressLine(fraction: Double(job.progress ?? 0) / Double(total)).padding(.leading, 22)
+                ProgressLine(fraction: Double(job.progress ?? 0) / Double(total)).padding(.leading, 20)
             }
         }
-        .padding(.leading, 16).padding(.trailing, 10).padding(.vertical, 6)
+        .padding(.leading, Metrics.panelEdge).padding(.trailing, 12).padding(.vertical, 4)
     }
 
     /// What failed, what is safe, and the one thing to do.
     private func failed(_ job: Job) -> some View {
         let writerProblem = job.isWriting && (job.error ?? "").localizedCaseInsensitiveContains("sign")
-        return HStack(alignment: .top, spacing: 10) {
-            Circle().fill(p.unread).frame(width: 6, height: 6).padding(.top, 6)
-            VStack(alignment: .leading, spacing: 3) {
+        return HStack(alignment: .top, spacing: 8) {
+            Circle().fill(p.unread).frame(width: Metrics.dot, height: Metrics.dot).padding(.top, 4)
+            VStack(alignment: .leading, spacing: 4) {
                 Text("\(model.library.describe(job)) did not finish").font(.ui(13, .medium))
                 Text("\(job.error ?? "It stopped.") Your articles are untouched.").font(.ui(12)).foregroundStyle(p.inkSoft)
                     .fixedSize(horizontal: false, vertical: true)
@@ -126,7 +126,7 @@ struct ActivityPanel: View {
                 layer.close()
                 if writerProblem { SettingsOpener.open(tab: .Agents, model: model) } else if job.isWriting { model.runBrief() } else { model.refresh() }
             }
-            .buttonStyle(ActionStyle(kind: .inverse, height: 26))
+            .buttonStyle(ActionStyle(kind: .inverse, height: Metrics.compactControl))
         }
         .padding(12)
         .background(p.selected, in: RoundedRectangle(cornerRadius: Radii.control))
@@ -135,9 +135,9 @@ struct ActivityPanel: View {
 
     private var feeds: some View {
         let failing = model.failingFeeds
-        return HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "exclamationmark.triangle").font(.system(size: 11)).foregroundStyle(p.ink).padding(.top, 2)
-            VStack(alignment: .leading, spacing: 3) {
+        return HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle").font(.system(size: 11)).foregroundStyle(p.ink)
+            VStack(alignment: .leading, spacing: 4) {
                 Text(failing.count == 1 ? "\(failing[0].name) is not loading" : "\(failing.count) feeds are not loading").font(.ui(13, .medium))
                 Text("Their articles so far are kept. Fyke keeps trying on its own.").font(.ui(12)).foregroundStyle(p.inkSoft)
             }
@@ -146,21 +146,21 @@ struct ActivityPanel: View {
                 layer.close()
                 model.healthFeed = failing[0].id
             }
-            .buttonStyle(ActionStyle(kind: .secondary, height: 26))
+            .buttonStyle(ActionStyle(kind: .secondary, height: Metrics.compactControl))
         }
         .padding(12)
         .padding(.horizontal, 8)
     }
 
     private func done(_ job: Job) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Image(systemName: job.state == .done ? "checkmark" : job.state == .cancelled ? "minus" : "exclamationmark")
                 .font(.system(size: 11, weight: .semibold)).foregroundStyle(job.state == .done ? p.inkSoft : p.muted).frame(width: 12)
             Text(model.library.describe(job) + (job.state == .cancelled ? " · cancelled" : "")).font(.ui(13)).lineLimit(1)
             Spacer()
             Text((job.finishedAt ?? job.createdAt).map { $0.formatted(.dateTime.hour().minute()) } ?? "").font(.ui(12)).foregroundStyle(p.muted)
         }
-        .padding(.horizontal, 16).frame(height: 30)
+        .padding(.horizontal, Metrics.panelEdge).frame(height: Metrics.panelRow)
     }
 }
 
@@ -173,18 +173,18 @@ struct FeedHealthPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text(feed.isFailing ? "\(feed.name) is not loading" : feed.name).font(.ui(14, .semibold))
                 Text(feed.errorCount == 0 ? "Its last fetch worked. Its \(Plural.count(Int(feed.entries), "article")) are here." : "It failed \(Plural.count(Int(feed.errorCount), "time")) in a row. Its \(Plural.count(Int(feed.entries), "article")) are kept, and Fyke keeps trying on its own.")
                     .font(.ui(13)).foregroundStyle(p.inkSoft).fixedSize(horizontal: false, vertical: true)
             }
-            .padding(16)
+            .padding(Metrics.panelEdge)
             if let error = feed.lastError {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
                     Text("Error").font(.ui(12)).foregroundStyle(p.muted)
                     Text(error).font(.code(12)).foregroundStyle(p.ink).lineLimit(3).textSelection(.enabled)
                 }
-                .padding(.horizontal, 16).padding(.vertical, 10)
+                .padding(.horizontal, Metrics.panelEdge).padding(.vertical, 12)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(p.surface)
             }
@@ -194,14 +194,14 @@ struct FeedHealthPanel: View {
                         layer.close()
                         model.openLink(url)
                     }
-                    .buttonStyle(ActionStyle(kind: .quiet, height: 28))
+                    .buttonStyle(ActionStyle(kind: .quiet, height: Metrics.compactControl))
                 }
                 Spacer()
-                Button("Try again now") {
+                Button(feed.isFailing ? "Try again now" : "Refresh now") {
                     layer.close()
                     model.refreshFeed(feed.id)
                 }
-                .buttonStyle(ActionStyle(kind: .primary, height: 28))
+                .buttonStyle(ActionStyle(kind: .primary, height: Metrics.compactControl))
                 .keyboardShortcut(.defaultAction)
             }
             .padding(12)

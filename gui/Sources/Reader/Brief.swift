@@ -9,7 +9,7 @@ struct Flow: Layout {
     var lineHeight: CGFloat
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? 640
+        let width = proposal.width ?? Metrics.readingColumn
         var x: CGFloat = 0
         var lines: CGFloat = 1
         for view in subviews {
@@ -64,10 +64,10 @@ struct BriefBody: View {
             ForEach(Array(artifact.sections.enumerated()), id: \.offset) { _, section in
                 if let heading = section.heading, !heading.isEmpty {
                     Text(heading).font(.custom(titleFamily, fixedSize: 22).weight(.semibold))
-                        .padding(.top, 12).padding(.bottom, 10)
+                        .padding(.top, 12).padding(.bottom, 8)
                         .accessibilityAddTraits(.isHeader)
                 }
-                paragraph(section.claims).padding(.bottom, 22)
+                paragraph(section.claims).padding(.bottom, 24)
             }
         }
     }
@@ -111,8 +111,8 @@ private struct CitationMark: View {
             Text(last ? "\(number)" : "\(number),").font(.ui(12, .semibold))
                 .foregroundStyle(p.unread)
                 .baselineOffset(5)
-                .padding(.leading, 2).padding(.trailing, 1)
-                .background(hovering || active ? p.selected : .clear, in: RoundedRectangle(cornerRadius: 3))
+                .padding(.horizontal, 2)
+                .background(hovering || active ? p.selected : .clear, in: RoundedRectangle(cornerRadius: Radii.mark))
         }
         .buttonStyle(.plain)
         .frameIn("brief") { frame = $0 }
@@ -120,13 +120,29 @@ private struct CitationMark: View {
             hovering = inside
             hover(inside, frame)
         }
+        .task { await PinForCheck.offer(number) { pin(frame) } }
         .accessibilityLabel("Source \(number)")
         .accessibilityHint("Shows the cited article")
     }
 }
 
+/// `FYKE_PIN_CITATION=N` pins the popover of source N once, as a click on its number
+/// would, so that tools/e2e_gui.py can take a picture of it without a pointer.
+@MainActor private enum PinForCheck {
+    private static var done = false
+
+    static func offer(_ number: Int, pin: () -> Void) async {
+        guard !done, ProcessInfo.processInfo.environment["FYKE_PIN_CITATION"] == String(number) else { return }
+        done = true
+        // The number moves while the column's fonts and width settle.
+        try? await Task.sleep(for: .seconds(1))
+        pin()
+    }
+}
+
 /// The source behind a number: where it is from, its title and its words.
 struct CitationPopover: View {
+    static let width: CGFloat = 340
     let citation: Citation
     let open: () -> Void
     let close: () -> Void
@@ -137,9 +153,9 @@ struct CitationPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(["\(citation.number)", citation.feedTitle, citation.date.map { Dates.relative($0) }].compactMap { $0 }.joined(separator: " · "))
-                .font(.ui(12)).foregroundStyle(p.muted).padding(.bottom, 6)
+                .font(.ui(12)).foregroundStyle(p.muted).padding(.bottom, 4)
             Text(citation.title).font(.custom(titleFamily, fixedSize: 17).weight(.semibold))
-                .fixedSize(horizontal: false, vertical: true).padding(.bottom, 10)
+                .fixedSize(horizontal: false, vertical: true).padding(.bottom, 8)
             if let snippet = citation.snippet, !snippet.isEmpty {
                 Text("“\(snippet.trimmingCharacters(in: .whitespacesAndNewlines))”")
                     .font(.custom(family, fixedSize: 14)).foregroundStyle(p.inkSoft).line(21, size: 14).lineLimit(4)
@@ -148,18 +164,18 @@ struct CitationPopover: View {
                     .overlay(alignment: .leading) { Rectangle().fill(p.unread).frame(width: 2) }
                     .padding(.bottom, 12)
             }
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 Button(action: open) {
                     HStack(spacing: 4) { Text("Open article"); Image(systemName: "return").font(.system(size: 10)) }
                 }
-                .buttonStyle(ActionStyle(kind: .quiet, height: 26))
+                .buttonStyle(ActionStyle(kind: .quiet, height: Metrics.compactControl))
                 .keyboardShortcut(.defaultAction)
                 Text("Opens here, in the reader").font(.ui(12)).foregroundStyle(p.muted)
             }
             .padding(.leading, -10)
         }
-        .padding(16)
-        .frame(width: 340, alignment: .leading)
+        .padding(Metrics.panelEdge)
+        .frame(width: CitationPopover.width, alignment: .leading)
         .popoverPanel()
         .onExitCommand(perform: close)
         .accessibilityElement(children: .contain)
@@ -177,16 +193,16 @@ struct SourceList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Rule().padding(.bottom, 20)
-            SectionLabel(text: "Sources").padding(.bottom, 10)
+            SectionLabel(text: "Sources").padding(.bottom, 8)
             ForEach(artifact.citations) { citation in
                 SourceRow(citation: citation) { open(citation.entryId) }
             }
             if artifact.omittedCount > 0 {
                 Text("\(Plural.count(Int(artifact.omittedCount), "more article")) matched but did not fit, so the writer did not read them.")
-                    .font(.ui(13)).foregroundStyle(p.muted).padding(.top, 10).padding(.leading, 28)
+                    .font(.ui(13)).foregroundStyle(p.muted).padding(.top, 8).padding(.leading, 28)
             } else if artifact.inputCount > Int64(artifact.citations.count) {
                 Text("\(Plural.count(Int(artifact.inputCount) - artifact.citations.count, "more")) read but not cited")
-                    .font(.ui(13)).foregroundStyle(p.muted).padding(.top, 10).padding(.leading, 28)
+                    .font(.ui(13)).foregroundStyle(p.muted).padding(.top, 8).padding(.leading, 28)
             }
         }
     }
@@ -235,16 +251,16 @@ struct MadeWith: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Image(systemName: "doc.text").font(.system(size: 13)).foregroundStyle(p.inkSoft)
             (Text("Written by \(writer) with your ") + Text("\(recipeName ?? artifact.recipeName ?? "recipe")").fontWeight(.semibold)
                 + Text(artifact.recipeRevision.map { " · rev \($0)" } ?? "") + Text(artifact.durationSeconds.map { " · \($0) s" } ?? ""))
                 .font(.ui(13)).foregroundStyle(p.inkSoft).lineLimit(1)
             Spacer(minLength: 12)
-            Button("Edit recipe", action: openRecipe).buttonStyle(ActionStyle(kind: .link, height: 28))
+            Button("Edit recipe", action: openRecipe).buttonStyle(ActionStyle(kind: .link, height: Metrics.compactControl))
         }
-        .padding(.leading, 16).padding(.trailing, 8)
-        .frame(height: 44)
+        .padding(.leading, Metrics.panelEdge).padding(.trailing, 8)
+        .frame(height: Metrics.panelHeader)
         .background(p.surface, in: RoundedRectangle(cornerRadius: Radii.panel))
         .accessibilityElement(children: .contain)
     }
@@ -274,11 +290,11 @@ struct ArtifactColumn<Header: View, Footer: View>: View {
                 }, pin: { number, frame in
                     focus = focus?.number == number && focus?.pinned == true ? nil : CitationFocus(number: number, anchor: frame, pinned: true)
                 })
-                SourceList(artifact: artifact, open: open).padding(.top, 8).padding(.bottom, 28)
+                SourceList(artifact: artifact, open: open).padding(.top, 8).padding(.bottom, 32)
                 footer
             }
-            .frame(maxWidth: 640, alignment: .leading)
-            .padding(.horizontal, 48).padding(.top, 72).padding(.bottom, 96)
+            .frame(maxWidth: Metrics.readingColumn, alignment: .leading)
+            .padding(.horizontal, Metrics.pageGutter).padding(.top, 72).padding(.bottom, 96)
             .frame(maxWidth: .infinity)
             .coordinateSpace(.named("brief"))
             .overlay(alignment: .topLeading) { popover }
@@ -293,7 +309,7 @@ struct ArtifactColumn<Header: View, Footer: View>: View {
                 self.focus = nil
                 open(citation.entryId)
             }, close: { self.focus = nil })
-            .offset(x: min(focus.anchor.minX - 16, 640 - 340 + 48), y: focus.anchor.maxY + 6)
+            .offset(x: min(focus.anchor.minX - Metrics.panelEdge, Metrics.readingColumn + Metrics.pageGutter - CitationPopover.width), y: focus.anchor.maxY + 4)
             .onHover { inside in
                 overPopover = inside
                 if !inside { closeSoon() }

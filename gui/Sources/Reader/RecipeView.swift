@@ -49,8 +49,8 @@ struct RecipeView: View {
                         Spinner(size: 16)
                     }
                 }
-                .frame(maxWidth: 640, alignment: .leading)
-                .padding(.horizontal, 48).padding(.top, 40).padding(.bottom, 96)
+                .frame(maxWidth: Metrics.readingColumn, alignment: .leading)
+                .padding(.horizontal, Metrics.pageGutter).padding(.top, 40).padding(.bottom, 96)
                 .frame(maxWidth: .infinity)
             }
             .themedScrollbar()
@@ -91,12 +91,11 @@ struct RecipeView: View {
     private var bar: some View {
         HStack {
             BackBar(title: briefId == nil ? "Back" : "Brief", trailing: recipe.map { "\($0.name) recipe" }) { model.detail = nil }
-                .padding(.top, -11).padding(.leading, -14)
             Spacer()
             Tabs(selection: $tab, items: [(.edit, "Edit"), (.tryIt, "Try it"), (.history, "History")])
         }
-        .padding(.horizontal, 16)
-        .frame(height: 48)
+        .padding(.horizontal, Metrics.barEdge)
+        .frame(height: Metrics.barHeight)
     }
 
     @ViewBuilder private func editor(_ recipe: Recipe) -> some View {
@@ -111,15 +110,15 @@ struct RecipeView: View {
             .padding(.bottom, 16)
         }
         RecipeEditor(text: $draft)
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: "info.circle").font(.system(size: 12)).foregroundStyle(p.muted)
             Text("Fyke adds the selected articles and its citation rules after your text. They are fixed, so a recipe cannot turn citations off.")
                 .font(.ui(13)).foregroundStyle(p.inkSoft).fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.top, 14)
+        .padding(.top, 12)
         HStack(spacing: 8) {
             if dirty {
-                Circle().fill(p.unread).frame(width: 6, height: 6)
+                Circle().fill(p.unread).frame(width: Metrics.dot, height: Metrics.dot)
                 Text("Unsaved changes").font(.ui(13)).foregroundStyle(p.muted)
             } else if let problem {
                 Text(problem).font(.ui(13)).foregroundStyle(p.muted)
@@ -207,17 +206,17 @@ private struct ConflictNote: View {
     @Environment(\.palette) private var p
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("This recipe changed elsewhere (revision \(theirs.revision)).").font(.ui(14, .medium))
             Text("Your edits are still here and nothing is saved yet. Keeping yours makes it the newest revision; the other stays in History.")
                 .font(.ui(13)).foregroundStyle(p.inkSoft).fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 8) {
-                Button("Keep mine", action: keepMine).buttonStyle(ActionStyle(kind: .primary, height: 28))
-                Button("Use the newer one", action: takeTheirs).buttonStyle(ActionStyle(kind: .quiet, height: 28))
+                Button("Keep mine", action: keepMine).buttonStyle(ActionStyle(kind: .primary, height: Metrics.compactControl))
+                Button("Use the newer one", action: takeTheirs).buttonStyle(ActionStyle(kind: .quiet, height: Metrics.compactControl))
             }
-            .padding(.top, 6)
+            .padding(.top, 4)
         }
-        .padding(14)
+        .padding(Metrics.panelEdge)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(p.selected, in: RoundedRectangle(cornerRadius: Radii.panel))
     }
@@ -256,7 +255,7 @@ private struct RecipeTrial: View {
                 InlineState(tone: .failed, label: "Trial failed", title: "The trial did not finish", detail: "\(problem) The recipe and your briefs are unchanged.",
                             primary: ("Try again", start))
             } else if let result {
-                GeneratedTag(text: "Trial · not saved").padding(.bottom, 14)
+                GeneratedTag(text: "Trial · not saved").padding(.bottom, 12)
                 Text(result.title).font(.custom(Fonts.resolve(Prefs.shared.currentFonts.title ?? Tokens.fontReading), fixedSize: 28).weight(.semibold)).padding(.bottom, 16)
                 BriefBody(artifact: result, focus: nil)
             }
@@ -328,9 +327,9 @@ private struct RecipeHistory: View {
                         Text(texts[revision.revision] ?? "…").font(.code(12)).foregroundStyle(p.inkSoft).lineSpacing(4)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(14).background(p.surface, in: RoundedRectangle(cornerRadius: Radii.control))
+                            .padding(Metrics.panelEdge).background(p.surface, in: RoundedRectangle(cornerRadius: Radii.control))
                         if revision.revision != recipe.revision, let text = texts[revision.revision] {
-                            Button("Put this text in Edit") { restore(text) }.buttonStyle(ActionStyle(kind: .secondary, height: 28)).padding(.vertical, 10)
+                            Button("Put this text in Edit") { restore(text) }.buttonStyle(ActionStyle(kind: .secondary, height: Metrics.compactControl)).padding(.vertical, 12)
                         }
                     }
                 }

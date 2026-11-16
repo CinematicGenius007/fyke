@@ -88,6 +88,8 @@ struct CatchUpView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(p.surface)
+        // The screen takes keys for the arrows; it is not a control, so it draws no
+        // ring. Its buttons keep the system ring for Tab with Full Keyboard Access.
         .focusable(true)
         .focusEffectDisabled()
         .focused($focused)
@@ -143,14 +145,14 @@ struct CatchUpView: View {
             HStack {
                 Spacer()
                 Button { catchUp.close() } label: {
-                    HStack(spacing: 6) { Text("Done"); Text("esc").foregroundStyle(p.muted) }
+                    HStack(spacing: 8) { Text("Done"); Text("esc").foregroundStyle(p.muted) }
                 }
-                .buttonStyle(ActionStyle(kind: .secondary, height: 28))
+                .buttonStyle(ActionStyle(kind: .secondary, height: Metrics.compactControl))
                 .keyboardShortcut(.cancelAction)
             }
-            .padding(.trailing, 20)
+            .padding(.trailing, Metrics.barEdge)
         }
-        .padding(.top, 14)
+        .padding(.top, Metrics.barControlTop)
     }
 
     private func card(_ row: EntrySummary) -> some View {
@@ -195,7 +197,7 @@ struct CatchUpView: View {
 
     private func triage(_ title: String, symbol: String, key: String, kind: ActionStyle.Kind, run: @escaping () -> Void) -> some View {
         Button(action: run) {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 Image(systemName: symbol).font(.system(size: 13, weight: .medium))
                 Text(title).font(.ui(16, .medium))
                 KeyHint(text: key, onDark: kind == .primary)
@@ -212,7 +214,7 @@ struct CatchUpView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             if !catchUp.session.queue.isEmpty {
                 Text("\(min(catchUp.session.index + 1, catchUp.session.queue.count)) of \(catchUp.session.queue.count)")
                 Text("·")

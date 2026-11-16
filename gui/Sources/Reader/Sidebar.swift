@@ -53,7 +53,7 @@ struct Sidebar: View {
             }
             SidebarRow(title: "Today", symbol: "calendar", selected: model.place == .today, action: { model.go(to: .today) }) {
                 if model.briefJob != nil { Spinner(size: 10) }
-                else if hasNewBrief { Circle().fill(p.unread).frame(width: 6, height: 6).accessibilityLabel("New brief") }
+                else if hasNewBrief { Circle().fill(p.unread).frame(width: Metrics.dot, height: Metrics.dot).accessibilityLabel("New brief") }
             }
             SidebarRow(title: "All", symbol: "tray", selected: model.place == .all, action: { model.go(to: .all) }) {
                 if !model.feeds.isEmpty { Count(value: model.totalUnread) }
@@ -139,7 +139,7 @@ struct Sidebar: View {
             .help(help)
             .accessibilityLabel(help)
         }
-        .padding(.leading, SidebarGrid.edge).padding(.trailing, 4).padding(.top, 20).padding(.bottom, 6)
+        .padding(.leading, SidebarGrid.edge).padding(.trailing, 4).padding(.top, 20).padding(.bottom, 4)
     }
 
     /// The one line of background work. It opens Activity.
@@ -149,7 +149,7 @@ struct Sidebar: View {
                 HStack(spacing: SidebarGrid.gap) {
                     Group {
                         if model.statusIsBusy { Spinner(size: 10) }
-                        else { Circle().fill(model.statusNeedsYou ? p.unread : p.control).frame(width: 6, height: 6) }
+                        else { Circle().fill(model.statusNeedsYou ? p.unread : p.control).frame(width: Metrics.dot, height: Metrics.dot) }
                     }
                     .frame(width: SidebarGrid.icon)
                     Text(model.statusWords).font(.ui(12)).foregroundStyle(model.statusNeedsYou ? p.ink : p.muted).lineLimit(1)

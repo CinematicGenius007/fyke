@@ -98,6 +98,10 @@ final class AppModel {
     var unreadOnly = false
     let search = SearchModel()
     var hasLoaded = false
+    /// True once the first load and any screen asked for at launch are done, or the
+    /// load failed. Key replay and snapshots for checks wait for it, so a slow cold
+    /// start cannot swallow their first keys.
+    @ObservationIgnored static var launched = false
     var problem: String?
     var updatedAt: Date?
     var showingAddFeed = false
@@ -208,12 +212,14 @@ final class AppModel {
             hasLoaded = true
             await openRequestedScreen()
             await openRequestedMove()
+            Self.launched = true
             for await event in Daemon.shared.events(since: stats.lastEventSeq) {
                 await handle(event)
             }
         } catch {
             problem = error.localizedDescription
             hasLoaded = true
+            Self.launched = true
         }
     }
 

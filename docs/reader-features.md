@@ -137,7 +137,7 @@ The GUI follows [design-rules.md](design-rules.md):
 - **Ask**: a question box over a view or all feeds, a cited answer, follow-up, and "Make it a routine".
 - **Catch-up**: the triage mode above.
 - **⌘K**: a palette of every command and destination.
-- **Settings · Agents**: writer choice and status, and a ready-to-paste MCP configuration.
+- **Settings · Agents**: writer choice and status, and a ready-to-paste MCP configuration. "Make changes" picks the `--tier` written into that configuration: Never (`read`), Reading state only (`annotate`) or Everything (`manage`). Fyke has no per-change approval prompt; an agent's MCP client decides whether to ask before calling a tool.
 - **States**: writing, failed and empty states are inline, say what is safe, and offer one next action. Bulk changes show an undo toast instead of a confirmation.
 
 ## Checks

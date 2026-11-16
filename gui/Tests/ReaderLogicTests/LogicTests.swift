@@ -42,8 +42,10 @@ import Testing
         RuleSentence.parts(rule, feedName: { feeds[$0] }, folderName: { folders[$0] })
     }
 
-    @Test func emptyRuleReadsAsAllFromAllFeeds() {
-        #expect(RuleSentence.text(parts(Rule())) == "All from all feeds")
+    @Test func emptyRuleReadsAsArticlesFromAllFeeds() {
+        #expect(RuleSentence.text(parts(Rule())) == "Articles from all feeds")
+        #expect(RuleSentence.text(parts(Rule(state: .any, words: "needle"))) == "Articles from all feeds about needle")
+        #expect(RuleSentence.text(parts(Rule(folders: [2], state: .unread, words: "storage"))) == "Unread from Engineering about storage")
     }
 
     @Test func everyClauseBecomesWords() {
@@ -53,11 +55,11 @@ import Testing
     }
 
     @Test func deletedSourcesAreNamed() {
-        #expect(RuleSentence.text(parts(Rule(feeds: [99]))) == "All from Deleted source")
+        #expect(RuleSentence.text(parts(Rule(feeds: [99]))) == "Articles from Deleted source")
     }
 
     @Test func manySourcesAreCounted() {
-        #expect(RuleSentence.text(parts(Rule(feeds: [3, 7], folders: [2]))).hasPrefix("All from Engineering and 2 more"))
+        #expect(RuleSentence.text(parts(Rule(feeds: [3, 7], folders: [2]))).hasPrefix("Articles from Engineering and 2 more"))
     }
 
     @Test func editsRoundTripThroughTheSentence() {
@@ -98,6 +100,8 @@ import Testing
 
     @Test func suggestedNamesAreUnique() {
         #expect(ViewName.suggest(for: Rule(words: "storage query", anyWords: true)) == "Storage or query")
+        #expect(ViewName.suggest(for: Rule()) == "New view")
+        #expect(ViewName.suggest(for: Rule(state: .unread)) == "Unread")
         #expect(ViewName.unique("Storage", taken: ["Storage", "Storage 2"]) == "Storage 3")
     }
 }

@@ -15,10 +15,10 @@ struct RoutineList: View {
                 SymbolButton(symbol: "plus", label: "New routine") { model.newRoutine() }
                     .disabled(model.library.views.isEmpty)
             }
-            .padding(.horizontal, 24).padding(.top, 44).padding(.bottom, 16)
+            .padding(.horizontal, 24).padding(.top, 48).padding(.bottom, 16)
             Rule()
             ScrollView {
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     if let draft = model.routineDraft, draft.id == nil {
                         RoutineRow(routine: draft)
                     }
@@ -50,13 +50,13 @@ private struct RoutineRow: View {
     var body: some View {
         Button { model.routineDraft = routine } label: {
             HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(routine.id == nil ? "\(routine.name) (not saved)" : routine.name).font(.ui(14, .semibold))
                         .foregroundStyle(routine.enabled ? p.ink : p.muted)
                     Text(([routine.schedule.summary] + routine.actions.map(\.kind.short)).joined(separator: " · "))
                         .font(.ui(13)).foregroundStyle(p.inkSoft)
                     if let failed {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 4) {
                             Image(systemName: "exclamationmark.triangle").font(.system(size: 10))
                             Text(failed.error ?? "Last run failed").lineLimit(1)
                         }
@@ -69,7 +69,7 @@ private struct RoutineRow: View {
                 Spacer(minLength: 48)
             }
             .padding(12)
-            .background(selected ? p.selected : hovering ? p.selected.opacity(0.5) : .clear, in: RoundedRectangle(cornerRadius: 8))
+            .background(selected ? p.selected : hovering ? p.selected.opacity(0.5) : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -135,7 +135,7 @@ struct RoutineEditor: View {
                 InlineState(tone: .empty, label: "Routines", title: model.library.views.isEmpty ? "Routines start from a view" : "No routine chosen",
                             detail: model.library.views.isEmpty ? "Search for what you follow, keep it with ⌘S, and a routine can brief it every morning." : "Pick one on the left, or make one from a view.",
                             primary: model.library.views.isEmpty ? ("Search", { model.search.show() }) : ("New routine", { model.newRoutine() }))
-                    .padding(.horizontal, 48).padding(.top, 96)
+                    .padding(.horizontal, Metrics.pageGutter).padding(.top, 96)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             } else {
                 editor
@@ -173,15 +173,15 @@ struct RoutineEditor: View {
                 Rule().padding(.top, 24)
                 footer.padding(.top, 16)
             }
-            .frame(maxWidth: 640, alignment: .leading)
-            .padding(.horizontal, 48).padding(.top, 64).padding(.bottom, 96)
+            .frame(maxWidth: Metrics.readingColumn, alignment: .leading)
+            .padding(.horizontal, Metrics.pageGutter).padding(.top, 64).padding(.bottom, 96)
             .frame(maxWidth: .infinity)
         }
         .themedScrollbar()
         .overlay(alignment: .topTrailing) {
             if routine.id != nil {
-                Button("Remove") { remove() }.buttonStyle(ActionStyle(kind: .quiet, height: 28))
-                    .padding(.top, 11).padding(.trailing, 16)
+                Button("Remove") { remove() }.buttonStyle(ActionStyle(kind: .quiet, height: Metrics.compactControl))
+                    .padding(.top, Metrics.barControlTop).padding(.trailing, Metrics.barEdge)
             }
         }
     }
@@ -191,7 +191,7 @@ struct RoutineEditor: View {
     private var lines: some View {
         VStack(alignment: .leading, spacing: 0) {
             line("When") {
-                HStack(spacing: 6) {
+                HStack(spacing: 4) {
                     menuChip("repeat", routine.schedule.repeatWords) { repeatMenu }
                     if routine.schedule.kind != .manual {
                         Text("at").font(.ui(13)).foregroundStyle(p.muted)
@@ -201,22 +201,22 @@ struct RoutineEditor: View {
             }
             Rule()
             line("Look in") {
-                HStack(spacing: 6) {
+                HStack(spacing: 4) {
                     menuChip("view", model.library.view(routine.viewId)?.name ?? "Choose a view") { viewMenu }
                     Text("for articles new since the last run").font(.ui(13)).foregroundStyle(p.muted)
                 }
             }
             Rule()
             line("Then") {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(routine.actions.enumerated()), id: \.offset) { index, action in
                         actionRow(action, index: index)
                     }
                     Button { show("add") { addMenu } } label: {
-                        HStack(spacing: 6) { Image(systemName: "plus").font(.system(size: 11, weight: .semibold)); Text("Add action") }
+                        HStack(spacing: 4) { Image(systemName: "plus").font(.system(size: 11, weight: .semibold)); Text("Add action") }
                             .foregroundStyle(p.unread)
                     }
-                    .buttonStyle(ActionStyle(kind: .quiet, height: 28))
+                    .buttonStyle(ActionStyle(kind: .quiet, height: Metrics.compactControl))
                     .floatFrame(binding("add"))
                     .padding(.leading, -10)
                 }
@@ -232,23 +232,23 @@ struct RoutineEditor: View {
             content()
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 16).padding(.vertical, 14)
+        .padding(.horizontal, 16).padding(.vertical, 12)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(label)
     }
 
     private func actionRow(_ action: RoutineAction, index: Int) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Image(systemName: action.kind.symbol).font(.system(size: 12)).foregroundStyle(p.inkSoft).frame(width: 14)
             actionWords(action, index: index)
             Spacer()
             if action.kind == .brief {
                 Text(model.library.selectedWriter?.name ?? "No writer").font(.ui(12)).foregroundStyle(p.muted)
             }
-            SymbolButton(symbol: "xmark", label: "Remove this action", size: 22) { routine.actions.remove(at: index) }
+            SymbolButton(symbol: "xmark", label: "Remove this action", size: 24) { routine.actions.remove(at: index) }
         }
-        .padding(.leading, 10).padding(.trailing, 4)
-        .frame(height: 34)
+        .padding(.leading, 12).padding(.trailing, 4)
+        .frame(height: Metrics.panelRow)
         .background(p.surface, in: RoundedRectangle(cornerRadius: Radii.control))
     }
 
@@ -272,11 +272,11 @@ struct RoutineEditor: View {
         case .markRead: Text("Mark them read").font(.ui(14))
         case .star: Text("Star them").font(.ui(14))
         case .tag:
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
                 Text("Tag them").font(.ui(14))
-                TextField("", text: Binding(get: { routine.actions[index].tag ?? "" }, set: { routine.actions[index].tag = $0 }), prompt: Text("tag").foregroundStyle(p.muted))
-                    .textFieldStyle(.plain).font(.ui(13)).frame(width: 120)
-                    .padding(.horizontal, 8).frame(height: 24).background(p.selected, in: RoundedRectangle(cornerRadius: Radii.control))
+                Field(placeholder: "tag", text: Binding(get: { routine.actions[index].tag ?? "" }, set: { routine.actions[index].tag = $0 }), height: 24, font: .ui(13))
+                    .frame(width: 120)
+                    .accessibilityLabel("Tag")
             }
         }
     }
@@ -356,7 +356,7 @@ struct RoutineEditor: View {
 
     @ViewBuilder private var dryRunSection: some View {
         HStack(alignment: .bottom, spacing: 24) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 SectionLabel(text: "Dry run · last week")
                 if routine.id == nil {
                     Text("Save to see what this routine would have caught last week.")
@@ -383,7 +383,7 @@ struct RoutineEditor: View {
         return HStack(alignment: .bottom, spacing: 8) {
             ForEach(Array(dryRun.days.enumerated()), id: \.offset) { index, day in
                 VStack(spacing: 4) {
-                    RoundedRectangle(cornerRadius: 3).fill(day.count == 0 ? p.hairline : p.unread)
+                    RoundedRectangle(cornerRadius: Radii.mark).fill(day.count == 0 ? p.hairline : p.unread)
                         .frame(width: 20, height: max(3, 40 * heights[index]))
                     Text(day.label).font(.ui(11)).foregroundStyle(p.muted)
                 }

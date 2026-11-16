@@ -63,8 +63,8 @@ struct UndoToast: View {
                 .accessibilityHint("Takes back: \(item.message)")
             KeyHint(text: "⌘Z", onDark: true)
         }
-        .padding(.leading, 16).padding(.trailing, 10)
-        .frame(height: 44)
+        .padding(.leading, 16).padding(.trailing, 8)
+        .frame(height: Metrics.panelHeader)
         .frame(minWidth: 360, maxWidth: 480)
         .background(p.ink, in: RoundedRectangle(cornerRadius: Radii.panel))
         .shadow(color: .black.opacity(0x1F / 255), radius: 16, y: 12)
@@ -84,7 +84,7 @@ private struct ToastButton: ButtonStyle {
         var body: some View {
             configuration.label
                 .font(.ui(14, .medium)).foregroundStyle(p.ground)
-                .padding(.horizontal, 10).frame(height: 28)
+                .padding(.horizontal, 10).frame(height: Metrics.compactControl)
                 .background(p.ground.opacity(configuration.isPressed ? 0.28 : hovering ? 0.2 : 0.12), in: RoundedRectangle(cornerRadius: Radii.control))
                 .contentShape(Rectangle())
                 .onHover { hovering = $0 }

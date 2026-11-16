@@ -444,7 +444,7 @@ private struct AgentsPane: View {
             PaneTitle(text: "Agents")
             Text("Who writes your briefs").font(.ui(14, .semibold))
             Text("Fyke hands the chosen articles and your recipe to an agent already on this Mac. Nothing is sent anywhere else by Fyke itself.")
-                .font(.ui(13)).foregroundStyle(p.muted).fixedSize(horizontal: false, vertical: true).padding(.top, 2).padding(.bottom, 12)
+                .font(.ui(13)).foregroundStyle(p.muted).fixedSize(horizontal: false, vertical: true).padding(.top, 4).padding(.bottom, 12)
             VStack(spacing: 0) {
                 if model.library.writers.isEmpty {
                     Text(model.library.available ? "Looking for Codex and Claude Code…" : "Writers need a newer Fyke service. Quit and open Fyke again.")
@@ -461,7 +461,7 @@ private struct AgentsPane: View {
 
             Text("Let agents use Fyke").font(.ui(14, .semibold)).padding(.top, 28)
             Text("Agents connected over MCP can search and read your articles, views and briefs. Article text can try to mislead an agent, so changes start off.")
-                .font(.ui(13)).foregroundStyle(p.muted).fixedSize(horizontal: false, vertical: true).padding(.top, 2).padding(.bottom, 12)
+                .font(.ui(13)).foregroundStyle(p.muted).fixedSize(horizontal: false, vertical: true).padding(.top, 4).padding(.bottom, 12)
             VStack(spacing: 0) {
                 HStack {
                     Text("Read articles, views and briefs").font(.ui(14))
@@ -471,7 +471,7 @@ private struct AgentsPane: View {
                 .padding(.horizontal, 16).frame(height: 48)
                 Rule()
                 HStack {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text("Make changes").font(.ui(14))
                         Text("Mark read and star; or also edit views, recipes and routines").font(.ui(12)).foregroundStyle(p.muted)
                     }
@@ -502,9 +502,9 @@ private struct AgentsPane: View {
             Text(snippet).font(.code(12)).lineSpacing(3).textSelection(.enabled)
                 .foregroundStyle(p.inkSoft)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 12).padding(.horizontal, 14)
+                .padding(.vertical, 12).padding(.horizontal, 16)
                 .background(p.surface, in: RoundedRectangle(cornerRadius: Radii.control))
-                .padding(.top, 10)
+                .padding(.top, 8)
         }
     }
 
@@ -512,8 +512,8 @@ private struct AgentsPane: View {
         HStack(spacing: 12) {
             Text(writer.id == "codex" ? "Cx" : String(writer.name.prefix(1)))
                 .font(.ui(12, .semibold)).foregroundStyle(p.ground)
-                .frame(width: 28, height: 28).background(writer.found ? p.ink : p.control, in: RoundedRectangle(cornerRadius: Radii.control))
-            VStack(alignment: .leading, spacing: 2) {
+                .frame(width: Metrics.compactControl, height: Metrics.compactControl).background(writer.found ? p.ink : p.control, in: RoundedRectangle(cornerRadius: Radii.control))
+            VStack(alignment: .leading, spacing: 4) {
                 Text(writer.name).font(.ui(14))
                 Text(status(writer)).font(.ui(12)).foregroundStyle(writer.problem != nil ? p.ink : p.muted).lineLimit(2)
             }
@@ -521,14 +521,14 @@ private struct AgentsPane: View {
             if checking == writer.id {
                 Spinner(size: 12)
             } else {
-                Button("Check") { check(writer) }.buttonStyle(ActionStyle(kind: .quiet, height: 28))
+                Button("Check") { check(writer) }.buttonStyle(ActionStyle(kind: .quiet, height: Metrics.compactControl))
                     .help("Run \(writer.name)'s version check again")
             }
             if writer.selected {
                 Text("Default").font(.ui(12)).foregroundStyle(p.inkSoft).padding(.horizontal, 8).frame(height: 24)
                     .background(p.selected, in: RoundedRectangle(cornerRadius: Radii.control))
             } else {
-                Button("Make default") { choose(writer) }.buttonStyle(ActionStyle(kind: .secondary, height: 28))
+                Button("Make default") { choose(writer) }.buttonStyle(ActionStyle(kind: .secondary, height: Metrics.compactControl))
                     .disabled(!writer.found)
             }
         }

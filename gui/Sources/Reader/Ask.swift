@@ -72,15 +72,14 @@ struct AskView: View {
         VStack(spacing: 0) {
             HStack {
                 BackBar(title: model.article == nil ? "Back" : "Back to article") { model.detail = nil }
-                    .padding(.top, -11).padding(.leading, -14)
                 Spacer()
                 if let answer = ask.latest?.answer {
-                    Button("Copy") { copy(answer) }.buttonStyle(ActionStyle(kind: .quiet, height: 28))
-                    Button("Make it a routine") { makeRoutine() }.buttonStyle(ActionStyle(kind: .quiet, height: 28))
+                    Button("Copy") { copy(answer) }.buttonStyle(ActionStyle(kind: .quiet, height: Metrics.compactControl))
+                    Button("Make it a routine") { makeRoutine() }.buttonStyle(ActionStyle(kind: .quiet, height: Metrics.compactControl))
                         .disabled(model.library.views.isEmpty)
                 }
             }
-            .padding(.horizontal, 16).frame(height: 48)
+            .padding(.horizontal, Metrics.barEdge).frame(height: Metrics.barHeight)
             content
         }
     }
@@ -117,8 +116,8 @@ struct AskView: View {
                         }
                     }
                 }
-                .frame(maxWidth: 640, alignment: .leading)
-                .padding(.horizontal, 48).padding(.top, 48).padding(.bottom, 96)
+                .frame(maxWidth: Metrics.readingColumn, alignment: .leading)
+                .padding(.horizontal, Metrics.pageGutter).padding(.top, 48).padding(.bottom, 96)
                 .frame(maxWidth: .infinity)
             }
             .themedScrollbar()
@@ -177,7 +176,7 @@ private struct QuestionField: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Image(systemName: "sparkle").font(.system(size: 12)).foregroundStyle(p.muted)
             TextField("", text: $ask.draft, prompt: Text(placeholder).foregroundStyle(p.muted))
                 .textFieldStyle(.plain).font(.ui(15))
@@ -185,7 +184,7 @@ private struct QuestionField: View {
                 .onSubmit(submit)
                 .accessibilityLabel(placeholder)
             Text("Answers only from your feeds").font(.ui(12)).foregroundStyle(p.muted)
-            Button(action: submit) { Image(systemName: "arrow.up").font(.system(size: 12, weight: .semibold)).frame(width: 28, height: 28) }
+            Button(action: submit) { Image(systemName: "arrow.up").font(.system(size: 12, weight: .semibold)).frame(width: Metrics.compactControl, height: Metrics.compactControl) }
                 .buttonStyle(SymbolStyle(selected: !ask.draft.isEmpty))
                 .disabled(ask.draft.trimmingCharacters(in: .whitespaces).isEmpty || ask.isAsking)
                 .accessibilityLabel("Ask")

@@ -153,7 +153,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         KeyReplay.startIfRequested()
         guard let path = ProcessInfo.processInfo.environment["FYKE_SNAPSHOT"] else { return }
-        let delay = Double(ProcessInfo.processInfo.environment["FYKE_SNAPSHOT_DELAY"] ?? "") ?? 2.5
+        // With keys to play, the replay calls `snapshot` once its last key is sent.
+        if environment["FYKE_KEYS"] == nil { Launch.whenReady { Self.snapshot(to: path) } }
+    }
+
+    /// Saves the window after `FYKE_SNAPSHOT_DELAY` seconds, for screens that are still
+    /// loading or animating once the app is ready.
+    @MainActor static func snapshot(to path: String) {
+        let delay = Double(ProcessInfo.processInfo.environment["FYKE_SNAPSHOT_DELAY"] ?? "") ?? 1
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             // Settings is the smaller window, and it may not have become key.
             let wanted = ProcessInfo.processInfo.environment["FYKE_SCREEN"] == "settings" ? NSApp.windows.first { $0.isVisible && $0.frame.width < 1000 } : nil
@@ -170,29 +177,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+/// Waits for the first load to finish, then for the window to become key and draw.
+/// Checks start from here, not from a fixed delay, because a cold start after a
+/// rebuild can take several seconds longer than a warm one.
+@MainActor enum Launch {
+    private static let limit = Date.now.addingTimeInterval(60)
+    /// Time for the window to lay out and for focus to land after the first load.
+    private static let settleSeconds = 0.5
+
+    static func whenReady(_ run: @escaping @MainActor () -> Void) {
+        let window = NSApp.windows.first { $0.isVisible && $0.frame.width >= 960 }
+        if AppModel.launched && window != nil || Date.now > limit {
+            NSApp.activate(ignoringOtherApps: true)
+            window?.makeKeyAndOrderFront(nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + settleSeconds) { run() }
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { whenReady(run) }
+    }
+}
+
 /// `FYKE_KEYS` plays key presses into the window once it settles, then quits, for
 /// tools/e2e_gui.py. Steps are separated by spaces: `cmd+K` or `shift+cmd+K` for any
 /// letter or digit K, `up`, `down`, `left`, `right`, `tab`, `space`, `return`, `esc`, `wait`,
 /// `click:X,Y`, `rclick:X,Y`, `drag:X1,Y1,X2,Y2`, or text to type. Coordinates count from the
 /// window's top left. The events take the same path as real ones from there on.
 @MainActor private enum KeyReplay {
-    private static let settleSeconds = 2.5
     private static let stepSeconds = 0.5
 
     static func startIfRequested() {
         guard let script = ProcessInfo.processInfo.environment["FYKE_KEYS"] else { return }
         let steps = script.split(separator: " ").map(String.init)
-        DispatchQueue.main.asyncAfter(deadline: .now() + settleSeconds) {
-            NSApp.activate(ignoringOtherApps: true)
-            NSApp.windows.first { $0.isVisible }?.makeKeyAndOrderFront(nil)
-            play(steps[...])
-        }
+        Launch.whenReady { play(steps[...]) }
     }
 
     private static func play(_ steps: ArraySlice<String>) {
         // With a snapshot requested, that is what ends the run.
         guard let step = steps.first else {
-            if ProcessInfo.processInfo.environment["FYKE_SNAPSHOT"] == nil { exit(0) }
+            if let path = ProcessInfo.processInfo.environment["FYKE_SNAPSHOT"] { AppDelegate.snapshot(to: path) } else { exit(0) }
             return
         }
         send(step)

@@ -46,7 +46,7 @@ struct RootView: View {
         .overlay(alignment: .bottom) {
             VStack(spacing: 8) {
                 if let problem = model.problem ?? Prefs.shared.fileProblem.map({ "config.json has a mistake, so the last good settings stay in use: \($0)" }) {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 8) {
                         Text(problem).font(.ui(13)).foregroundStyle(p.ground)
                         Button { model.problem = nil } label: { Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).foregroundStyle(p.ground) }
                             .buttonStyle(.plain).accessibilityLabel("Dismiss")

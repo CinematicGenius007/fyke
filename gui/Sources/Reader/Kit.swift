@@ -6,6 +6,41 @@
 import AppKit
 import SwiftUI
 
+// MARK: Metrics
+
+/// Measurements that more than one view shares, on the 4 pt grid of the design rules.
+/// A view that needs one of these uses the name, so a change lands everywhere at once.
+enum Metrics {
+    /// The reading column: articles, briefs, answers, recipes and routines all set
+    /// their text in it.
+    static let readingColumn: CGFloat = 640
+    /// Space between the reader pane's edge and the reading column.
+    static let pageGutter: CGFloat = 48
+    /// The band at the top of the reader pane that holds back links and actions.
+    static let barHeight: CGFloat = 48
+    /// Inset of a bar's controls from the pane's edge.
+    static let barEdge: CGFloat = 16
+    /// Top inset that centers a compact control in the bar: (48 - 28) / 2.
+    static let barControlTop: CGFloat = (barHeight - compactControl) / 2
+    /// A button where a full 32 pt one would crowd its row: popovers, bars and lists.
+    static let compactControl: CGFloat = 28
+    /// A popover's header row.
+    static let panelHeader: CGFloat = 44
+    /// A one-line row inside a popover or list.
+    static let panelRow: CGFloat = 32
+    /// Inset of a popover's rows from its edge.
+    static let panelEdge: CGFloat = 16
+    /// The unread dot, and every status dot drawn like it.
+    static let dot: CGFloat = 6
+}
+
+extension Radii {
+    /// Marks 20 pt high or less: citation numbers inside a line of text, key hints,
+    /// generated-text tags and dry-run bars. The control radius of 6 would round
+    /// them into pills, so these use 3.
+    static let mark: Double = 3
+}
+
 // MARK: Motion
 
 enum Motion {
@@ -200,15 +235,15 @@ struct Tabs<Value: Hashable>: View {
     @Environment(\.palette) private var p
 
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 0) {
             ForEach(items, id: \.0) { item in
                 Button { selection = item.0 } label: { Text(item.1) }
                     .buttonStyle(TabStyle(selected: selection == item.0))
                     .accessibilityAddTraits(selection == item.0 ? .isSelected : [])
             }
         }
-        .padding(2)
-        .background(p.selected, in: RoundedRectangle(cornerRadius: Radii.control + 2))
+        .padding(4)
+        .background(p.selected, in: RoundedRectangle(cornerRadius: Radii.panel))
     }
 }
 
@@ -255,16 +290,18 @@ struct PopoverPanel: ViewModifier {
     @Environment(\.palette) private var p
 
     func body(content: Content) -> some View {
+        // The content is clipped to the shape before the shadows are drawn, so that the
+        // clip cannot cut them off. A CSS blur of 32 is a SwiftUI radius of about 16.
         content
             .padding(padding)
+            .background(p.isDark ? p.surface : p.ground)
+            .clipShape(RoundedRectangle(cornerRadius: Radii.panel))
+            .overlay(RoundedRectangle(cornerRadius: Radii.panel).strokeBorder(p.hairline))
             .background {
                 RoundedRectangle(cornerRadius: Radii.panel).fill(p.isDark ? p.surface : p.ground)
                     .shadow(color: .black.opacity(p.isDark ? 0.45 : 0x1F / 255), radius: 16, y: 12)
                     .shadow(color: .black.opacity(p.isDark ? 0.3 : 0x14 / 255), radius: 3, y: 2)
             }
-            .overlay(RoundedRectangle(cornerRadius: Radii.panel).stroke(p.hairline))
-            .clipShape(RoundedRectangle(cornerRadius: Radii.panel))
-            .compositingGroup()
     }
 }
 
@@ -290,13 +327,13 @@ struct InlineState: View {
             HStack(spacing: 8) {
                 switch tone {
                 case .working: Spinner(size: 12)
-                case .failed: Circle().fill(p.unread).frame(width: 6, height: 6)
+                case .failed: Circle().fill(p.unread).frame(width: Metrics.dot, height: Metrics.dot)
                 case .empty: EmptyView()
                 }
                 Text(label.uppercased()).font(.ui(11, .semibold)).tracking(0.66)
                     .foregroundStyle(tone == .empty ? p.muted : p.unread)
             }
-            .padding(.bottom, 14)
+            .padding(.bottom, 12)
             Text(title).font(.custom(titleFamily, fixedSize: 26).weight(.semibold)).tracking(-0.26)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 12)
@@ -359,8 +396,8 @@ struct KeyHint: View {
     var body: some View {
         Text(text).font(.ui(11, .medium))
             .foregroundStyle(onDark ? p.ground.opacity(0.7) : p.muted)
-            .padding(.horizontal, 5).frame(minWidth: 18, minHeight: 18)
-            .background(onDark ? p.ground.opacity(0.12) : p.selected, in: RoundedRectangle(cornerRadius: 4))
+            .padding(.horizontal, 4).frame(minWidth: 20, minHeight: 20)
+            .background(onDark ? p.ground.opacity(0.12) : p.selected, in: RoundedRectangle(cornerRadius: Radii.mark))
     }
 }
 
@@ -381,8 +418,8 @@ struct GeneratedTag: View {
     var body: some View {
         Text(text.uppercased()).font(.ui(11, .semibold)).tracking(0.5)
             .foregroundStyle(p.inkSoft)
-            .padding(.horizontal, 6).frame(height: 20)
-            .background(p.selected, in: RoundedRectangle(cornerRadius: 4))
+            .padding(.horizontal, 8).frame(height: 20)
+            .background(p.selected, in: RoundedRectangle(cornerRadius: Radii.mark))
     }
 }
 
@@ -406,6 +443,7 @@ struct Field: View {
             .background(p.ground, in: RoundedRectangle(cornerRadius: Radii.control))
             .overlay(RoundedRectangle(cornerRadius: Radii.control).stroke(focused ? p.unread : p.control, lineWidth: focused ? 1.5 : 1))
             .focused($focused)
+            .accessibilityLabel(placeholder)
             .onSubmit(submit)
             .onAppear { if autofocus { DispatchQueue.main.async { focused = true } } }
             .motion(focused, Motion.quick)

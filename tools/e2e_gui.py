@@ -8,7 +8,7 @@ such as which entry it marked read, since that is the effect that outlives the w
 The reader features run against a stand-in writer, and each of their screens is saved
 as a picture in zig-out/gui-snapshots for a person to look at.
 """
-import http.server, json, os, pathlib, shutil, socket, socketserver, subprocess, sys, tempfile, threading
+import http.server, json, os, pathlib, shutil, socket, socketserver, subprocess, sys, tempfile, threading, time
 
 # Unix socket paths are short, so macOS and Linux use /tmp. Windows has no /tmp.
 TMP = tempfile.gettempdir() if os.name == "nt" else "/tmp"
@@ -72,6 +72,13 @@ def play(name, keys, expected):
 
 
 rss("add", f"http://127.0.0.1:{server.server_address[1]}/feed.xml", "--allow-private")
+# The daemon fetches a new feed in the background. The checks start once it holds all
+# three articles, not after a fixed pause, because a cold start after a rebuild is slow.
+deadline = time.monotonic() + 60
+while len(json.loads(rss("list", "--json"))["items"]) < 3:
+    if time.monotonic() > deadline:
+        print("FAIL the feed was not fetched within 60 s"); rss("daemon", "stop"); shutil.rmtree(home, ignore_errors=True); sys.exit(1)
+    time.sleep(0.1)
 play("command-F, type and Return opens the first result", "cmd+f needle return", ["Needle one"])
 play("/ opens search too", "/ needle return", ["Needle one"])
 play("the down arrow moves the selection", "cmd+f needle down return", ["Needle two"])
@@ -210,17 +217,22 @@ scenario("a routine starts from a view and saves with command-S", "wait cmd+s wa
 # Pictures of every feature screen, in both themes, for a person to look at.
 shutil.rmtree(snapshots, ignore_errors=True)
 snapshots.mkdir(parents=True)
-for screen in ["today", "view", "recipe", "routines", "catchup", "palette", "ask", "activity", "health", "toast", "search"]:
+# The delay counts from the moment the app has loaded, so it covers animation only.
+# `citation` is Today with source 1 pinned open, as a click on its number leaves it.
+SHOTS = {screen: {"FYKE_SCREEN": screen} for screen in
+         ["today", "view", "recipe", "routines", "catchup", "palette", "ask", "activity", "health", "toast", "search"]}
+SHOTS["citation"] = {"FYKE_SCREEN": "today", "FYKE_PIN_CITATION": "1"}
+for name, extra in SHOTS.items():
     for theme in ["light", "dark"]:
-        target = snapshots / f"{screen}-{theme}.png"
+        target = snapshots / f"{name}-{theme}.png"
         subprocess.run([str(app / "Reader"), "-theme", theme, "-followSystem", "NO"], timeout=90, capture_output=True,
-                       env=dict(env, FYKE_SCREEN=screen, FYKE_QUERY="needle", FYKE_SNAPSHOT=str(target), FYKE_SNAPSHOT_DELAY="4"))
+                       env=dict(env, FYKE_QUERY="needle", FYKE_SNAPSHOT=str(target), FYKE_SNAPSHOT_DELAY="2", **extra))
         if not target.exists() or target.stat().st_size < 10000:
-            fail(f"snapshot {screen} {theme}", "no picture")
+            fail(f"snapshot {name} {theme}", "no picture")
 for theme in ["light", "dark"]:
     target = snapshots / f"settings-agents-{theme}.png"
     subprocess.run([str(app / "Reader"), "-theme", theme, "-followSystem", "NO"], timeout=90, capture_output=True,
-                   env=dict(env, FYKE_SCREEN="settings", FYKE_TAB="Agents", FYKE_SNAPSHOT=str(target), FYKE_SNAPSHOT_DELAY="4"))
+                   env=dict(env, FYKE_SCREEN="settings", FYKE_TAB="Agents", FYKE_SNAPSHOT=str(target), FYKE_SNAPSHOT_DELAY="2"))
     if not target.exists():
         fail(f"snapshot settings {theme}", "no picture")
 print(f"ok   snapshots in {snapshots.relative_to(root)}")

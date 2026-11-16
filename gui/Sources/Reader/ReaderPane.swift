@@ -20,7 +20,7 @@ struct ReaderPane: View {
                 ScrollView {
                     column(article)
                         .frame(maxWidth: columnWidth, alignment: .leading)
-                        .padding(.horizontal, 48).padding(.top, 72).padding(.bottom, 96)
+                        .padding(.horizontal, Metrics.pageGutter).padding(.top, 72).padding(.bottom, 96)
                         .frame(maxWidth: .infinity)
                 }
                 .themedScrollbar()
@@ -98,7 +98,7 @@ struct ReaderPane: View {
             .buttonStyle(.plain)
             .help("Open the page here. Command-click a link for your browser.")
         }
-        .padding(.top, 11).padding(.trailing, 16)
+        .padding(.top, Metrics.barControlTop).padding(.trailing, Metrics.barEdge)
     }
 }
 
