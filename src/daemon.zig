@@ -191,11 +191,24 @@ fn handle(s: *Service, arena: std.mem.Allocator, line: []const u8, out: *Io.Writ
         };
         return writeError(out, id, code, @errorName(err));
     };
-    if (std.mem.endsWith(u8, method, ".put") or std.mem.eql(u8, method, "views.remove") or std.mem.eql(u8, method, "recipes.reset")) {
+    if (std.mem.endsWith(u8, method, ".put") or std.mem.eql(u8, method, "views.remove") or
+        std.mem.eql(u8, method, "recipes.reset"))
+    {
         const value = try std.json.parseFromSliceLeaky(std.json.Value, arena, result.written(), .{});
         if (value == .object) if (value.object.get("kind")) |kind| {
-            if (kind == .string and (std.mem.eql(u8, kind.string, "revision_conflict") or std.mem.eql(u8, kind.string, "in_use"))) {
-                try out.print("{{\"jsonrpc\":\"2.0\",\"id\":{f},\"error\":{{\"code\":{d},\"message\":{f},\"data\":{f}}}}}\n", .{ std.json.fmt(id, .{}), code_failed, std.json.fmt(kind.string, .{}), std.json.fmt(value, .{}) });
+            if (kind == .string and (std.mem.eql(u8, kind.string, "revision_conflict") or
+                std.mem.eql(u8, kind.string, "in_use")))
+            {
+                try out.print(
+                    "{{\"jsonrpc\":\"2.0\",\"id\":{f},\"error\":{{\"code\":{d},\"message\":{f},\"data" ++
+                        "\":{f}}}}}\n",
+                    .{
+                        std.json.fmt(id, .{}),
+                        code_failed,
+                        std.json.fmt(kind.string, .{}),
+                        std.json.fmt(value, .{}),
+                    },
+                );
                 return;
             }
         };

@@ -1,4 +1,6 @@
 //! Reader jobs and routine orchestration. All persistence goes through store.
+//! Durable inputs separate capture from execution so later view edits cannot change a queued run.
+
 const std = @import("std");
 const core = @import("core");
 const store = @import("store.zig");
@@ -6,8 +8,35 @@ const service = @import("service.zig");
 const schedule = @import("schedule.zig");
 const writer = @import("writer.zig");
 const runner = @import("runner.zig");
-pub const Writing = struct { view_id: ?i64 = null, rule: core.selector.Rule = .{}, recipe_id: i64 = 1, recipe_revision: i64, recipe_text: []const u8, question: ?[]const u8 = null, writer: []const u8, timeout_seconds: i64 = 180, preview: bool = false, entry_ids: ?[]const i64 = null };
-pub const Action = struct { kind: enum { brief, notify, mark_read, star, tag }, recipe_id: i64 = 1, tag: ?[]const u8 = null };
+
+/// Immutable job input records the exact recipe and selection used by a writer.
+pub const Writing = struct {
+    view_id: ?i64 = null,
+    rule: core.selector.Rule = .{},
+    recipe_id: i64 = 1,
+    recipe_revision: i64,
+    recipe_text: []const u8,
+    question: ?[]const u8 = null,
+    writer: []const u8,
+    timeout_seconds: i64 = 180,
+    preview: bool = false,
+    entry_ids: ?[]const i64 = null,
+};
+
+/// One routine effect; explicit values make reading-state actions safe to retry.
+pub const Action = struct {
+    kind: enum {
+        brief,
+        notify,
+        mark_read,
+        star,
+        tag,
+    },
+    recipe_id: i64 = 1,
+    tag: ?[]const u8 = null,
+};
+
+/// Rejects empty, oversized or incomplete routine action lists before persistence.
 pub fn validateActions(a: std.mem.Allocator, value: std.json.Value) !void {
     const actions = std.json.parseFromValueLeaky([]const Action, a, value, .{}) catch return error.InvalidActions;
     if (actions.len == 0 or actions.len > 16) return error.InvalidActions;
@@ -16,22 +45,17 @@ pub fn validateActions(a: std.mem.Allocator, value: std.json.Value) !void {
         if (std.mem.trim(u8, tag, " \t\r\n").len == 0 or tag.len > 200) return error.InvalidActions;
     };
 }
-const Tm = extern struct { sec: c_int, min: c_int, hour: c_int, mday: c_int, mon: c_int, year: c_int, wday: c_int, yday: c_int, isdst: c_int, offset: c_long, zone: ?[*:0]const u8 };
-extern fn localtime_r(*const i64, *Tm) ?*Tm;
-extern fn _localtime64_s(*Tm, *const i64) c_int;
+// Conversion is injected into the pure scheduler; only this adapter asks the OS.
 fn localCivil(_: void, ms: i64) schedule.Civil {
-    var tm: Tm = undefined;
-    const seconds = @divFloor(ms, 1000);
-    if (@import("builtin").os.tag == .windows) {
-        _ = _localtime64_s(&tm, &seconds);
-    } else {
-        _ = localtime_r(&seconds, &tm);
-    }
-    return .{ .day = @as(i64, tm.year) * 366 + tm.yday, .weekday = @intCast(tm.wday), .minute = @intCast(tm.hour * 60 + tm.min) };
+    return @import("platform.zig").localCivil(ms);
 }
+
+/// Finds the next occurrence using the machine timezone and the supplied clock instant.
 pub fn nextRun(s: schedule.Schedule, now: i64) !?i64 {
     return schedule.next(s, now, {}, localCivil);
 }
+
+/// Counts matches across seven local calendar days without applying any actions.
 pub fn dryRun(db: *store.Db, a: std.mem.Allocator, id: i64, now: i64) !std.json.Value {
     const routine = try db.routineGet(a, id);
     const view = routine.object.get("view_id").?;
@@ -45,20 +69,34 @@ pub fn dryRun(db: *store.Db, a: std.mem.Allocator, id: i64, now: i64) !std.json.
         const start = dayStart(end);
         const selection = try db.selectRule(a, rule, end, 1, null, start - 1, end);
         total += selection.total;
-        var tm: Tm = undefined;
-        const seconds = @divFloor(start, 1000);
-        if (@import("builtin").os.tag == .windows) {
-            _ = _localtime64_s(&tm, &seconds);
-        } else {
-            _ = localtime_r(&seconds, &tm);
-        }
-        const date = try std.fmt.allocPrint(a, "{d:0>4}-{d:0>2}-{d:0>2}", .{ tm.year + 1900, tm.mon + 1, tm.mday });
-        try days.append(a, try store.object(a, .{ .from = start, .start = start, .until = end, .date = date, .count = selection.total, .actions = try dryActions(a, routine.object.get("actions").?, selection.total) }));
+        const civil = localCivil({}, start);
+        const date = try std.fmt.allocPrint(a, "{d:0>4}-{d:0>2}-{d:0>2}", .{ civil.year, civil.month, civil.day });
+        try days.append(
+            a,
+            try store.object(
+                a,
+                .{
+                    .from = start,
+                    .start = start,
+                    .until = end,
+                    .date = date,
+                    .count = selection.total,
+                    .actions = try dryActions(a, routine.object.get("actions").?, selection.total),
+                },
+            ),
+        );
         end = start - 1;
     }
     std.mem.reverse(std.json.Value, days.items);
-    return store.object(a, .{ .days = days.items, .actions = try dryActions(a, routine.object.get("actions").?, total) });
+    return store.object(
+        a,
+        .{
+            .days = days.items,
+            .actions = try dryActions(a, routine.object.get("actions").?, total),
+        },
+    );
 }
+
 fn dryActions(a: std.mem.Allocator, value: std.json.Value, count: i64) ![]const std.json.Value {
     const actions = try std.json.parseFromValueLeaky([]const Action, a, value, .{});
     var results: std.ArrayList(std.json.Value) = .empty;
@@ -70,19 +108,39 @@ fn dryActions(a: std.mem.Allocator, value: std.json.Value, count: i64) ![]const 
             .star => "Star",
             .tag => "Tag",
         };
-        try results.append(a, try store.object(a, .{ .kind = @tagName(action.kind), .count = count, .summary = try std.fmt.allocPrint(a, "{s} {d} articles", .{ verb, count }) }));
+        try results.append(
+            a,
+            try store.object(
+                a,
+                .{
+                    .kind = @tagName(action.kind),
+                    .count = count,
+                    .summary = try std.fmt.allocPrint(
+                        a,
+                        "{s} {d} articles",
+                        .{
+                            verb,
+                            count,
+                        },
+                    ),
+                },
+            ),
+        );
     }
     return results.items;
 }
+
 fn dayStart(ms: i64) i64 {
-    const day = localCivil({}, ms).day;
+    const day = localCivil({}, ms);
     var minute = @divFloor(ms, 60000) * 60000;
     for (0..26 * 60) |_| {
-        if (localCivil({}, minute - 60000).day != day) return minute;
+        if (!localCivil({}, minute - 60000).sameDate(day)) return minute;
         minute -= 60000;
     }
     return minute;
 }
+
+/// Captures arrivals and advances the schedule in the transaction that queues the run.
 pub fn queueRoutine(db: *store.Db, a: std.mem.Allocator, id: i64, now: i64) !std.json.Value {
     const routine = try db.routineGet(a, id);
     const view = routine.object.get("view_id").?;
@@ -95,11 +153,23 @@ pub fn queueRoutine(db: *store.Db, a: std.mem.Allocator, id: i64, now: i64) !std
     const ids = try a.alloc(i64, selection.items.len);
     for (selection.items, 0..) |e, i| ids[i] = e.id;
     const timing = try schedule.parse(a, try text(a, routine.object.get("schedule").?));
-    return db.routineStart(a, id, ids, routine.object.get("actions").?, now, try nextRun(timing, now), view.integer, rule);
+    return db.routineStart(
+        a,
+        id,
+        ids,
+        routine.object.get("actions").?,
+        now,
+        try nextRun(timing, now),
+        view.integer,
+        rule,
+    );
 }
+
 fn text(a: std.mem.Allocator, value: anytype) ![]const u8 {
     return std.fmt.allocPrint(a, "{f}", .{std.json.fmt(value, .{})});
 }
+
+/// Recovers durable jobs and executes them serially so routine actions cannot overlap.
 pub fn loop(s: *service.Service) std.Io.Cancelable!void {
     runner.cleanup(s) catch |err| std.debug.print("writer cleanup: {s}\n", .{@errorName(err)});
     {
@@ -116,12 +186,19 @@ pub fn loop(s: *service.Service) std.Io.Cancelable!void {
             std.debug.print("reader worker: {s}\n", .{@errorName(err)});
             break :blk false;
         };
-        if (!worked) s.jobs_wake.waitTimeout(s.io, .{ .duration = .{ .raw = .fromSeconds(60), .clock = .awake } }) catch |err| switch (err) {
+        if (!worked) s.jobs_wake.waitTimeout(
+            s.io,
+            .{ .duration = .{
+                .raw = .fromSeconds(60),
+                .clock = .awake,
+            } },
+        ) catch |err| switch (err) {
             error.Timeout => {},
             error.Canceled => return error.Canceled,
         };
     }
 }
+
 fn tick(s: *service.Service, a: std.mem.Allocator) !bool {
     const job = blk: {
         const db = s.lockWriter();
@@ -156,6 +233,7 @@ fn tick(s: *service.Service, a: std.mem.Allocator) !bool {
     s.eventsChanged();
     return true;
 }
+
 fn write(s: *service.Service, a: std.mem.Allocator, id: i64, input: Writing) !void {
     var total: i64 = undefined;
     const selected = blk: {
@@ -191,7 +269,19 @@ fn write(s: *service.Service, a: std.mem.Allocator, id: i64, input: Writing) !vo
     var result: writer.Output = undefined;
     var valid = false;
     for (0..2) |attempt| {
-        const output = try runner.execute(s, a, id, input.writer, if (attempt == 0) prompt else try std.fmt.allocPrint(a, "{s}\nThe previous output failed JSON or citation validation. Return valid JSON; cite only supplied ids.\n", .{prompt}), input.timeout_seconds);
+        const output = try runner.execute(
+            s,
+            a,
+            id,
+            input.writer,
+            if (attempt == 0) prompt else try std.fmt.allocPrint(
+                a,
+                "{s}\nThe previous output failed JSON or citation validation. Return valid JSON; " ++
+                    "cite only supplied ids.\n",
+                .{prompt},
+            ),
+            input.timeout_seconds,
+        );
         result = writer.validate(a, output, sources.items) catch |err| {
             if (attempt == 1) return err;
             continue;
@@ -207,8 +297,15 @@ fn write(s: *service.Service, a: std.mem.Allocator, id: i64, input: Writing) !vo
     defer s.unlockWriter();
     _ = try db.artifactSave(a, id, input, result, body, ids, total - @as(i64, @intCast(ids.len)), s.now());
 }
+
 fn runRoutine(s: *service.Service, a: std.mem.Allocator, job: i64, value: std.json.Value) !void {
-    const Input = struct { routine_id: i64, matches: []const i64, actions: []const Action, view_id: i64, rule: core.selector.Rule };
+    const Input = struct {
+        routine_id: i64,
+        matches: []const i64,
+        actions: []const Action,
+        view_id: i64,
+        rule: core.selector.Rule,
+    };
     const input = try std.json.parseFromValueLeaky(Input, a, value, .{});
     var results: std.ArrayList(std.json.Value) = .empty;
     for (input.actions) |action| {
@@ -221,7 +318,14 @@ fn runRoutine(s: *service.Service, a: std.mem.Allocator, job: i64, value: std.js
                 return;
             }
         }
-        const result = actionResult(s, a, job, input, action) catch |err| try store.object(a, .{ .kind = @tagName(action.kind), .status = "failed", .error_name = @errorName(err) });
+        const result = actionResult(s, a, job, input, action) catch |err| try store.object(
+            a,
+            .{
+                .kind = @tagName(action.kind),
+                .status = "failed",
+                .error_name = @errorName(err),
+            },
+        );
         try results.append(a, result);
     }
     var failed = false;
@@ -233,6 +337,7 @@ fn runRoutine(s: *service.Service, a: std.mem.Allocator, job: i64, value: std.js
     try db.routineFinish(job, try text(a, results.items), if (failed) "failed" else "done", s.now());
     try db.jobFinish(job, if (failed) "failed" else "done", if (failed) "RoutineActionFailed" else null, s.now());
 }
+
 fn actionResult(s: *service.Service, a: std.mem.Allocator, job: i64, input: anytype, action: Action) !std.json.Value {
     const db = s.lockWriter();
     defer s.unlockWriter();
@@ -243,17 +348,48 @@ fn actionResult(s: *service.Service, a: std.mem.Allocator, job: i64, input: anyt
             var offset: usize = 0;
             while (offset < input.matches.len) {
                 const end = @min(offset + 1000, input.matches.len);
-                _ = try db.markMany(a, input.matches[offset..end], if (action.kind == .mark_read) .{ .read = true } else .{ .starred = true }, s.now());
+                _ = try db.markMany(
+                    a,
+                    input.matches[offset..end],
+                    if (action.kind == .mark_read) .{ .read = true } else .{ .starred = true },
+                    s.now(),
+                );
                 offset = end;
             }
         },
-        .tag => try db.routineTag(a, input.matches, action.tag.?, try std.fmt.allocPrint(a, "routine:{d}", .{input.routine_id}), s.now()),
+        .tag => try db.routineTag(
+            a,
+            input.matches,
+            action.tag.?,
+            try std.fmt.allocPrint(
+                a,
+                "routine:{d}",
+                .{input.routine_id},
+            ),
+            s.now(),
+        ),
         .notify => try db.featureEvent("routine.notify", input.routine_id, s.now()),
         .brief => {
             const recipe = try db.recipeGet(a, action.recipe_id, null);
-            const writing = Writing{ .view_id = input.view_id, .rule = input.rule, .recipe_id = action.recipe_id, .recipe_revision = recipe.object.get("revision").?.integer, .recipe_text = recipe.object.get("text").?.string, .writer = try runner.selected(s, a), .entry_ids = input.matches };
+            const writing = Writing{
+                .view_id = input.view_id,
+                .rule = input.rule,
+                .recipe_id = action.recipe_id,
+                .recipe_revision = recipe.object.get("revision").?.integer,
+                .recipe_text = recipe.object.get("text").?.string,
+                .writer = try runner.selected(s, a),
+                .entry_ids = input.matches,
+            };
             const queued = try db.jobQueue(a, "brief", try text(a, writing), s.now());
-            return store.object(a, .{ .kind = "brief", .status = "queued", .job_id = queued.object.get("id").?.integer, .count = input.matches.len });
+            return store.object(
+                a,
+                .{
+                    .kind = "brief",
+                    .status = "queued",
+                    .job_id = queued.object.get("id").?.integer,
+                    .count = input.matches.len,
+                },
+            );
         },
     }
     return store.object(a, .{ .kind = @tagName(action.kind), .status = "done", .count = input.matches.len });

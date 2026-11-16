@@ -182,6 +182,17 @@ print(json.dumps({"title":"Morning brief","sections":[{"heading":"News","claims"
 ''')
     command = subprocess.list2cmdline([sys.executable,writer,mode]) if os.name=="nt" else shlex.join([sys.executable,writer,mode])
     env = dict(os.environ,FYKE_HOME=home,FYKE_WRITER_CMD=command)
+    # Version-only adapters make probe counts observable without installed agents.
+    if os.name != "nt":
+        os.mkdir(home+"/bin")
+        for name in ("codex", "claude"):
+            executable = home+"/bin/"+name
+            with open(executable,"w") as f:
+                f.write("#!/bin/sh\nprintf 'probe\\n' >> " + shlex.quote(home+"/"+name+".probes") +
+                        "\nprintf 'fixture-version\\n'\n")
+            os.chmod(executable,0o700)
+        env["PATH"] = home+"/bin"+os.pathsep+env.get("PATH","")
+
     with open(home+"/config.json","w") as f: json.dump({"auto_poll":False,"full_text":False},f)
     client = None
     def cli(*args): return subprocess.run([FYKE,*args],env=env,capture_output=True,text=True,timeout=30)
@@ -235,7 +246,20 @@ print(json.dumps({"title":"Morning brief","sections":[{"heading":"News","claims"
         check("recipe history",len(call("recipes.history",id=1)["items"])==3 and call("recipes.get",id=1)["text"]==original["text"])
         writers=call("writers.list")["items"]
         check("writer detection",{w["writer"] for w in writers}=={"codex","claude"})
-        check("writer probe",call("writers.check",writer="codex")["writer"]=="codex")
+        check("writer probes timestamped",all(isinstance(w["checked_at"],int) for w in writers))
+        check("writer list cached",call("writers.list")["items"]==writers)
+        if os.name != "nt":
+            check("lazy probes run once",all(len(open(home+"/"+name+".probes").readlines())==1
+                                            for name in ("codex","claude")))
+        refreshed = call("writers.check",writer="codex")
+        check("writer probe",refreshed["writer"]=="codex")
+        cached = call("writers.list")["items"]
+        check("explicit check updates cache",next(w for w in cached if w["writer"]=="codex")["checked_at"]
+              ==refreshed["checked_at"])
+        if os.name != "nt":
+            check("only checked adapter reprobed",len(open(home+"/codex.probes").readlines())==2 and
+                  len(open(home+"/claude.probes").readlines())==1)
+
         call("config.set",ai={"writer":"claude"})
         check("writer setting",call("config.get")["ai"]["writer"]=="claude")
         job=wait_job(call,call("briefs.run",view_id=vid),"done")

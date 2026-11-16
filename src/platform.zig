@@ -53,3 +53,54 @@ pub fn keepStdHandlesFromChildren() void {
         _ = win.SetHandleInformation(h, win.handle_flag_inherit, 0);
     }
 }
+// The C runtime owns timezone rules. Windows struct tm has only the nine ISO C
+// fields; POSIX adds the UTC offset and zone pointer. Keep the ABI here so callers
+// cannot accidentally pass the POSIX layout to a Windows runtime function.
+const LocalTm = extern struct {
+    sec: c_int,
+    min: c_int,
+    hour: c_int,
+    mday: c_int,
+    mon: c_int,
+    year: c_int,
+    wday: c_int,
+    yday: c_int,
+    isdst: c_int,
+};
+const PosixTm = extern struct {
+    fields: LocalTm,
+    offset: c_long,
+    zone: ?[*:0]const u8,
+};
+extern fn localtime_r(*const i64, *PosixTm) ?*PosixTm;
+extern fn _localtime64_s(*LocalTm, *const i64) c_int;
+extern fn _mkgmtime64(*LocalTm) i64;
+
+/// Converts an epoch millisecond timestamp to the machine's local Gregorian date.
+/// Both scheduling and dry-run day boundaries use this conversion, including DST.
+/// Timestamps must be in the C runtime's supported range (1970 through 3000 on Windows).
+pub fn localCivil(ms: i64) @import("schedule.zig").Civil {
+    const seconds = @divFloor(ms, 1000);
+    var fields: LocalTm = undefined;
+    var offset: i64 = undefined;
+    if (comptime is_windows) {
+        const result = _localtime64_s(&fields, &seconds);
+        std.debug.assert(result == 0);
+        var utc_fields = fields;
+        offset = _mkgmtime64(&utc_fields) - seconds;
+    } else {
+        var tm: PosixTm = undefined;
+        const result = localtime_r(&seconds, &tm);
+        std.debug.assert(result != null);
+        fields = tm.fields;
+        offset = tm.offset;
+    }
+    return .{
+        .year = @as(i64, fields.year) + 1900,
+        .month = @intCast(fields.mon + 1),
+        .day = fields.mday,
+        .weekday = @intCast(fields.wday),
+        .minute = @intCast(fields.hour * 60 + fields.min),
+        .utc_offset = offset,
+    };
+}

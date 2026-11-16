@@ -468,9 +468,21 @@ pub const EntriesList = struct {
         const reader = s.lockReader();
         defer s.unlockReader();
         if (p.view_id != null or p.rule != null) {
-            if (p.view_id != null and p.rule != null or p.feed_id != null or p.folder_id != null or p.unread_only or p.starred_only or p.since_days != null) return error.ConflictingFilters;
+            if ((p.view_id != null and p.rule != null) or p.feed_id != null or p.folder_id != null or
+                p.unread_only or p.starred_only or p.since_days != null)
+            {
+                return error.ConflictingFilters;
+            }
             const rule = try selectionRule(reader, arena, p.view_id, p.rule);
-            const selected = try reader.selectRule(arena, rule, s.now(), limit, if (p.before) |text| try parseCursor(text) else null, null, null);
+            const selected = try reader.selectRule(
+                arena,
+                rule,
+                s.now(),
+                limit,
+                if (p.before) |text| try parseCursor(text) else null,
+                null,
+                null,
+            );
             return .{ .items = selected.items, .next_cursor = selected.next_cursor };
         }
         const rows = try reader.listEntries(arena, .{
@@ -491,6 +503,7 @@ pub const EntriesList = struct {
         return .{ .items = rows, .next_cursor = cursor };
     }
 
+    /// Decodes the shared keyset cursor so view previews use timeline paging.
     pub fn parseCursor(text: []const u8) !store.Cursor {
         const colon = std.mem.indexOfScalar(u8, text, ':') orelse return error.InvalidCursor;
         return .{
@@ -600,13 +613,34 @@ pub const EntriesMark = struct {
         .hidden = "True to hide, false to show again.",
         .later = "True to save for later, false to clear.",
     };
-    pub const Params = struct { id: i64, read: ?bool = null, starred: ?bool = null, hidden: ?bool = null, later: ?bool = null };
+
+    /// Typed request fields decoded and validated by the operation registry.
+    pub const Params = struct {
+        id: i64,
+        read: ?bool = null,
+        starred: ?bool = null,
+        hidden: ?bool = null,
+        later: ?bool = null,
+    };
+
+    /// Response shape shared by every transport.
     pub const Result = struct { ok: bool = true, previous: store.Db.Previous };
 
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
         const writer = s.lockWriter();
         defer s.unlockWriter();
-        const previous = try writer.markMany(arena, &.{p.id}, .{ .read = p.read, .starred = p.starred, .hidden = p.hidden, .later = p.later }, s.now());
+        const previous = try writer.markMany(
+            arena,
+            &.{p.id},
+            .{
+                .read = p.read,
+                .starred = p.starred,
+                .hidden = p.hidden,
+                .later = p.later,
+            },
+            s.now(),
+        );
         s.eventsChanged();
         return .{ .previous = previous[0] };
     }
@@ -869,7 +903,9 @@ pub const SchemaDescribe = struct {
     pub const Result = struct { schema: []const u8 };
 
     pub fn run(_: *Service, _: std.mem.Allocator, _: Params) !Result {
-        return .{ .schema = @embedFile("schema") ++ "\n" ++ @embedFile("schema2") ++ "\n" ++ @embedFile("schema3") ++ "\n" ++ @embedFile("schema4") ++ "\n" ++ @embedFile("schema5") ++ "\n" ++ @embedFile("schema6") ++ "\n" ++ @embedFile("schema7") };
+        return .{ .schema = @embedFile("schema") ++ "\n" ++ @embedFile("schema2") ++ "\n" ++
+            @embedFile("schema3") ++ "\n" ++ @embedFile("schema4") ++ "\n" ++
+            @embedFile("schema5") ++ "\n" ++ @embedFile("schema6") ++ "\n" ++ @embedFile("schema7") };
     }
 };
 
@@ -956,9 +992,67 @@ pub const DaemonHousekeep = struct {
 };
 
 pub const all = .{
-    ViewsList,    ViewsGet,    ViewsPreview,    ViewsPut,  ViewsMove,  ViewsRemove,   EntriesMarkMany, RecipesList,   RecipesGet, RecipesHistory, RecipesPut,  RecipesReset, WritersList,     WritersCheck, BriefsRun,   BriefsTry,   AskRun,     BriefsList,    BriefsGet,   AnswersGet,     JobsList,         JobsCancel, RoutinesList, RoutinesGet, RoutinesPut, RoutinesRemove, RoutinesDryRun, RoutinesRun, RoutinesRuns,
-    FeedsPreview, FoldersList, ConfigGet,       ConfigSet, FoldersAdd, FoldersRename, FoldersMove,     FoldersRemove, FeedsList,  FeedsAdd,       FeedsUpdate, FeedsRefresh, FeedsRefreshAll, FeedsQueue,   FeedsRemove, EntriesList, EntriesGet, EntriesSearch, EntriesMark, EntriesMarkAll, EntriesFetchFull, OpmlImport, OpmlExport,   StatsGet,    StorageGet,  StorageFree,    SchemaDescribe, DbQuery,     EventsSince,
-    OpsList,      DaemonStop,  DaemonHousekeep,
+    ViewsList,
+    ViewsGet,
+    ViewsPreview,
+    ViewsPut,
+    ViewsMove,
+    ViewsRemove,
+    EntriesMarkMany,
+    RecipesList,
+    RecipesGet,
+    RecipesHistory,
+    RecipesPut,
+    RecipesReset,
+    WritersList,
+    WritersCheck,
+    BriefsRun,
+    BriefsTry,
+    AskRun,
+    BriefsList,
+    BriefsGet,
+    AnswersGet,
+    JobsList,
+    JobsCancel,
+    RoutinesList,
+    RoutinesGet,
+    RoutinesPut,
+    RoutinesRemove,
+    RoutinesDryRun,
+    RoutinesRun,
+    RoutinesRuns,
+    FeedsPreview,
+    FoldersList,
+    ConfigGet,
+    ConfigSet,
+    FoldersAdd,
+    FoldersRename,
+    FoldersMove,
+    FoldersRemove,
+    FeedsList,
+    FeedsAdd,
+    FeedsUpdate,
+    FeedsRefresh,
+    FeedsRefreshAll,
+    FeedsQueue,
+    FeedsRemove,
+    EntriesList,
+    EntriesGet,
+    EntriesSearch,
+    EntriesMark,
+    EntriesMarkAll,
+    EntriesFetchFull,
+    OpmlImport,
+    OpmlExport,
+    StatsGet,
+    StorageGet,
+    StorageFree,
+    SchemaDescribe,
+    DbQuery,
+    EventsSince,
+    OpsList,
+    DaemonStop,
+    DaemonHousekeep,
 };
 
 pub const DispatchError = error{ UnknownMethod, TierDenied, InvalidParams };
@@ -1001,13 +1095,27 @@ test "the agent-facing read tier cannot change anything" {
     }
 }
 
+/// List saved views in sidebar order with exact total and unread counts.
 pub const ViewsList = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "views.list";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .read;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "List saved views in sidebar order with exact total and unread counts.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{};
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {};
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockReader();
         defer s.unlockReader();
@@ -1016,17 +1124,31 @@ pub const ViewsList = struct {
     }
 };
 
+/// Read a saved view, its rule and its sentence.
 pub const ViewsGet = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "views.get";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .read;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Read a saved view, its rule and its sentence.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .id = "Record id.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         id: i64,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockReader();
         defer s.unlockReader();
@@ -1034,46 +1156,85 @@ pub const ViewsGet = struct {
     }
 };
 
+/// Preview an unsaved rule with exact counts and keyset paging.
 pub const ViewsPreview = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "views.preview";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .read;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Preview an unsaved rule with exact counts and keyset paging.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .rule = "Rule object.",
         .limit = "Maximum results, up to 1000.",
         .before = "Keyset cursor from the previous page.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         rule: std.json.Value,
         limit: i64 = 50,
         before: ?[]const u8 = null,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockReader();
         defer s.unlockReader();
         const r = try selectionRule(db, a, null, p.rule);
-        return store.object(a, try db.selectRule(a, r, s.now(), std.math.clamp(p.limit, 1, 1000), if (p.before) |v| try EntriesList.parseCursor(v) else null, null, null));
+        return store.object(
+            a,
+            try db.selectRule(
+                a,
+                r,
+                s.now(),
+                std.math.clamp(p.limit, 1, 1000),
+                if (p.before) |v| try EntriesList.parseCursor(v) else null,
+                null,
+                null,
+            ),
+        );
     }
 };
 
+/// Create a view or update it if its revision still matches.
 pub const ViewsPut = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "views.put";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .manage;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Create a view or update it if its revision still matches.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .id = "Record id.",
         .name = "Name.",
         .rule = "Rule object.",
         .expected_revision = "Revision last read; required for updates.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         id: ?i64 = null,
         name: []const u8,
         rule: std.json.Value,
         expected_revision: ?i64 = null,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockWriter();
         defer s.unlockWriter();
@@ -1084,19 +1245,33 @@ pub const ViewsPut = struct {
     }
 };
 
+/// Set a saved view sidebar position.
 pub const ViewsMove = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "views.move";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .manage;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Set a saved view sidebar position.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .id = "Record id.",
         .position = "Position.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         id: i64,
         position: i64,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockWriter();
         defer s.unlockWriter();
@@ -1106,19 +1281,33 @@ pub const ViewsMove = struct {
     }
 };
 
+/// Remove a view; optionally detach and disable its routines.
 pub const ViewsRemove = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "views.remove";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .manage;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Remove a view; optionally detach and disable its routines.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .id = "Record id.",
         .detach = "Detach.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         id: i64,
         detach: bool = false,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockWriter();
         defer s.unlockWriter();
@@ -1127,38 +1316,78 @@ pub const ViewsRemove = struct {
     }
 };
 
+/// Set reading flags atomically and return every previous state for undo.
 pub const EntriesMarkMany = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "entries.mark_many";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .annotate;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Set reading flags atomically and return every previous state for undo.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .ids = "Up to 1000 entry ids; a missing id aborts every change.",
         .read = "Read.",
         .starred = "Starred.",
         .later = "Later.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         ids: []const i64,
         read: ?bool = null,
         starred: ?bool = null,
         later: ?bool = null,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockWriter();
         defer s.unlockWriter();
         defer s.eventsChanged();
-        return store.object(a, .{ .previous = try db.markMany(a, p.ids, .{ .read = p.read, .starred = p.starred, .later = p.later }, s.now()) });
+        return store.object(
+            a,
+            .{ .previous = try db.markMany(
+                a,
+                p.ids,
+                .{
+                    .read = p.read,
+                    .starred = p.starred,
+                    .later = p.later,
+                },
+                s.now(),
+            ) },
+        );
     }
 };
 
+/// List recipes and their current immutable revision text.
 pub const RecipesList = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "recipes.list";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .read;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "List recipes and their current immutable revision text.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{};
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {};
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockReader();
         defer s.unlockReader();
@@ -1167,19 +1396,33 @@ pub const RecipesList = struct {
     }
 };
 
+/// Read the current or a historical recipe revision.
 pub const RecipesGet = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "recipes.get";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .read;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Read the current or a historical recipe revision.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .id = "Record id.",
         .revision = "Immutable recipe revision.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         id: i64,
         revision: ?i64 = null,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockReader();
         defer s.unlockReader();
@@ -1187,17 +1430,31 @@ pub const RecipesGet = struct {
     }
 };
 
+/// List immutable recipe revisions, newest first.
 pub const RecipesHistory = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "recipes.history";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .read;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "List immutable recipe revisions, newest first.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .id = "Record id.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         id: i64,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockReader();
         defer s.unlockReader();
@@ -1205,10 +1462,18 @@ pub const RecipesHistory = struct {
     }
 };
 
+/// Save recipe text as a new immutable revision.
 pub const RecipesPut = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "recipes.put";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .manage;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Save recipe text as a new immutable revision.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .id = "Record id.",
         .name = "Name.",
@@ -1216,6 +1481,8 @@ pub const RecipesPut = struct {
         .note = "Note.",
         .expected_revision = "Revision last read; required for updates.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         id: ?i64 = null,
         name: []const u8,
@@ -1223,7 +1490,11 @@ pub const RecipesPut = struct {
         note: []const u8 = "",
         expected_revision: ?i64 = null,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockWriter();
         defer s.unlockWriter();
@@ -1234,61 +1505,120 @@ pub const RecipesPut = struct {
     }
 };
 
+/// Append the built-in recipe text as a new revision.
 pub const RecipesReset = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "recipes.reset";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .manage;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Append the built-in recipe text as a new revision.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .id = "Record id.",
         .expected_revision = "Revision last read; required for updates.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         id: i64,
         expected_revision: i64,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockWriter();
         defer s.unlockWriter();
         defer s.eventsChanged();
         const current = try db.recipeGet(a, p.id, null);
-        return db.recipePut(a, p.id, current.object.get("name").?.string, "", "Reset to built-in", p.expected_revision, true, s.now());
+        return db.recipePut(
+            a,
+            p.id,
+            current.object.get("name").?.string,
+            "",
+            "Reset to built-in",
+            p.expected_revision,
+            true,
+            s.now(),
+        );
     }
 };
 
+/// List cached writer probes and show the selected writer.
 pub const WritersList = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "writers.list";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .read;
-    pub const description = "Probe installed writers and show the selected writer.";
+
+    /// Public operation summary used by generated API discovery.
+    pub const description = "List cached writer probes and show the selected writer.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{};
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {};
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         _ = p;
         return @import("runner.zig").list(s, a);
     }
 };
 
+/// Probe a writer version and save the timestamped result.
 pub const WritersCheck = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "writers.check";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .manage;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Probe a writer version and save the timestamped result.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .writer = "Writer.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         writer: []const u8,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         return @import("runner.zig").check(s, a, p.writer);
     }
 };
 
+/// Queue a cited brief over a saved view or unsaved rule.
 pub const BriefsRun = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "briefs.run";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .manage;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Queue a cited brief over a saved view or unsaved rule.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .view_id = "Saved view id.",
         .rule = "Rule object.",
@@ -1296,6 +1626,8 @@ pub const BriefsRun = struct {
         .writer = "Writer.",
         .timeout_seconds = "Writer deadline in seconds, clamped to 1 through 600; default 180.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         view_id: ?i64 = null,
         rule: ?std.json.Value = null,
@@ -1303,16 +1635,28 @@ pub const BriefsRun = struct {
         writer: ?[]const u8 = null,
         timeout_seconds: i64 = 180,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         return queueWriting(s, a, p.view_id, p.rule, p.recipe_id, null, null, p.writer, p.timeout_seconds, false);
     }
 };
 
+/// Queue a recipe trial excluded from the brief listing.
 pub const BriefsTry = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "briefs.try";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .manage;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Queue a recipe trial excluded from the brief listing.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .view_id = "Saved view id.",
         .rule = "Rule object.",
@@ -1321,6 +1665,8 @@ pub const BriefsTry = struct {
         .timeout_seconds = "Writer deadline in seconds, clamped to 1 through 600; default 180.",
         .text = "Recipe Markdown, 1 through 64000 bytes.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         view_id: ?i64 = null,
         rule: ?std.json.Value = null,
@@ -1329,16 +1675,28 @@ pub const BriefsTry = struct {
         timeout_seconds: i64 = 180,
         text: []const u8,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         return queueWriting(s, a, p.view_id, p.rule, p.recipe_id, p.text, null, p.writer, p.timeout_seconds, true);
     }
 };
 
+/// Queue a cited answer to a question over a selection.
 pub const AskRun = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "ask.run";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .manage;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Queue a cited answer to a question over a selection.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .view_id = "Saved view id.",
         .rule = "Rule object.",
@@ -1347,6 +1705,8 @@ pub const AskRun = struct {
         .timeout_seconds = "Writer deadline in seconds, clamped to 1 through 600; default 180.",
         .question = "Question.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         view_id: ?i64 = null,
         rule: ?std.json.Value = null,
@@ -1355,24 +1715,42 @@ pub const AskRun = struct {
         timeout_seconds: i64 = 180,
         question: []const u8,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         if (p.question.len == 0 or p.question.len > 4000) return error.InvalidQuestion;
         return queueWriting(s, a, p.view_id, p.rule, p.recipe_id, null, p.question, p.writer, p.timeout_seconds, false);
     }
 };
 
+/// List published briefs, newest first.
 pub const BriefsList = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "briefs.list";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .read;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "List published briefs, newest first.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .limit = "Maximum results, up to 1000.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         limit: i64 = 50,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockReader();
         defer s.unlockReader();
@@ -1380,17 +1758,31 @@ pub const BriefsList = struct {
     }
 };
 
+/// Read a brief with blocks, citations and immutable provenance.
 pub const BriefsGet = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "briefs.get";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .read;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Read a brief with blocks, citations and immutable provenance.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .id = "Record id.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         id: i64,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockReader();
         defer s.unlockReader();
@@ -1398,17 +1790,31 @@ pub const BriefsGet = struct {
     }
 };
 
+/// Read an answer with blocks, citations and provenance.
 pub const AnswersGet = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "answers.get";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .read;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Read an answer with blocks, citations and provenance.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .id = "Record id.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         id: i64,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockReader();
         defer s.unlockReader();
@@ -1416,17 +1822,31 @@ pub const AnswersGet = struct {
     }
 };
 
+/// List running and recent background work for Activity.
 pub const JobsList = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "jobs.list";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .read;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "List running and recent background work for Activity.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .limit = "Maximum results, up to 1000.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         limit: i64 = 50,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockReader();
         defer s.unlockReader();
@@ -1434,17 +1854,31 @@ pub const JobsList = struct {
     }
 };
 
+/// Cancel queued work or stop its running writer.
 pub const JobsCancel = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "jobs.cancel";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .manage;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Cancel queued work or stop its running writer.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .id = "Record id.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         id: i64,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockWriter();
         defer s.unlockWriter();
@@ -1455,13 +1889,27 @@ pub const JobsCancel = struct {
     }
 };
 
+/// List routines with local-time scheduling state.
 pub const RoutinesList = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "routines.list";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .read;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "List routines with local-time scheduling state.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{};
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {};
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockReader();
         defer s.unlockReader();
@@ -1470,17 +1918,31 @@ pub const RoutinesList = struct {
     }
 };
 
+/// Read a routine definition and its next run.
 pub const RoutinesGet = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "routines.get";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .read;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Read a routine definition and its next run.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .id = "Record id.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         id: i64,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockReader();
         defer s.unlockReader();
@@ -1488,19 +1950,30 @@ pub const RoutinesGet = struct {
     }
 };
 
+/// Create or update a routine using a revision check.
 pub const RoutinesPut = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "routines.put";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .manage;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Create or update a routine using a revision check.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .id = "Record id.",
         .name = "Name.",
         .view_id = "Saved view id.",
-        .schedule = "Local schedule: kind manual, daily, weekdays or weekly; HH:MM time; weekly days are Sunday 0 through Saturday 6.",
+        .schedule = "Local schedule: kind manual, daily, weekdays or weekly; HH:MM time; weekly days " ++
+            "are Sunday 0 through Saturday 6.",
         .actions = "Array of actions: kind brief (recipe_id), notify, mark_read, star or tag (tag text).",
         .enabled = "Enabled.",
         .expected_revision = "Revision last read; required for updates.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         id: ?i64 = null,
         name: []const u8,
@@ -1510,7 +1983,11 @@ pub const RoutinesPut = struct {
         enabled: bool = true,
         expected_revision: ?i64 = null,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockWriter();
         defer s.unlockWriter();
@@ -1519,21 +1996,46 @@ pub const RoutinesPut = struct {
         _ = try db.viewGet(a, p.view_id);
         const schedule = try @import("schedule.zig").parse(a, try jsonText(a, p.schedule));
         try @import("features.zig").validateActions(a, p.actions);
-        return db.routinePut(a, p.id, p.name, p.view_id, try jsonText(a, schedule), try jsonText(a, p.actions), p.enabled, p.expected_revision, s.now(), try @import("features.zig").nextRun(schedule, s.now()));
+        return db.routinePut(
+            a,
+            p.id,
+            p.name,
+            p.view_id,
+            try jsonText(a, schedule),
+            try jsonText(a, p.actions),
+            p.enabled,
+            p.expected_revision,
+            s.now(),
+            try @import("features.zig").nextRun(schedule, s.now()),
+        );
     }
 };
 
+/// Delete a routine that has no running work.
 pub const RoutinesRemove = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "routines.remove";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .manage;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Delete a routine that has no running work.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .id = "Record id.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         id: i64,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockWriter();
         defer s.unlockWriter();
@@ -1543,17 +2045,31 @@ pub const RoutinesRemove = struct {
     }
 };
 
+/// Count matches over seven local calendar days without changing anything.
 pub const RoutinesDryRun = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "routines.dry_run";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .read;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Count matches over seven local calendar days without changing anything.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .id = "Record id.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         id: i64,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockReader();
         defer s.unlockReader();
@@ -1561,17 +2077,31 @@ pub const RoutinesDryRun = struct {
     }
 };
 
+/// Capture matching arrivals and queue a routine now.
 pub const RoutinesRun = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "routines.run";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .manage;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "Capture matching arrivals and queue a routine now.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .id = "Record id.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         id: i64,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockWriter();
         defer s.unlockWriter();
@@ -1580,19 +2110,33 @@ pub const RoutinesRun = struct {
     }
 };
 
+/// List captured matches and per-action routine results.
 pub const RoutinesRuns = struct {
+    /// Stable operation identifier shared by socket and MCP clients.
     pub const name = "routines.runs";
+
+    /// Minimum permission required before dispatching this operation.
     pub const tier: Tier = .read;
+
+    /// Public operation summary used by generated API discovery.
     pub const description = "List captured matches and per-action routine results.";
+
+    /// Parameter descriptions used to generate the agent-facing schema.
     pub const docs = .{
         .id = "Record id.",
         .limit = "Maximum results, up to 1000.",
     };
+
+    /// Typed request fields decoded and validated by the operation registry.
     pub const Params = struct {
         id: i64,
         limit: i64 = 50,
     };
+
+    /// Response shape shared by every transport.
     pub const Result = std.json.Value;
+
+    /// Executes the operation through daemon-owned state and storage locks.
     pub fn run(s: *Service, a: std.mem.Allocator, p: Params) !Result {
         const db = s.lockReader();
         defer s.unlockReader();
@@ -1603,9 +2147,11 @@ pub const RoutinesRuns = struct {
 fn validName(name: []const u8) !void {
     if (std.mem.trim(u8, name, " \t\r\n").len == 0 or name.len > 200) return error.InvalidName;
 }
+
 fn jsonText(a: std.mem.Allocator, value: anytype) ![]const u8 {
     return std.fmt.allocPrint(a, "{f}", .{std.json.fmt(value, .{})});
 }
+
 fn selectionRule(db: *store.Db, a: std.mem.Allocator, view_id: ?i64, rule: ?std.json.Value) !core.selector.Rule {
     if (view_id != null and rule != null) return error.ConflictingFilters;
     const value = if (view_id) |id| (try db.viewGet(a, id)).object.get("rule").? else rule orelse return .{};
@@ -1613,7 +2159,19 @@ fn selectionRule(db: *store.Db, a: std.mem.Allocator, view_id: ?i64, rule: ?std.
     try db.validateRule(a, result);
     return result;
 }
-fn queueWriting(s: *Service, a: std.mem.Allocator, view_id: ?i64, rule: ?std.json.Value, recipe_id: i64, text: ?[]const u8, question: ?[]const u8, writer: ?[]const u8, timeout: i64, preview: bool) !std.json.Value {
+
+fn queueWriting(
+    s: *Service,
+    a: std.mem.Allocator,
+    view_id: ?i64,
+    rule: ?std.json.Value,
+    recipe_id: i64,
+    text: ?[]const u8,
+    question: ?[]const u8,
+    writer: ?[]const u8,
+    timeout: i64,
+    preview: bool,
+) !std.json.Value {
     const db = s.lockWriter();
     defer s.unlockWriter();
     defer s.eventsChanged();
@@ -1624,6 +2182,16 @@ fn queueWriting(s: *Service, a: std.mem.Allocator, view_id: ?i64, rule: ?std.jso
     }
     const chosen = writer orelse try @import("runner.zig").selected(s, a);
     try @import("runner.zig").validateName(chosen);
-    const input = @import("features.zig").Writing{ .view_id = view_id, .rule = r, .recipe_id = recipe_id, .recipe_revision = recipe.object.get("revision").?.integer, .recipe_text = text orelse recipe.object.get("text").?.string, .question = question, .writer = chosen, .timeout_seconds = std.math.clamp(timeout, 1, 600), .preview = preview };
+    const input = @import("features.zig").Writing{
+        .view_id = view_id,
+        .rule = r,
+        .recipe_id = recipe_id,
+        .recipe_revision = recipe.object.get("revision").?.integer,
+        .recipe_text = text orelse recipe.object.get("text").?.string,
+        .question = question,
+        .writer = chosen,
+        .timeout_seconds = std.math.clamp(timeout, 1, 600),
+        .preview = preview,
+    };
     return db.jobQueue(a, if (question != null) "answer" else "brief", try jsonText(a, input), s.now());
 }

@@ -74,11 +74,19 @@ fn inputSchema(comptime Op: type) []const u8 {
         var required: []const u8 = "";
         for (info.field_names, info.field_types, info.field_attrs) |name, T, attrs| {
             if (properties.len != 0) properties = properties ++ ",";
-            properties = properties ++ "\"" ++ name ++ "\":{\"type\":\"" ++ (if (std.mem.eql(u8, name, "actions")) "array" else jsonType(T)) ++ "\"";
+            properties = properties ++ "\"" ++ name ++ "\":{\"type\":\"" ++ (if (std.mem.eql(
+                u8,
+                name,
+                "actions",
+            )) "array" else jsonType(T)) ++ "\"";
             if (@hasDecl(Op, "docs") and @hasField(@TypeOf(Op.docs), name)) {
                 properties = properties ++ ",\"description\":\"" ++ @field(Op.docs, name) ++ "\"";
             }
-            if (std.mem.eql(u8, name, "actions")) properties = properties ++ ",\"items\":{\"type\":\"object\"}" else if (jsonType(T)[0] == 'a') properties = properties ++ ",\"items\":{\"type\":\"integer\"}";
+            if (std.mem.eql(u8, name, "actions")) {
+                properties = properties ++ ",\"items\":{\"type\":\"object\"}";
+            } else if (jsonType(T)[0] == 'a') {
+                properties = properties ++ ",\"items\":{\"type\":\"integer\"}";
+            }
             properties = properties ++ "}";
             if (attrs.default_value_ptr == null) {
                 if (required.len != 0) required = required ++ ",";

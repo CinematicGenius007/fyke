@@ -285,9 +285,13 @@ one run. The worker checks schedules at startup, on relevant changes and at most
 
 Writer selection is stored with `config.set` using
 `{ "ai": { "writer": "codex" } }`, and is returned by `config.get`.
-`writers.list` probes installed commands on PATH with a five-second deadline;
-`writers.check` also records the probe and its timestamp under `ai.checks` in
-`config.json`. No model request is needed for either operation. A writer runs in
+Writer discovery is cached in memory for the daemon's lifetime. The first
+`writers.list` lazily probes each adapter once and returns `checked_at` (epoch
+milliseconds) with its availability and version. Later reads reuse those results;
+`writers.check` is the only operation that refreshes a probe. It updates the cache
+and persists the timestamped result under `ai.checks` in `config.json`. Restarting
+the daemon clears the in-memory cache. Each probe has a five-second deadline.
+No model request is needed for either operation. A writer runs in
 a temporary directory under the data directory, without Fyke MCP configuration.
 `FYKE_WRITER_CMD` is an owner-supplied shell command override; the prompt is still
 passed on stdin. Worker output is limited to 1 MiB, including diagnostics. Bad

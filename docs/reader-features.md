@@ -68,7 +68,7 @@ Tiers follow [api.md](api.md): `read` inspects, `annotate` changes reading state
 | `recipes.history` | read | Revisions with time and note |
 | `recipes.put` | manage | New revision; `expected_revision` mismatch fails with `kind: "revision_conflict"` and the current text |
 | `recipes.reset` | manage | Make the built-in text current again, as a new revision |
-| `writers.list` | read | Codex and Claude Code: found on `PATH`, version, selected |
+| `writers.list` | read | Codex and Claude Code: cached availability, version, checked time, selected |
 | `writers.check` | manage | Run the writer's version probe and record the result |
 | `briefs.run` | manage | Queue a brief for a view or rule, with a recipe; returns the job |
 | `briefs.try` | manage | Same, with unsaved recipe text; the result is not listed as a brief |
@@ -98,7 +98,8 @@ The writer must return JSON: `{"title": "...", "sections": [{"heading": "...", "
 
 `FYKE_WRITER_CMD` replaces the writer with any command that speaks the same contract. The tests use it with a stand-in written in Python.
 
-Codex uses `--output-schema` and `--output-last-message`; Claude runs with an empty explicit MCP configuration and no tools. `writers.check` saves a timestamped version probe under `ai.checks`. The owner selects a writer with `config.set` under `ai.writer`.
+Codex uses `--output-schema` and `--output-last-message`; Claude runs with an empty explicit MCP configuration and no tools. `writers.list` probes lazily once per daemon start and caches availability, version and `checked_at` in memory.
+`writers.check` refreshes one probe and saves its timestamped result under `ai.checks`. The owner selects a writer with `config.set` under `ai.writer`.
 
 Selection is bounded: at most 60 articles and 120 000 characters of text, newest first. A brief records how many matching articles were left out, and the GUI says so.
 
@@ -148,3 +149,23 @@ The GUI follows [design-rules.md](design-rules.md):
 | `tools/e2e_gui.py` | Key presses and clicks through each screen, with snapshots |
 
 The concrete operation parameters, defaults, result shapes and revision-conflict errors are documented in [api.md](api.md#views-writing-and-routines). Normalized address columns are indexed by host; measurements at the architecture's million-entry target are planned.
+
+### Measured
+
+On 2026-11-17, a MacBook Air with Apple M5 (10 cores), 24 GB RAM and macOS
+27.0.1 ran Zig 0.17.1's default Debug build. `tools/measure_views.py` ingested
+100,000 synthetic articles across 100 feeds through the daemon, then measured
+`views.list` over a persistent local socket with 10 views. All articles were
+unread. Each case used one initial request followed by 20 warm requests.
+
+| Rules in the 10 views | Matches per view | Initial | Warm p50 | Warm p95 | Warm max |
+|---|---:|---:|---:|---:|---:|
+| Exact article host | 1,000 | 17.99 ms | 12.89 ms | 18.83 ms | 22.14 ms |
+| All articles | 100,000 | 271.11 ms | 208.82 ms | 249.70 ms | 263.66 ms |
+
+Each view uses the same count query as an unsaved selection. Exact host rules
+can seek the normalized-host index. Unscoped rules still scan every matching
+entry for each view to compute exact total and unread counts; cost grows with
+both collection size and view count. These measurements do not establish a
+million-entry latency bound. Reproduce with
+`python3 tools/measure_views.py ./zig-out/bin/fyke`.

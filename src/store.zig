@@ -48,7 +48,15 @@ const SQLITE_DETACH = 25;
 
 pub const Error = error{ OutOfMemory, Sqlite };
 
-const migrations = [_][*:0]const u8{ @embedFile("schema"), @embedFile("schema2"), @embedFile("schema3"), @embedFile("schema4"), @embedFile("schema5"), @embedFile("schema6"), @embedFile("schema7") };
+const migrations = [_][*:0]const u8{
+    @embedFile("schema"),
+    @embedFile("schema2"),
+    @embedFile("schema3"),
+    @embedFile("schema4"),
+    @embedFile("schema5"),
+    @embedFile("schema6"),
+    @embedFile("schema7"),
+};
 
 pub const Feed = struct {
     id: i64,
@@ -85,6 +93,7 @@ pub const EntrySummary = struct {
     read: bool,
     starred: bool,
     later: bool = false,
+
     /// Matching text, from search only.
     snippet: ?[]const u8 = null,
     /// The start of the entry's text, for lists that show one.
@@ -326,9 +335,28 @@ pub const Db = struct {
         }
         var db: Db = .{ .handle = handle.? };
         errdefer db.close();
-        if (sqlite3_create_function_v2(db.handle, "rule_words", 1, 1 | 0x800, null, ruleWords, null, null, null) != 0) return error.Sqlite;
-        if (sqlite3_create_function_v2(db.handle, "article_host", 1, 1 | 0x800, null, articleHost, null, null, null) != 0) return error.Sqlite;
-        if (sqlite3_create_function_v2(db.handle, "article_path", 1, 1 | 0x800, null, articlePath, null, null, null) != 0) return error.Sqlite;
+        if (sqlite3_create_function_v2(
+            db.handle,
+            "article_host",
+            1,
+            1 | 0x800,
+            null,
+            articleHost,
+            null,
+            null,
+            null,
+        ) != 0) return error.Sqlite;
+        if (sqlite3_create_function_v2(
+            db.handle,
+            "article_path",
+            1,
+            1 | 0x800,
+            null,
+            articlePath,
+            null,
+            null,
+            null,
+        ) != 0) return error.Sqlite;
         try db.exec("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=5000;");
         switch (role) {
             .writer => try db.migrate(),
@@ -1048,7 +1076,9 @@ pub const Db = struct {
                 const stored = pointer[0..@intCast(sqlite3_column_bytes(lookup, 1))];
                 if (std.mem.eql(u8, stored, entry.content_hash)) continue;
                 try db.run(
-                    \\UPDATE entries SET url = ?2, article_host=article_host(?2),article_path=article_path(?2),canonical_url = ?3, title = ?4, author = ?5,
+                    \\UPDATE entries
+                    \\SET url = ?2, article_host=article_host(?2),article_path=article_path(?2),canonical_url = ?3,
+                    \\title = ?4, author = ?5,
                     \\  published_at = ?6, updated_at = ?7, content_blocks_json = ?8, content_text = ?9,
                     \\  content_hash = ?10, revision = revision + 1, full_status = NULL,
                     \\  full_attempts = 0, full_retry_at = NULL WHERE id = ?1
@@ -1063,7 +1093,8 @@ pub const Db = struct {
             const sort_at = @min(entry.published_at orelse entry.updated_at orelse now, now);
             try db.run(
                 \\INSERT INTO entries (feed_id, identity, url, canonical_url, title, author, published_at,
-                \\  updated_at, first_seen_at, sort_at, content_blocks_json, content_text, content_hash,article_host,article_path)
+                \\updated_at, first_seen_at, sort_at, content_blocks_json, content_text,
+                \\content_hash,article_host,article_path)
                 \\VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,article_host(?3),article_path(?3))
             , .{ feed_id, entry.identity, entry.url, entry.canonical_url, entry.title, entry.author, entry.published_at, entry.updated_at, now, sort_at, entry.content_blocks_json, entry.content_text, entry.content_hash });
             const id = sqlite3_last_insert_rowid(db.handle);
@@ -1282,9 +1313,15 @@ pub const Db = struct {
         if (marks.hidden) |hidden| {
             try db.run("UPDATE entry_state SET hidden_at = ?2 WHERE entry_id = ?1", .{ id, if (hidden) now else null });
         }
-        if (marks.later) |later| try db.run("UPDATE entry_state SET later_at=?2 WHERE entry_id=?1", .{ id, if (later) now else null });
+        if (marks.later) |later| try db.run(
+            \\UPDATE entry_state
+            \\SET later_at=?2
+            \\WHERE entry_id=?1
+        , .{ id, if (later) now else null });
         return true;
     }
+
+    /// Reads JSON-shaped rows, decoding columns ending in _json into structured values.
     pub fn featureRows(db: *Db, a: std.mem.Allocator, sql: [*:0]const u8, args: anytype) ![]const std.json.Value {
         const stmt = try db.prepare(sql, args);
         defer _ = sqlite3_finalize(stmt);
@@ -1303,64 +1340,215 @@ pub const Db = struct {
                     else => .{ .string = try columnText(stmt, col, a) },
                 };
                 if (std.mem.endsWith(u8, name, "_json") and value == .string) {
-                    try obj.put(a, try a.dupe(u8, name[0 .. name.len - 5]), try std.json.parseFromSliceLeaky(std.json.Value, a, value.string, .{}));
+                    try obj.put(
+                        a,
+                        try a.dupe(u8, name[0 .. name.len - 5]),
+                        try std.json.parseFromSliceLeaky(std.json.Value, a, value.string, .{}),
+                    );
                 } else try obj.put(a, try a.dupe(u8, name), value);
             }
             try rows.append(a, .{ .object = obj });
         }
         return rows.items;
     }
+
+    /// Appends a change notification inside the caller’s write transaction.
     pub fn featureEvent(db: *Db, kind: []const u8, id: i64, now: i64) !void {
-        try db.run("INSERT INTO events(at,type,subject_id) VALUES(?1,?2,?3)", .{ now, kind, id });
+        try db.run(
+            \\INSERT INTO events(at,type,subject_id)
+            \\VALUES(?1,?2,?3)
+        , .{ now, kind, id });
     }
+
+    /// Rejects feed and folder ids that no longer exist before executing a selection.
     pub fn validateRule(db: *Db, a: std.mem.Allocator, r: core.selector.Rule) !void {
-        const stmt = try db.prepare("SELECT EXISTS(SELECT 1 FROM json_each(?1) x WHERE NOT EXISTS(SELECT 1 FROM feeds WHERE id=x.value)),EXISTS(SELECT 1 FROM json_each(?2) x WHERE NOT EXISTS(SELECT 1 FROM folders WHERE id=x.value))", .{ try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(r.feeds, .{})}), try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(r.folders, .{})}) });
+        const stmt = try db.prepare(
+            \\SELECT EXISTS(SELECT 1
+            \\FROM json_each(?1) x
+            \\WHERE NOT EXISTS(SELECT 1
+            \\FROM feeds
+            \\WHERE id=x.value)),EXISTS(SELECT 1
+            \\FROM json_each(?2) x
+            \\WHERE NOT EXISTS(SELECT 1
+            \\FROM folders
+            \\WHERE id=x.value))
+        , .{
+            try std.fmt.allocPrint(
+                a,
+                "{f}",
+                .{std.json.fmt(r.feeds, .{})},
+            ),
+            try std.fmt.allocPrint(
+                a,
+                "{f}",
+                .{std.json.fmt(r.folders, .{})},
+            ),
+        });
         defer _ = sqlite3_finalize(stmt);
         if (sqlite3_step(stmt) != SQLITE_ROW) return error.Sqlite;
         if (sqlite3_column_int64(stmt, 0) != 0) return error.NoSuchFeed;
         if (sqlite3_column_int64(stmt, 1) != 0) return error.NoSuchFolder;
     }
+
+    /// Resolves source names and renders the selection through the pure selector module.
     pub fn ruleSentence(db: *Db, a: std.mem.Allocator, r: core.selector.Rule) ![]const u8 {
         var feeds_names: std.ArrayList(core.selector.Name) = .empty;
         var folders_names: std.ArrayList(core.selector.Name) = .empty;
-        for (try db.featureRows(a, "SELECT id,coalesce(title_override,title,url) AS name FROM feeds", .{})) |f| try feeds_names.append(a, .{ .id = f.object.get("id").?.integer, .name = f.object.get("name").?.string });
+        for (try db.featureRows(a,
+            \\SELECT id,coalesce(title_override,title,url) AS name
+            \\FROM feeds
+        , .{})) |f| try feeds_names.append(
+            a,
+            .{
+                .id = f.object.get("id").?.integer,
+                .name = f.object.get("name").?.string,
+            },
+        );
         for (try db.folders(a)) |f| try folders_names.append(a, .{ .id = f.id, .name = f.name });
         return core.selector.sentence(a, r, feeds_names.items, folders_names.items);
     }
+    // Parameters 1–5 are the normalized rule, FTS query, publication cutoff and
+    // arrival bounds. Paging uses 6–8; the separately chosen host predicate uses 9.
     const rule_from =
-        \\ FROM entries e JOIN feeds f ON f.id=e.feed_id LEFT JOIN entry_state s ON s.entry_id=e.id
+        \\ FROM entries e
+        \\ JOIN feeds f ON f.id = e.feed_id
+        \\ LEFT JOIN entry_state s ON s.entry_id = e.id
         \\ WHERE s.hidden_at IS NULL
-        \\ AND (json_array_length(?1,'$.feeds')+json_array_length(?1,'$.folders')=0
-        \\ OR e.feed_id IN (SELECT value FROM json_each(?1,'$.feeds'))
-        \\ OR f.folder_id IN (WITH RECURSIVE tree(id) AS (
-        \\ SELECT value FROM json_each(?1,'$.folders') UNION SELECT folders.id FROM folders JOIN tree ON folders.parent_id=tree.id) SELECT id FROM tree))
-        \\ AND (json_extract(?1,'$.state')='any' OR (json_extract(?1,'$.state')='unread' AND s.read_at IS NULL)
-        \\ OR (json_extract(?1,'$.state')='starred' AND s.starred_at IS NOT NULL)
-        \\ OR (json_extract(?1,'$.state')='later' AND s.later_at IS NOT NULL))
-        \\ AND (?2 IS NULL OR e.id IN (SELECT rowid FROM entries_fts WHERE entries_fts MATCH ?2))
-        \\ AND (?3 IS NULL OR e.sort_at>=?3) AND (?4 IS NULL OR e.first_seen_at>?4)
-        \\ AND (?5 IS NULL OR e.first_seen_at<=?5)
-        \\ AND ((json_extract(?1,'$.path_prefix') IS NULL AND json_array_length(?1,'$.exclude_path_prefix')=0)
-        \\ OR (e.article_path IS NOT NULL
-        \\ AND (json_extract(?1,'$.path_prefix') IS NULL OR json_extract(?1,'$.path_prefix')='/'
-        \\ OR e.article_path=json_extract(?1,'$.path_prefix') OR substr(e.article_path,1,length(json_extract(?1,'$.path_prefix'))+1)=json_extract(?1,'$.path_prefix')||'/')
-        \\ AND NOT EXISTS(SELECT 1 FROM json_each(?1,'$.exclude_path_prefix') x WHERE x.value='/' OR e.article_path=x.value OR substr(e.article_path,1,length(x.value)+1)=x.value||'/')))
+        \\   AND (
+        \\     json_array_length(?1, '$.feeds') + json_array_length(?1, '$.folders') = 0
+        \\     OR e.feed_id IN (SELECT value FROM json_each(?1, '$.feeds'))
+        \\     OR f.folder_id IN (
+        \\       WITH RECURSIVE tree(id) AS (
+        \\         SELECT value FROM json_each(?1, '$.folders')
+        \\         UNION
+        \\         SELECT folders.id
+        \\         FROM folders
+        \\         JOIN tree ON folders.parent_id = tree.id
+        \\       )
+        \\       SELECT id FROM tree
+        \\     )
+        \\   )
+        \\   AND (
+        \\     json_extract(?1, '$.state') = 'any'
+        \\     OR (json_extract(?1, '$.state') = 'unread' AND s.read_at IS NULL)
+        \\     OR (json_extract(?1, '$.state') = 'starred' AND s.starred_at IS NOT NULL)
+        \\     OR (json_extract(?1, '$.state') = 'later' AND s.later_at IS NOT NULL)
+        \\   )
+        \\   AND (?2 IS NULL OR e.id IN (SELECT rowid FROM entries_fts WHERE entries_fts MATCH ?2))
+        \\   AND (?3 IS NULL OR e.sort_at >= ?3)
+        \\   AND (?4 IS NULL OR e.first_seen_at > ?4)
+        \\   AND (?5 IS NULL OR e.first_seen_at <= ?5)
+        \\   AND (
+        \\     (json_extract(?1, '$.path_prefix') IS NULL AND json_array_length(?1, '$.exclude_path_prefix') = 0)
+        \\     OR (
+        \\       e.article_path IS NOT NULL
+        \\       AND (
+        \\         json_extract(?1, '$.path_prefix') IS NULL
+        \\         OR json_extract(?1, '$.path_prefix') = '/'
+        \\         OR e.article_path = json_extract(?1, '$.path_prefix')
+        \\         OR substr(e.article_path, 1, length(json_extract(?1, '$.path_prefix')) + 1)
+        \\           = json_extract(?1, '$.path_prefix') || '/'
+        \\       )
+        \\       AND NOT EXISTS (
+        \\         SELECT 1
+        \\         FROM json_each(?1, '$.exclude_path_prefix') x
+        \\         WHERE x.value = '/'
+        \\           OR e.article_path = x.value
+        \\           OR substr(e.article_path, 1, length(x.value) + 1) = x.value || '/'
+        \\       )
+        \\     )
+        \\   )
     ;
+
+    /// A keyset page with exact counts for the whole rule, independent of the page cursor.
     pub const Selection = struct { items: []const EntrySummary, total: i64, unread: i64, next_cursor: ?[]const u8 };
-    pub fn selectRule(db: *Db, a: std.mem.Allocator, r: core.selector.Rule, now: i64, limit: i64, before: ?Cursor, arrived_after: ?i64, arrived_until: ?i64) !Selection {
+    // Exact hosts use equality so SQLite can seek the normalized-host index.
+    fn ruleHost(r: core.selector.Rule) []const u8 {
+        return if (r.host == null)
+            \\ AND ?9 IS NULL
+        else if (r.subdomains)
+            \\ AND (e.article_host=?9
+            \\OR substr(e.article_host,-length(?9)-1)='.'||?9)
+        else
+            \\ AND e.article_host=?9
+        ;
+    }
+
+    const RuleCounts = struct { total: i64, unread: i64 };
+    // A single count path keeps sidebar badges and selection totals consistent.
+    fn countRule(
+        db: *Db,
+        a: std.mem.Allocator,
+        r: core.selector.Rule,
+        now: i64,
+        arrived_after: ?i64,
+        arrived_until: ?i64,
+    ) !RuleCounts {
         try db.validateRule(a, r);
         const json = try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(r, .{})});
         const match = try core.selector.fts(a, r);
         const since: ?i64 = if (r.within_days) |d| now - d * 86400000 else null;
-        const host_sql: []const u8 = if (r.host == null) " AND ?9 IS NULL" else if (r.subdomains) " AND (e.article_host=?9 OR substr(e.article_host,-length(?9)-1)='.'||?9)" else " AND e.article_host=?9";
-        const count_sql = try std.fmt.allocPrintSentinel(a, "SELECT count(*),coalesce(sum(s.read_at IS NULL),0){s}{s}", .{ rule_from, host_sql }, 0);
-        const count = try db.prepare(count_sql, .{ json, match, since, arrived_after, arrived_until, null, null, null, r.host });
+        const host_sql = ruleHost(r);
+        const count_sql = try std.fmt.allocPrintSentinel(a,
+            \\SELECT count(*),coalesce(sum(s.read_at IS NULL),0){s}{s}
+        , .{ rule_from, host_sql }, 0);
+        const count = try db.prepare(
+            count_sql,
+            .{
+                json,
+                match,
+                since,
+                arrived_after,
+                arrived_until,
+                null,
+                null,
+                null,
+                r.host,
+            },
+        );
         defer _ = sqlite3_finalize(count);
         if (sqlite3_step(count) != SQLITE_ROW) return error.Sqlite;
-        const total = sqlite3_column_int64(count, 0);
-        const unread = sqlite3_column_int64(count, 1);
-        const list_sql = try std.fmt.allocPrintSentinel(a, "SELECT e.id,e.feed_id,coalesce(f.title_override,f.title),e.title,e.url,e.sort_at,s.read_at IS NOT NULL,s.starred_at IS NOT NULL,substr(e.content_text,1,200),s.later_at IS NOT NULL{s}{s} AND (?6 IS NULL OR (e.sort_at,e.id)<(?6,?7)) ORDER BY e.sort_at DESC,e.id DESC LIMIT ?8", .{ rule_from, host_sql }, 0);
-        const stmt = try db.prepare(list_sql, .{ json, match, since, arrived_after, arrived_until, if (before) |c| c.sort_at else null, if (before) |c| c.id else null, limit, r.host });
+        return .{ .total = sqlite3_column_int64(count, 0), .unread = sqlite3_column_int64(count, 1) };
+    }
+
+    /// Counts and pages one rule with shared predicates, excluding hidden entries.
+    pub fn selectRule(
+        db: *Db,
+        a: std.mem.Allocator,
+        r: core.selector.Rule,
+        now: i64,
+        limit: i64,
+        before: ?Cursor,
+        arrived_after: ?i64,
+        arrived_until: ?i64,
+    ) !Selection {
+        const counts = try db.countRule(a, r, now, arrived_after, arrived_until);
+        const json = try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(r, .{})});
+        const match = try core.selector.fts(a, r);
+        const since: ?i64 = if (r.within_days) |d| now - d * 86400000 else null;
+        const host_sql = ruleHost(r);
+        const list_sql = try std.fmt.allocPrintSentinel(a,
+            \\SELECT e.id,e.feed_id,coalesce(f.title_override,f.title),e.title,e.url,e.sort_at,s.read_at IS NOT
+            \\NULL,s.starred_at IS NOT NULL,substr(e.content_text,1,200),s.later_at IS NOT NULL{s}{s}
+            \\AND (?6 IS NULL
+            \\OR (e.sort_at,e.id)<(?6,?7))
+            \\ORDER BY e.sort_at DESC,e.id DESC
+            \\LIMIT ?8
+        , .{ rule_from, host_sql }, 0);
+        const stmt = try db.prepare(
+            list_sql,
+            .{
+                json,
+                match,
+                since,
+                arrived_after,
+                arrived_until,
+                if (before) |c| c.sort_at else null,
+                if (before) |c| c.id else null,
+                limit,
+                r.host,
+            },
+        );
         defer _ = sqlite3_finalize(stmt);
         var rows: std.ArrayList(EntrySummary) = .empty;
         while (true) {
@@ -1371,53 +1559,90 @@ pub const Db = struct {
             row.later = sqlite3_column_int64(stmt, 9) != 0;
             try rows.append(a, row);
         }
-        const cursor = if (rows.items.len > 0 and rows.items.len == limit) try std.fmt.allocPrint(a, "{d}:{d}", .{ rows.items[rows.items.len - 1].sort_at, rows.items[rows.items.len - 1].id }) else null;
-        return .{ .items = rows.items, .total = total, .unread = unread, .next_cursor = cursor };
+        const cursor = if (rows.items.len > 0 and rows.items.len == limit) try std.fmt.allocPrint(
+            a,
+            "{d}:{d}",
+            .{
+                rows.items[rows.items.len - 1].sort_at,
+                rows.items[rows.items.len - 1].id,
+            },
+        ) else null;
+        return .{ .items = rows.items, .total = counts.total, .unread = counts.unread, .next_cursor = cursor };
     }
+
+    /// Loads a saved definition and its human-readable selection sentence.
     pub fn viewGet(db: *Db, a: std.mem.Allocator, id: i64) !std.json.Value {
-        const rows = try db.featureRows(a, "SELECT * FROM views WHERE id=?1", .{id});
+        const rows = try db.featureRows(a,
+            \\SELECT *
+            \\FROM views
+            \\WHERE id=?1
+        , .{id});
         if (rows.len == 0) return error.NoSuchView;
         var row = rows[0];
-        const r = try core.selector.parse(a, try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(row.object.get("rule").?, .{})}));
+        const r = try core.selector.parse(
+            a,
+            try std.fmt.allocPrint(
+                a,
+                "{f}",
+                .{std.json.fmt(row.object.get("rule").?, .{})},
+            ),
+        );
         try row.object.put(a, "sentence", .{ .string = try db.ruleSentence(a, r) });
         return row;
     }
-    fn viewPredicate() []const u8 {
-        @setEvalBranchQuota(100000);
-        const start = std.mem.indexOf(u8, rule_from, "WHERE").? + 5;
-        const input = rule_from[start..];
-        var result: []const u8 = "";
-        var i: usize = 0;
-        while (i < input.len) {
-            if (input[i] == '?' and i + 1 < input.len) {
-                result = result ++ switch (input[i + 1]) {
-                    '1' => "v.rule_json",
-                    '2' => "v.words",
-                    '3' => "(CASE WHEN json_extract(v.rule_json,'$.within_days') IS NOT NULL THEN ?1-json_extract(v.rule_json,'$.within_days')*86400000 END)",
-                    '4', '5' => "NULL",
-                    else => unreachable,
-                };
-                i += 2;
-            } else {
-                result = result ++ input[i .. i + 1];
-                i += 1;
-            }
-        }
-        return result;
-    }
+
+    /// Counts each saved rule through the same query planner path as an unsaved rule.
+    /// In particular, an exact host condition can seek entries_article_host.
     pub fn viewsList(db: *Db, a: std.mem.Allocator, now: i64) ![]const std.json.Value {
-        const rows = try db.featureRows(a, "WITH rules AS MATERIALIZED (SELECT views.*,rule_words(rule_json) AS words FROM views),counts AS (SELECT v.id,count(*) AS total,sum(s.read_at IS NULL) AS unread FROM rules v CROSS JOIN entries e JOIN feeds f ON f.id=e.feed_id LEFT JOIN entry_state s ON s.entry_id=e.id WHERE " ++ comptime viewPredicate() ++ " AND (json_extract(v.rule_json,'$.host') IS NULL OR e.article_host=json_extract(v.rule_json,'$.host') OR (json_extract(v.rule_json,'$.subdomains') AND substr(e.article_host,-length(json_extract(v.rule_json,'$.host'))-1)='.'||json_extract(v.rule_json,'$.host'))) GROUP BY v.id) SELECT v.*,coalesce(c.total,0) AS total,coalesce(c.unread,0) AS unread FROM views v LEFT JOIN counts c ON c.id=v.id ORDER BY v.position,v.id", .{now});
+        const rows = try db.featureRows(a,
+            \\SELECT *
+            \\FROM views
+            \\ORDER BY position,id
+        , .{});
         var feed_names: std.ArrayList(core.selector.Name) = .empty;
         var folder_names: std.ArrayList(core.selector.Name) = .empty;
-        for (try db.featureRows(a, "SELECT id,coalesce(title_override,title,url) AS name FROM feeds", .{})) |f| try feed_names.append(a, .{ .id = f.object.get("id").?.integer, .name = f.object.get("name").?.string });
+        for (try db.featureRows(a,
+            \\SELECT id,coalesce(title_override,title,url) AS name
+            \\FROM feeds
+        , .{})) |f| try feed_names.append(
+            a,
+            .{
+                .id = f.object.get("id").?.integer,
+                .name = f.object.get("name").?.string,
+            },
+        );
         for (try db.folders(a)) |f| try folder_names.append(a, .{ .id = f.id, .name = f.name });
         for (@constCast(rows)) |*row| {
-            const r = try core.selector.parse(a, try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(row.object.get("rule").?, .{})}));
-            try row.object.put(a, "sentence", .{ .string = try core.selector.sentence(a, r, feed_names.items, folder_names.items) });
+            const r = try core.selector.parse(
+                a,
+                try std.fmt.allocPrint(
+                    a,
+                    "{f}",
+                    .{std.json.fmt(row.object.get("rule").?, .{})},
+                ),
+            );
+            const counts = try db.countRule(a, r, now, null, null);
+            try row.object.put(a, "total", .{ .integer = counts.total });
+            try row.object.put(a, "unread", .{ .integer = counts.unread });
+            try row.object.put(
+                a,
+                "sentence",
+                .{ .string = try core.selector.sentence(a, r, feed_names.items, folder_names.items) },
+            );
         }
         return rows;
     }
-    pub fn viewPut(db: *Db, a: std.mem.Allocator, id: ?i64, name: []const u8, rule: []const u8, expected: ?i64, now: i64) !std.json.Value {
+
+    /// Creates or revises a view atomically, returning a conflict if its revision changed.
+    pub fn viewPut(
+        db: *Db,
+        a: std.mem.Allocator,
+        id: ?i64,
+        name: []const u8,
+        rule: []const u8,
+        expected: ?i64,
+        now: i64,
+    ) !std.json.Value {
         try db.validateRule(a, try core.selector.parse(a, rule));
         try db.begin();
         errdefer db.rollback();
@@ -1428,27 +1653,46 @@ pub const Db = struct {
                 try db.commit();
                 return conflict(a, current);
             }
-            try db.run("UPDATE views SET name=?2,rule_json=?3,revision=revision+1,updated_at=?4 WHERE id=?1", .{ v, name, rule, now });
+            try db.run(
+                \\UPDATE views
+                \\SET name=?2,rule_json=?3,revision=revision+1,updated_at=?4
+                \\WHERE id=?1
+            , .{ v, name, rule, now });
             result_id = v;
         } else {
-            try db.run("INSERT INTO views(name,rule_json,created_at,updated_at) VALUES(?1,?2,?3,?3)", .{ name, rule, now });
+            try db.run(
+                \\INSERT INTO views(name,rule_json,created_at,updated_at)
+                \\VALUES(?1,?2,?3,?3)
+            , .{ name, rule, now });
             result_id = sqlite3_last_insert_rowid(db.handle);
         }
         try db.featureEvent("view.changed", result_id, now);
         try db.commit();
         return db.viewGet(a, result_id);
     }
+
+    /// Updates sidebar order and emits the view change in the same transaction.
     pub fn viewMove(db: *Db, id: i64, position: i64, now: i64) !void {
         try db.begin();
         errdefer db.rollback();
-        try db.run("UPDATE views SET position=?2 WHERE id=?1", .{ id, position });
+        try db.run(
+            \\UPDATE views
+            \\SET position=?2
+            \\WHERE id=?1
+        , .{ id, position });
         if (sqlite3_changes(db.handle) == 0) return error.NoSuchView;
         try db.featureEvent("view.changed", id, now);
         try db.commit();
     }
+
+    /// Refuses referenced views unless detaching also disables their routines.
     pub fn viewRemove(db: *Db, a: std.mem.Allocator, id: i64, detach: bool, now: i64) !std.json.Value {
         _ = try db.viewGet(a, id);
-        const refs = try db.featureRows(a, "SELECT id FROM routines WHERE view_id=?1", .{id});
+        const refs = try db.featureRows(a,
+            \\SELECT id
+            \\FROM routines
+            \\WHERE view_id=?1
+        , .{id});
         if (refs.len != 0 and !detach) {
             const ids = try a.alloc(i64, refs.len);
             for (refs, 0..) |ref, i| ids[i] = ref.object.get("id").?.integer;
@@ -1456,25 +1700,68 @@ pub const Db = struct {
         }
         try db.begin();
         errdefer db.rollback();
-        try db.run("UPDATE routines SET enabled=0,view_id=NULL WHERE view_id=?1", .{id});
-        try db.run("DELETE FROM views WHERE id=?1", .{id});
+        try db.run(
+            \\UPDATE routines
+            \\SET enabled=0,view_id=NULL
+            \\WHERE view_id=?1
+        , .{id});
+        try db.run(
+            \\DELETE
+            \\FROM views
+            \\WHERE id=?1
+        , .{id});
         try db.featureEvent("view.changed", id, now);
         try db.commit();
         return object(a, .{ .ok = true });
     }
+
+    /// Loads immutable recipe text at the requested revision or the current revision.
     pub fn recipeGet(db: *Db, a: std.mem.Allocator, id: i64, revision: ?i64) !std.json.Value {
-        const rows = try db.featureRows(a, "SELECT r.id,r.name,r.builtin_text IS NOT NULL AS builtin,v.revision,v.text,v.note,v.created_at FROM recipes r JOIN recipe_revisions v ON v.recipe_id=r.id AND v.revision=coalesce(?2,r.revision) WHERE r.id=?1", .{ id, revision });
+        const rows = try db.featureRows(a,
+            \\SELECT r.id,r.name,r.builtin_text IS NOT NULL AS builtin,v.revision,v.text,v.note,v.created_at
+            \\FROM recipes r
+            \\JOIN recipe_revisions v ON v.recipe_id=r.id
+            \\AND v.revision=coalesce(?2,r.revision)
+            \\WHERE r.id=?1
+        , .{ id, revision });
         if (rows.len == 0) return error.NoSuchRecipe;
         return rows[0];
     }
+
+    /// Lists recipes with their current immutable text for the recipe picker.
     pub fn recipesList(db: *Db, a: std.mem.Allocator) ![]const std.json.Value {
-        return db.featureRows(a, "SELECT r.id,r.name,r.revision,r.builtin_text IS NOT NULL AS builtin,v.text,v.note,v.created_at FROM recipes r JOIN recipe_revisions v ON v.recipe_id=r.id AND v.revision=r.revision ORDER BY r.id", .{});
+        return db.featureRows(a,
+            \\SELECT r.id,r.name,r.revision,r.builtin_text IS NOT NULL AS builtin,v.text,v.note,v.created_at
+            \\FROM recipes r
+            \\JOIN recipe_revisions v ON v.recipe_id=r.id
+            \\AND v.revision=r.revision
+            \\ORDER BY r.id
+        , .{});
     }
+
+    /// Lists immutable revisions newest first without discarding earlier instructions.
     pub fn recipeHistory(db: *Db, a: std.mem.Allocator, id: i64) ![]const std.json.Value {
         _ = try db.recipeGet(a, id, null);
-        return db.featureRows(a, "SELECT * FROM recipe_revisions WHERE recipe_id=?1 ORDER BY revision DESC", .{id});
+        return db.featureRows(a,
+            \\SELECT *
+            \\FROM recipe_revisions
+            \\WHERE recipe_id=?1
+            \\ORDER BY revision DESC
+        , .{id});
     }
-    pub fn recipePut(db: *Db, a: std.mem.Allocator, id: ?i64, name: []const u8, text: []const u8, note: []const u8, expected: ?i64, reset: bool, now: i64) !std.json.Value {
+
+    /// Appends a recipe revision atomically and checks the caller’s expected revision.
+    pub fn recipePut(
+        db: *Db,
+        a: std.mem.Allocator,
+        id: ?i64,
+        name: []const u8,
+        text: []const u8,
+        note: []const u8,
+        expected: ?i64,
+        reset: bool,
+        now: i64,
+    ) !std.json.Value {
         try db.begin();
         errdefer db.rollback();
         var result_id: i64 = undefined;
@@ -1490,106 +1777,252 @@ pub const Db = struct {
             rev += 1;
             result_id = v;
             if (reset) {
-                const row = try db.featureRows(a, "SELECT builtin_text FROM recipes WHERE id=?1", .{v});
+                const row = try db.featureRows(a,
+                    \\SELECT builtin_text
+                    \\FROM recipes
+                    \\WHERE id=?1
+                , .{v});
                 const val = row[0].object.get("builtin_text").?;
                 if (val != .string) return error.NotBuiltin;
                 body = val.string;
             }
-            try db.run("UPDATE recipes SET name=?2,revision=?3 WHERE id=?1", .{ v, name, rev });
+            try db.run(
+                \\UPDATE recipes
+                \\SET name=?2,revision=?3
+                \\WHERE id=?1
+            , .{ v, name, rev });
         } else {
             if (reset) return error.NoSuchRecipe;
-            try db.run("INSERT INTO recipes(name,created_at) VALUES(?1,?2)", .{ name, now });
+            try db.run(
+                \\INSERT INTO recipes(name,created_at)
+                \\VALUES(?1,?2)
+            , .{ name, now });
             result_id = sqlite3_last_insert_rowid(db.handle);
         }
-        try db.run("INSERT INTO recipe_revisions(recipe_id,revision,text,note,created_at) VALUES(?1,?2,?3,?4,?5)", .{ result_id, rev, body, note, now });
+        try db.run(
+            \\INSERT INTO recipe_revisions(recipe_id,revision,text,note,created_at)
+            \\VALUES(?1,?2,?3,?4,?5)
+        , .{ result_id, rev, body, note, now });
         try db.featureEvent("recipe.changed", result_id, now);
         try db.commit();
         return db.recipeGet(a, result_id, null);
     }
+
+    /// Reading flags captured before a bulk write so clients can construct an undo.
     pub const Previous = struct { id: i64, read: bool, starred: bool, later: bool, hidden: bool };
+
+    /// Applies explicit flags atomically and returns previous states for every entry.
     pub fn markMany(db: *Db, a: std.mem.Allocator, ids: []const i64, marks: Marks, now: i64) ![]const Previous {
         if (ids.len > 1000) return error.TooManyEntries;
         const json = try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(ids, .{})});
         try db.begin();
         errdefer db.rollback();
-        const rows = try db.featureRows(a, "SELECT e.id,s.read_at IS NOT NULL AS read,s.starred_at IS NOT NULL AS starred,s.later_at IS NOT NULL AS later,s.hidden_at IS NOT NULL AS hidden FROM json_each(?1) requested LEFT JOIN entries e ON e.id=requested.value LEFT JOIN entry_state s ON s.entry_id=e.id ORDER BY requested.key", .{json});
+        const rows = try db.featureRows(a,
+            \\SELECT e.id,s.read_at IS NOT NULL AS read,s.starred_at IS NOT NULL AS starred,s.later_at IS NOT
+            \\NULL AS later,s.hidden_at IS NOT NULL AS hidden
+            \\FROM json_each(?1) requested
+            \\LEFT JOIN entries e ON e.id=requested.value
+            \\LEFT JOIN entry_state s ON s.entry_id=e.id
+            \\ORDER BY requested.key
+        , .{json});
         var old: std.ArrayList(Previous) = .empty;
         for (rows) |row| {
             const o = row.object;
             if (o.get("id").? == .null) return error.NoSuchEntry;
-            try old.append(a, .{ .id = o.get("id").?.integer, .read = o.get("read").?.integer != 0, .starred = o.get("starred").?.integer != 0, .later = o.get("later").?.integer != 0, .hidden = o.get("hidden").?.integer != 0 });
+            try old.append(
+                a,
+                .{
+                    .id = o.get("id").?.integer,
+                    .read = o.get("read").?.integer != 0,
+                    .starred = o.get("starred").?.integer != 0,
+                    .later = o.get("later").?.integer != 0,
+                    .hidden = o.get("hidden").?.integer != 0,
+                },
+            );
         }
-        try db.run("INSERT OR IGNORE INTO entry_state(entry_id) SELECT value FROM json_each(?1)", .{json});
-        try db.run("UPDATE entry_state SET read_at=CASE WHEN ?2 IS NULL THEN read_at WHEN ?2 THEN ?6 END,starred_at=CASE WHEN ?3 IS NULL THEN starred_at WHEN ?3 THEN ?6 END,later_at=CASE WHEN ?4 IS NULL THEN later_at WHEN ?4 THEN ?6 END,hidden_at=CASE WHEN ?5 IS NULL THEN hidden_at WHEN ?5 THEN ?6 END WHERE entry_id IN (SELECT value FROM json_each(?1))", .{ json, marks.read, marks.starred, marks.later, marks.hidden, now });
-        try db.run("INSERT INTO events(at,type,subject_id) SELECT ?2,'entry.state',value FROM json_each(?1) GROUP BY value", .{ json, now });
+        try db.run(
+            \\INSERT
+            \\OR IGNORE INTO entry_state(entry_id) SELECT value
+            \\FROM json_each(?1)
+        , .{json});
+        try db.run(
+            \\UPDATE entry_state
+            \\SET read_at=CASE WHEN ?2 IS NULL THEN read_at WHEN ?2 THEN ?6 END,starred_at=CASE WHEN ?3 IS NULL
+            \\THEN starred_at WHEN ?3 THEN ?6 END,later_at=CASE WHEN ?4 IS NULL THEN later_at WHEN ?4 THEN ?6
+            \\END,hidden_at=CASE WHEN ?5 IS NULL THEN hidden_at WHEN ?5 THEN ?6 END
+            \\WHERE entry_id IN (SELECT value
+            \\FROM json_each(?1))
+        , .{ json, marks.read, marks.starred, marks.later, marks.hidden, now });
+        try db.run(
+            \\INSERT INTO events(at,type,subject_id) SELECT ?2,'entry.state',value
+            \\FROM json_each(?1)
+            \\GROUP BY value
+        , .{ json, now });
         try db.commit();
         return old.items;
     }
+
+    /// Lists recent durable work for Activity with decoded input and progress fields.
     pub fn jobsList(db: *Db, a: std.mem.Allocator, limit: i64) ![]const std.json.Value {
-        return db.featureRows(a, "SELECT j.*,a.id AS artifact_id FROM jobs j LEFT JOIN artifacts a ON a.job_id=j.id ORDER BY j.created_at DESC,j.id DESC LIMIT ?1", .{limit});
+        return db.featureRows(a,
+            \\SELECT j.*,a.id AS artifact_id
+            \\FROM jobs j
+            \\LEFT JOIN artifacts a ON a.job_id=j.id
+            \\ORDER BY j.created_at DESC,j.id DESC
+            \\LIMIT ?1
+        , .{limit});
     }
+
+    /// Persisted lifecycle states used by workers and cancellation checks.
     pub const JobStatus = enum { queued, running, done, failed, cancelled };
+
+    /// Reads only the lifecycle state for frequent subprocess cancellation checks.
     pub fn jobStatus(db: *Db, id: i64) !JobStatus {
-        const stmt = try db.prepare("SELECT status FROM jobs WHERE id=?1", .{id});
+        const stmt = try db.prepare(
+            \\SELECT status
+            \\FROM jobs
+            \\WHERE id=?1
+        , .{id});
         defer _ = sqlite3_finalize(stmt);
         if (sqlite3_step(stmt) != SQLITE_ROW) return error.NoSuchJob;
         const value = sqlite3_column_text(stmt, 0) orelse return error.Sqlite;
         return std.meta.stringToEnum(JobStatus, value[0..@intCast(sqlite3_column_bytes(stmt, 0))]) orelse error.Sqlite;
     }
+
+    /// Loads one durable job, failing if its identity is unknown.
     pub fn jobGet(db: *Db, a: std.mem.Allocator, id: i64) !std.json.Value {
-        const rows = try db.featureRows(a, "SELECT j.*,a.id AS artifact_id FROM jobs j LEFT JOIN artifacts a ON a.job_id=j.id WHERE j.id=?1", .{id});
+        const rows = try db.featureRows(a,
+            \\SELECT j.*,a.id AS artifact_id
+            \\FROM jobs j
+            \\LEFT JOIN artifacts a ON a.job_id=j.id
+            \\WHERE j.id=?1
+        , .{id});
         if (rows.len == 0) return error.NoSuchJob;
         return rows[0];
     }
+
+    /// Persists queued input and its change event in one transaction.
     pub fn jobQueue(db: *Db, a: std.mem.Allocator, stage: []const u8, input: []const u8, now: i64) !std.json.Value {
         try db.begin();
         errdefer db.rollback();
-        try db.run("INSERT INTO jobs(stage,input_json,created_at) VALUES(?1,?2,?3)", .{ stage, input, now });
+        try db.run(
+            \\INSERT INTO jobs(stage,input_json,created_at)
+            \\VALUES(?1,?2,?3)
+        , .{ stage, input, now });
         const id = sqlite3_last_insert_rowid(db.handle);
         try db.featureEvent("job.changed", id, now);
         try db.commit();
         return db.jobGet(a, id);
     }
+
+    /// Records a terminal result without overwriting an explicit cancellation.
     pub fn jobFinish(db: *Db, id: i64, status: []const u8, reason: ?[]const u8, now: i64) !void {
         try db.begin();
         errdefer db.rollback();
-        if (std.mem.eql(u8, status, "cancelled")) try db.run("UPDATE routine_runs SET status='cancelled',finished_at=?2 WHERE job_id=?1 AND EXISTS(SELECT 1 FROM jobs WHERE id=?1 AND status='queued')", .{ id, now });
-        try db.run("UPDATE jobs SET status=?2,error=?3,finished_at=?4,lease_until=NULL WHERE id=?1 AND status IN ('queued','running')", .{ id, status, reason, now });
+        if (std.mem.eql(u8, status, "cancelled")) try db.run(
+            \\UPDATE routine_runs
+            \\SET status='cancelled',finished_at=?2
+            \\WHERE job_id=?1
+            \\AND EXISTS(SELECT 1
+            \\FROM jobs
+            \\WHERE id=?1
+            \\AND status='queued')
+        , .{ id, now });
+        try db.run(
+            \\UPDATE jobs
+            \\SET status=?2,error=?3,finished_at=?4,lease_until=NULL
+            \\WHERE id=?1
+            \\AND status IN ('queued','running')
+        , .{ id, status, reason, now });
         if (sqlite3_changes(db.handle) > 0) {
             try db.featureEvent("job.changed", id, now);
             try db.completeRoutineBrief(id, status, null, reason, now);
         }
         try db.commit();
     }
+
+    /// Atomically takes the oldest queued job for the serial feature worker.
     pub fn jobClaim(db: *Db, a: std.mem.Allocator, now: i64) !?std.json.Value {
         try db.begin();
         errdefer db.rollback();
-        const rows = try db.featureRows(a, "SELECT * FROM jobs WHERE status='queued' AND run_after<=?1 ORDER BY id LIMIT 1", .{now});
+        const rows = try db.featureRows(a,
+            \\SELECT *
+            \\FROM jobs
+            \\WHERE status='queued'
+            \\AND run_after<=?1
+            \\ORDER BY id
+            \\LIMIT 1
+        , .{now});
         if (rows.len == 0) {
             try db.commit();
             return null;
         }
         const id = rows[0].object.get("id").?.integer;
-        try db.run("UPDATE jobs SET status='running',attempts=attempts+1,lease_until=?2 WHERE id=?1", .{ id, now + 1260000 });
+        try db.run(
+            \\UPDATE jobs
+            \\SET status='running',attempts=attempts+1,lease_until=?2
+            \\WHERE id=?1
+        , .{ id, now + 1260000 });
         try db.featureEvent("job.changed", id, now);
         try db.commit();
         return rows[0];
     }
+
+    /// Requeues interrupted work so durable jobs resume after a daemon restart.
     pub fn recoverJobs(db: *Db, now: i64) !void {
         try db.begin();
         errdefer db.rollback();
-        try db.run("UPDATE jobs SET status='queued',lease_until=NULL WHERE status='running'", .{});
-        try db.run("INSERT INTO events(at,type,subject_id) SELECT ?1,'job.changed',id FROM jobs WHERE status='queued'", .{now});
+        try db.run(
+            \\UPDATE jobs
+            \\SET status='queued',lease_until=NULL
+            \\WHERE status='running'
+        , .{});
+        try db.run(
+            \\INSERT INTO events(at,type,subject_id) SELECT ?1,'job.changed',id
+            \\FROM jobs
+            \\WHERE status='queued'
+        , .{now});
         try db.commit();
     }
+
+    /// Lists published briefs, excluding recipe trials from the reading destination.
     pub fn artifactsList(db: *Db, a: std.mem.Allocator, limit: i64) ![]const std.json.Value {
-        return db.featureRows(a, "SELECT id,title,created_at,writer,recipe_id,recipe_revision,input_count,omitted_count,view_id FROM artifacts WHERE kind='digest' AND preview=0 ORDER BY created_at DESC,id DESC LIMIT ?1", .{limit});
+        return db.featureRows(a,
+            \\SELECT id,title,created_at,writer,recipe_id,recipe_revision,input_count,omitted_count,view_id
+            \\FROM artifacts
+            \\WHERE kind='digest'
+            \\AND preview=0
+            \\ORDER BY created_at DESC,id DESC
+            \\LIMIT ?1
+        , .{limit});
     }
+
+    /// Loads cited blocks and the immutable recipe and source provenance.
     pub fn artifactGet(db: *Db, a: std.mem.Allocator, id: i64, kind: []const u8) !std.json.Value {
-        const rows = try db.featureRows(a, "SELECT a.*,coalesce(json_extract(j.input_json,'$.recipe_text'),v.text) AS recipe_text,r.name AS recipe_name,w.name AS view_name FROM artifacts a LEFT JOIN jobs j ON j.id=a.job_id LEFT JOIN recipe_revisions v ON v.recipe_id=a.recipe_id AND v.revision=a.recipe_revision LEFT JOIN recipes r ON r.id=a.recipe_id LEFT JOIN views w ON w.id=a.view_id WHERE a.id=?1 AND a.kind=?2", .{ id, kind });
+        const rows = try db.featureRows(a,
+            \\SELECT a.*,coalesce(json_extract(j.input_json,'$.recipe_text'),v.text) AS recipe_text,
+            \\  r.name AS recipe_name,w.name AS view_name
+            \\FROM artifacts a
+            \\LEFT JOIN jobs j ON j.id=a.job_id
+            \\LEFT JOIN recipe_revisions v ON v.recipe_id=a.recipe_id
+            \\AND v.revision=a.recipe_revision
+            \\LEFT JOIN recipes r ON r.id=a.recipe_id
+            \\LEFT JOIN views w ON w.id=a.view_id
+            \\WHERE a.id=?1
+            \\AND a.kind=?2
+        , .{ id, kind });
         if (rows.len == 0) return error.NoSuchArtifact;
         var row = rows[0];
-        const sources = try db.featureRows(a, "SELECT e.id,e.title,e.url,e.sort_at,coalesce(f.title_override,f.title) AS feed_title,substr(e.content_text,1,200) AS snippet,s.read_at IS NOT NULL AS read FROM artifact_sources src JOIN entries e ON e.id=src.entry_id JOIN feeds f ON f.id=e.feed_id LEFT JOIN entry_state s ON s.entry_id=e.id WHERE src.artifact_id=?1 ORDER BY e.id", .{id});
+        const sources = try db.featureRows(a,
+            \\SELECT e.id,e.title,e.url,e.sort_at,coalesce(f.title_override,f.title) AS
+            \\feed_title,substr(e.content_text,1,200) AS snippet,s.read_at IS NOT NULL AS read
+            \\FROM artifact_sources src
+            \\JOIN entries e ON e.id=src.entry_id
+            \\JOIN feeds f ON f.id=e.feed_id
+            \\LEFT JOIN entry_state s ON s.entry_id=e.id
+            \\WHERE src.artifact_id=?1
+            \\ORDER BY e.id
+        , .{id});
         for (@constCast(sources), 0..) |*source, i| try source.object.put(a, "number", .{ .integer = @intCast(i + 1) });
         if (row.object.get("citations")) |raw| {
             try row.object.put(a, "output", raw);
@@ -1620,15 +2053,41 @@ pub const Db = struct {
         try row.object.put(a, "blocks", row.object.get("body_blocks").?);
         return row;
     }
+
+    /// Lists routine definitions with their persisted next occurrence.
     pub fn routinesList(db: *Db, a: std.mem.Allocator) ![]const std.json.Value {
-        return db.featureRows(a, "SELECT * FROM routines ORDER BY id", .{});
+        return db.featureRows(a,
+            \\SELECT *
+            \\FROM routines
+            \\ORDER BY id
+        , .{});
     }
+
+    /// Loads one routine with decoded schedule and action definitions.
     pub fn routineGet(db: *Db, a: std.mem.Allocator, id: i64) !std.json.Value {
-        const rows = try db.featureRows(a, "SELECT * FROM routines WHERE id=?1", .{id});
+        const rows = try db.featureRows(a,
+            \\SELECT *
+            \\FROM routines
+            \\WHERE id=?1
+        , .{id});
         if (rows.len == 0) return error.NoSuchRoutine;
         return rows[0];
     }
-    pub fn routinePut(db: *Db, a: std.mem.Allocator, id: ?i64, name: []const u8, view: i64, schedule: []const u8, actions: []const u8, enabled: bool, expected: ?i64, now: i64, next: ?i64) !std.json.Value {
+
+    /// Saves a revision-checked routine and its precomputed next occurrence atomically.
+    pub fn routinePut(
+        db: *Db,
+        a: std.mem.Allocator,
+        id: ?i64,
+        name: []const u8,
+        view: i64,
+        schedule: []const u8,
+        actions: []const u8,
+        enabled: bool,
+        expected: ?i64,
+        now: i64,
+        next: ?i64,
+    ) !std.json.Value {
         try db.begin();
         errdefer db.rollback();
         var result_id: i64 = undefined;
@@ -1638,88 +2097,289 @@ pub const Db = struct {
                 try db.commit();
                 return conflict(a, current);
             }
-            try db.run("UPDATE routines SET name=?2,view_id=?3,schedule_json=?4,actions_json=?5,enabled=?6,revision=revision+1,next_run_at=?7 WHERE id=?1", .{ v, name, view, schedule, actions, enabled, next });
+            try db.run(
+                \\UPDATE routines
+                \\SET
+                \\name=?2,view_id=?3,schedule_json=?4,actions_json=?5,enabled=?6,revision=revision+1,next_run_at=?7
+                \\WHERE id=?1
+            , .{ v, name, view, schedule, actions, enabled, next });
             result_id = v;
         } else {
-            try db.run("INSERT INTO routines(name,view_id,schedule_json,actions_json,enabled,created_at,next_run_at) VALUES(?1,?2,?3,?4,?5,?6,?7)", .{ name, view, schedule, actions, enabled, now, next });
+            try db.run(
+                \\INSERT INTO routines(name,view_id,schedule_json,actions_json,enabled,created_at,next_run_at)
+                \\VALUES(?1,?2,?3,?4,?5,?6,?7)
+            , .{ name, view, schedule, actions, enabled, now, next });
             result_id = sqlite3_last_insert_rowid(db.handle);
         }
         try db.featureEvent("routine.changed", result_id, now);
         try db.commit();
         return db.routineGet(a, result_id);
     }
+
+    /// Deletes an idle routine while preserving the no-overlap invariant.
     pub fn routineRemove(db: *Db, a: std.mem.Allocator, id: i64, now: i64) !void {
         _ = try db.routineGet(a, id);
-        const active = try db.featureRows(a, "SELECT id FROM routine_runs WHERE routine_id=?1 AND status='running'", .{id});
+        const active = try db.featureRows(a,
+            \\SELECT id
+            \\FROM routine_runs
+            \\WHERE routine_id=?1
+            \\AND status='running'
+        , .{id});
         if (active.len != 0) return error.RoutineBusy;
         try db.begin();
         errdefer db.rollback();
-        try db.run("DELETE FROM routines WHERE id=?1", .{id});
+        try db.run(
+            \\DELETE
+            \\FROM routines
+            \\WHERE id=?1
+        , .{id});
         try db.featureEvent("routine.changed", id, now);
         try db.commit();
     }
+
+    /// Lists captured matches and per-action results for recent routine runs.
     pub fn routineRuns(db: *Db, a: std.mem.Allocator, id: i64, limit: i64) ![]const std.json.Value {
         _ = try db.routineGet(a, id);
-        return db.featureRows(a, "SELECT * FROM routine_runs WHERE routine_id=?1 ORDER BY id DESC LIMIT ?2", .{ id, limit });
+        return db.featureRows(a,
+            \\SELECT *
+            \\FROM routine_runs
+            \\WHERE routine_id=?1
+            \\ORDER BY id DESC
+            \\LIMIT ?2
+        , .{ id, limit });
     }
+
+    /// Finds enabled due routines that have no running occurrence.
     pub fn dueRoutines(db: *Db, a: std.mem.Allocator, now: i64) ![]const std.json.Value {
-        return db.featureRows(a, "SELECT * FROM routines WHERE enabled=1 AND view_id IS NOT NULL AND next_run_at<=?1 AND NOT EXISTS(SELECT 1 FROM routine_runs rr WHERE rr.routine_id=routines.id AND rr.status='running') ORDER BY next_run_at", .{now});
+        return db.featureRows(a,
+            \\SELECT *
+            \\FROM routines
+            \\WHERE enabled=1
+            \\AND view_id IS NOT NULL
+            \\AND next_run_at<=?1
+            \\AND NOT EXISTS(SELECT 1
+            \\FROM routine_runs rr
+            \\WHERE rr.routine_id=routines.id
+            \\AND rr.status='running')
+            \\ORDER BY next_run_at
+        , .{now});
     }
-    pub fn routineStart(db: *Db, a: std.mem.Allocator, id: i64, matches: []const i64, actions: std.json.Value, now: i64, next: ?i64, view_id: i64, rule: core.selector.Rule) !std.json.Value {
+
+    /// Atomically captures one run, queues its job and coalesces missed occurrences.
+    pub fn routineStart(
+        db: *Db,
+        a: std.mem.Allocator,
+        id: i64,
+        matches: []const i64,
+        actions: std.json.Value,
+        now: i64,
+        next: ?i64,
+        view_id: i64,
+        rule: core.selector.Rule,
+    ) !std.json.Value {
         try db.begin();
         errdefer db.rollback();
-        const active = try db.featureRows(a, "SELECT id FROM routine_runs WHERE routine_id=?1 AND status='running'", .{id});
+        const active = try db.featureRows(a,
+            \\SELECT id
+            \\FROM routine_runs
+            \\WHERE routine_id=?1
+            \\AND status='running'
+        , .{id});
         if (active.len != 0) return error.RoutineBusy;
-        const input = try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(.{ .routine_id = id, .matches = matches, .actions = actions, .view_id = view_id, .rule = rule }, .{})});
-        try db.run("INSERT INTO jobs(stage,input_json,created_at) VALUES('routine',?1,?2)", .{ input, now });
+        const input = try std.fmt.allocPrint(
+            a,
+            "{f}",
+            .{std.json.fmt(
+                .{
+                    .routine_id = id,
+                    .matches = matches,
+                    .actions = actions,
+                    .view_id = view_id,
+                    .rule = rule,
+                },
+                .{},
+            )},
+        );
+        try db.run(
+            \\INSERT INTO jobs(stage,input_json,created_at)
+            \\VALUES('routine',?1,?2)
+        , .{ input, now });
         const job = sqlite3_last_insert_rowid(db.handle);
-        try db.run("INSERT INTO routine_runs(routine_id,job_id,started_at,matches_json) VALUES(?1,?2,?3,?4)", .{ id, job, now, try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(matches, .{})}) });
-        try db.run("UPDATE routines SET next_run_at=?2 WHERE id=?1", .{ id, next });
+        try db.run(
+            \\INSERT INTO routine_runs(routine_id,job_id,started_at,matches_json)
+            \\VALUES(?1,?2,?3,?4)
+        , .{ id, job, now, try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(matches, .{})}) });
+        try db.run(
+            \\UPDATE routines
+            \\SET next_run_at=?2
+            \\WHERE id=?1
+        , .{ id, next });
         try db.featureEvent("job.changed", job, now);
         try db.featureEvent("routine.changed", id, now);
         try db.commit();
         return db.jobGet(a, job);
     }
+
+    /// Records per-action outcomes for the run associated with a durable job.
     pub fn routineFinish(db: *Db, job: i64, results: []const u8, status: []const u8, now: i64) !void {
         try db.begin();
         errdefer db.rollback();
-        try db.run("UPDATE routines SET last_run_at=(SELECT started_at FROM routine_runs WHERE job_id=?1) WHERE id=(SELECT routine_id FROM routine_runs WHERE job_id=?1)", .{job});
-        try db.run("UPDATE routine_runs SET results_json=?2,status=?3,finished_at=?4 WHERE job_id=?1", .{ job, results, status, now });
+        try db.run(
+            \\UPDATE routines
+            \\SET last_run_at=(SELECT started_at
+            \\FROM routine_runs
+            \\WHERE job_id=?1)
+            \\WHERE id=(SELECT routine_id
+            \\FROM routine_runs
+            \\WHERE job_id=?1)
+        , .{job});
+        try db.run(
+            \\UPDATE routine_runs
+            \\SET results_json=?2,status=?3,finished_at=?4
+            \\WHERE job_id=?1
+        , .{ job, results, status, now });
         try db.commit();
     }
-    pub fn routineTag(db: *Db, a: std.mem.Allocator, ids: []const i64, tag: []const u8, source: []const u8, now: i64) !void {
+
+    /// Adds a tag to captured matches and records the routine as its actor.
+    pub fn routineTag(
+        db: *Db,
+        a: std.mem.Allocator,
+        ids: []const i64,
+        tag: []const u8,
+        source: []const u8,
+        now: i64,
+    ) !void {
         try db.begin();
         errdefer db.rollback();
-        try db.run("INSERT OR IGNORE INTO tags(name) VALUES(?1)", .{tag});
+        try db.run(
+            \\INSERT
+            \\OR IGNORE INTO tags(name)
+            \\VALUES(?1)
+        , .{tag});
         const json = try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(ids, .{})});
-        try db.run("INSERT OR IGNORE INTO entry_tags(entry_id,tag_id,source) SELECT x.value,t.id,?3 FROM json_each(?1) x JOIN tags t ON t.name=?2", .{ json, tag, source });
-        try db.run("INSERT INTO events(at,type,subject_id) SELECT ?2,'entry.state',value FROM json_each(?1)", .{ json, now });
+        try db.run(
+            \\INSERT
+            \\OR IGNORE INTO entry_tags(entry_id,tag_id,source) SELECT x.value,t.id,?3
+            \\FROM json_each(?1) x
+            \\JOIN tags t ON t.name=?2
+        , .{ json, tag, source });
+        try db.run(
+            \\INSERT INTO events(at,type,subject_id) SELECT ?2,'entry.state',value
+            \\FROM json_each(?1)
+        , .{ json, now });
         try db.commit();
     }
-    fn completeRoutineBrief(db: *Db, job: i64, status: []const u8, artifact: ?i64, reason: ?[]const u8, now: i64) !void {
-        try db.run("UPDATE routine_runs SET results_json=(SELECT json_group_array(json(CASE WHEN json_extract(value,'$.job_id')=?1 THEN json_set(value,'$.status',?2,'$.artifact_id',?3,'$.error',?4) ELSE value END)) FROM json_each(results_json)) WHERE EXISTS(SELECT 1 FROM json_each(results_json) WHERE json_extract(value,'$.job_id')=?1)", .{ job, status, artifact, reason });
-        try db.run("INSERT INTO events(at,type,subject_id) SELECT ?2,'routine.changed',routine_id FROM routine_runs WHERE EXISTS(SELECT 1 FROM json_each(results_json) WHERE json_extract(value,'$.job_id')=?1)", .{ job, now });
+
+    fn completeRoutineBrief(
+        db: *Db,
+        job: i64,
+        status: []const u8,
+        artifact: ?i64,
+        reason: ?[]const u8,
+        now: i64,
+    ) !void {
+        try db.run(
+            \\UPDATE routine_runs
+            \\SET results_json=(SELECT json_group_array(json(CASE WHEN json_extract(value,'$.job_id')=?1 THEN
+            \\json_set(value,'$.status',?2,'$.artifact_id',?3,'$.error',?4) ELSE value END))
+            \\FROM json_each(results_json))
+            \\WHERE EXISTS(SELECT 1
+            \\FROM json_each(results_json)
+            \\WHERE json_extract(value,'$.job_id')=?1)
+        , .{ job, status, artifact, reason });
+        try db.run(
+            \\INSERT INTO events(at,type,subject_id) SELECT ?2,'routine.changed',routine_id
+            \\FROM routine_runs
+            \\WHERE EXISTS(SELECT 1
+            \\FROM json_each(results_json)
+            \\WHERE json_extract(value,'$.job_id')=?1)
+        , .{ job, now });
     }
-    pub fn artifactSave(db: *Db, a: std.mem.Allocator, job: i64, input: anytype, output: anytype, body: []const u8, ids: []const i64, omitted: i64, now: i64) !i64 {
+
+    /// Commits cited output, source ids, provenance and completion as one transaction.
+    pub fn artifactSave(
+        db: *Db,
+        a: std.mem.Allocator,
+        job: i64,
+        input: anytype,
+        output: anytype,
+        body: []const u8,
+        ids: []const i64,
+        omitted: i64,
+        now: i64,
+    ) !i64 {
         try db.begin();
         errdefer db.rollback();
         const current = try db.jobGet(a, job);
         if (!std.mem.eql(u8, current.object.get("status").?.string, "running")) return error.JobCancelled;
-        try db.run("INSERT INTO artifacts(kind,job_id,producer,title,body_blocks_json,created_at,recipe_id,recipe_revision,template_version,view_id,rule_json,writer,input_count,omitted_count,question,preview,citations_json) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,1,?9,?10,?3,?11,?12,?13,?14,?15)", .{ if (input.question != null) @as([]const u8, "answer") else "digest", job, input.writer, output.title, body, now, input.recipe_id, input.recipe_revision, input.view_id, try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(input.rule, .{})}), ids.len, omitted, input.question, input.preview, try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(output, .{})}) });
+        try db.run(
+            \\INSERT INTO
+            \\artifacts(kind,job_id,producer,title,body_blocks_json,created_at,recipe_id,recipe_revision,
+            \\  template_version,view_id,rule_json,writer,input_count,omitted_count,question,preview,citations_json)
+            \\VALUES(?1,?2,?3,?4,?5,?6,?7,?8,1,?9,?10,?3,?11,?12,?13,?14,?15)
+        , .{
+            if (input.question != null) @as([]const u8, "answer") else "digest",
+            job,
+            input.writer,
+            output.title,
+            body,
+            now,
+            input.recipe_id,
+            input.recipe_revision,
+            input.view_id,
+            try std.fmt.allocPrint(
+                a,
+                "{f}",
+                .{std.json.fmt(input.rule, .{})},
+            ),
+            ids.len,
+            omitted,
+            input.question,
+            input.preview,
+            try std.fmt.allocPrint(
+                a,
+                "{f}",
+                .{std.json.fmt(output, .{})},
+            ),
+        });
         const id = sqlite3_last_insert_rowid(db.handle);
-        try db.run("INSERT INTO artifact_sources(artifact_id,entry_id) SELECT ?1,value FROM json_each(?2)", .{ id, try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(ids, .{})}) });
+        try db.run(
+            \\INSERT INTO artifact_sources(artifact_id,entry_id) SELECT ?1,value
+            \\FROM json_each(?2)
+        , .{ id, try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(ids, .{})}) });
         try db.completeRoutineBrief(job, "done", id, null, now);
         try db.featureEvent("artifact.new", id, now);
-        try db.run("UPDATE jobs SET status='done',finished_at=?2,lease_until=NULL WHERE id=?1", .{ job, now });
+        try db.run(
+            \\UPDATE jobs
+            \\SET status='done',finished_at=?2,lease_until=NULL
+            \\WHERE id=?1
+        , .{ job, now });
         try db.featureEvent("job.changed", job, now);
         try db.commit();
         return id;
     }
+
+    /// Loads source text in the captured order so citations keep stable entry identities.
     pub fn writerSources(db: *Db, a: std.mem.Allocator, ids: []const i64) ![]const @import("writer.zig").Source {
-        const rows = try db.featureRows(a, "SELECT id,coalesce(title,'') AS title,substr(content_text,1,120000) AS text FROM entries WHERE id IN (SELECT value FROM json_each(?1)) ORDER BY sort_at DESC,id DESC LIMIT 60", .{try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(ids, .{})})});
+        const rows = try db.featureRows(a,
+            \\SELECT id,coalesce(title,'') AS title,substr(content_text,1,120000) AS text
+            \\FROM entries
+            \\WHERE id IN (SELECT value
+            \\FROM json_each(?1))
+            \\ORDER BY sort_at DESC,id DESC
+            \\LIMIT 60
+        , .{try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(ids, .{})})});
         var sources: std.ArrayList(@import("writer.zig").Source) = .empty;
         for (rows) |row| {
-            try sources.append(a, .{ .id = row.object.get("id").?.integer, .title = row.object.get("title").?.string, .text = row.object.get("text").?.string });
+            try sources.append(
+                a,
+                .{
+                    .id = row.object.get("id").?.integer,
+                    .title = row.object.get("title").?.string,
+                    .text = row.object.get("text").?.string,
+                },
+            );
         }
         return sources.items;
     }
@@ -2167,39 +2827,38 @@ test "a future date cannot outrank the present" {
     try testing.expectEqual(2000, (try db.listEntries(arena.allocator(), .{}))[0].sort_at);
 }
 
+/// Builds an arena-owned JSON value from a typed response without borrowing temporary text.
 pub fn object(a: std.mem.Allocator, value: anytype) !std.json.Value {
-    return std.json.parseFromSliceLeaky(std.json.Value, a, try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(value, .{})}), .{});
+    return std.json.parseFromSliceLeaky(
+        std.json.Value,
+        a,
+        try std.fmt.allocPrint(
+            a,
+            "{f}",
+            .{std.json.fmt(value, .{})},
+        ),
+        .{},
+    );
 }
+
 fn conflict(a: std.mem.Allocator, current: std.json.Value) !std.json.Value {
     return object(a, .{ .kind = "revision_conflict", .current = current });
 }
 const Context = opaque {};
 const SqlValue = opaque {};
-extern fn sqlite3_create_function_v2(*Handle, [*:0]const u8, c_int, c_int, ?*anyopaque, ?*const fn (?*Context, c_int, [*]?*SqlValue) callconv(.c) void, ?*anyopaque, ?*anyopaque, ?*anyopaque) c_int;
+extern fn sqlite3_create_function_v2(
+    *Handle,
+    [*:0]const u8,
+    c_int,
+    c_int,
+    ?*anyopaque,
+    ?*const fn (?*Context, c_int, [*]?*SqlValue) callconv(.c) void,
+    ?*anyopaque,
+    ?*anyopaque,
+    ?*anyopaque,
+) c_int;
 extern fn sqlite3_value_text(?*SqlValue) ?[*:0]const u8;
-extern fn sqlite3_result_int(?*Context, c_int) void;
 extern fn sqlite3_result_error_nomem(?*Context) void;
-fn ruleWords(ctx: ?*Context, _: c_int, values: [*]?*SqlValue) callconv(.c) void {
-    var arena: std.heap.ArenaAllocator = .init(std.heap.page_allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    const json = sqlite3_value_text(values[0]) orelse {
-        sqlite3_result_null(ctx);
-        return;
-    };
-    const r = core.selector.parse(a, std.mem.span(json)) catch {
-        sqlite3_result_error_nomem(ctx);
-        return;
-    };
-    const result = (core.selector.fts(a, r) catch {
-        sqlite3_result_error_nomem(ctx);
-        return;
-    }) orelse {
-        sqlite3_result_null(ctx);
-        return;
-    };
-    sqlite3_result_text(ctx, result.ptr, @intCast(result.len), @ptrFromInt(std.math.maxInt(usize)));
-}
 
 test "reader views, rule counts, revisions and bulk undo are transactional" {
     var db: Db = try .open(":memory:", .writer);
@@ -2218,16 +2877,46 @@ test "reader views, rule counts, revisions and bulk undo are transactional" {
     var three = sample("c", "Addressless", "3");
     three.url = null;
     _ = try db.ingest(feed, &.{ one, two, three }, 2000);
-    const rule = try core.selector.parse(a, try std.fmt.allocPrint(a, "{{\"folders\":[{d}],\"host\":\"example.com\",\"subdomains\":true,\"path_prefix\":\"/blog/\",\"exclude_path_prefix\":[\"/blog/jobs/\"]}}", .{folder}));
+    const rule = try core.selector.parse(
+        a,
+        try std.fmt.allocPrint(
+            a,
+            "{{\"folders\":[{d}],\"host\":\"example.com\",\"subdomains\":true,\"path_prefix\"" ++
+                ":\"/blog/\",\"exclude_path_prefix\":[\"/blog/jobs/\"]}}",
+            .{folder},
+        ),
+    );
     const selection = try db.selectRule(a, rule, 3000, 1, null, null, null);
     try testing.expectEqual(@as(i64, 1), selection.total);
     try testing.expectEqual(@as(i64, 1), selection.unread);
-    const exact = try db.selectRule(a, .{ .host = "news.example.com", .path_prefix = "/blog" }, 3000, 50, null, null, null);
+    const exact = try db.selectRule(
+        a,
+        .{
+            .host = "news.example.com",
+            .path_prefix = "/blog",
+        },
+        3000,
+        50,
+        null,
+        null,
+        null,
+    );
     try testing.expectEqual(@as(i64, 1), exact.total);
     const expired = try db.selectRule(a, .{ .within_days = 1 }, 2 * 86400000, 50, null, null, null);
     try testing.expectEqual(@as(i64, 0), expired.total);
     const all = try db.selectRule(a, .{}, 3000, 1, null, null, null);
-    const next = try db.selectRule(a, .{}, 3000, 50, .{ .sort_at = all.items[0].sort_at, .id = all.items[0].id }, null, null);
+    const next = try db.selectRule(
+        a,
+        .{},
+        3000,
+        50,
+        .{
+            .sort_at = all.items[0].sort_at,
+            .id = all.items[0].id,
+        },
+        null,
+        null,
+    );
     try testing.expectEqual(@as(i64, 3), next.total);
     try testing.expectEqual(@as(usize, 2), next.items.len);
     const union_scope = try db.selectRule(a, .{ .feeds = &.{feed}, .folders = &.{folder} }, 3000, 50, null, null, null);
@@ -2235,11 +2924,47 @@ test "reader views, rule counts, revisions and bulk undo are transactional" {
     const id = selection.items[0].id;
     const old = try db.markMany(a, &.{id}, .{ .read = true, .later = true }, 4000);
     try testing.expect(!old[0].read and !old[0].later);
-    try testing.expectEqual(@as(i64, 0), (try db.selectRule(a, .{ .state = .unread, .host = "news.example.com" }, 5000, 10, null, null, null)).total);
-    try testing.expectEqual(@as(i64, 1), (try db.selectRule(a, .{ .state = .later }, 5000, 10, null, null, null)).total);
+    try testing.expectEqual(
+        @as(i64, 0),
+        (try db.selectRule(
+            a,
+            .{
+                .state = .unread,
+                .host = "news.example.com",
+            },
+            5000,
+            10,
+            null,
+            null,
+            null,
+        )).total,
+    );
+    try testing.expectEqual(
+        @as(i64, 1),
+        (try db.selectRule(
+            a,
+            .{ .state = .later },
+            5000,
+            10,
+            null,
+            null,
+            null,
+        )).total,
+    );
     try testing.expectError(error.NoSuchEntry, db.markMany(a, &.{ id, 9999 }, .{ .read = false }, 5000));
     try testing.expect((try db.getEntry(a, id)).?.read);
-    const view = try db.viewPut(a, null, "Engineering", try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(rule, .{})}), null, 3000);
+    const view = try db.viewPut(
+        a,
+        null,
+        "Engineering",
+        try std.fmt.allocPrint(
+            a,
+            "{f}",
+            .{std.json.fmt(rule, .{})},
+        ),
+        null,
+        3000,
+    );
     const view_id = view.object.get("id").?.integer;
     const conflict_value = try db.viewPut(a, view_id, "New", "{}", 0, 4000);
     try testing.expectEqualStrings("revision_conflict", conflict_value.object.get("kind").?.string);
@@ -2254,17 +2979,19 @@ test "reader views, rule counts, revisions and bulk undo are transactional" {
         try testing.expectEqual(sel.total, @as(i64, @intCast(sel.items.len)));
     }
 }
-
 extern fn sqlite3_result_text(?*Context, [*]const u8, c_int, ?*anyopaque) void;
 extern fn sqlite3_result_null(?*Context) void;
+
 fn articleHost(ctx: ?*Context, n: c_int, values: [*]?*SqlValue) callconv(.c) void {
     _ = n;
     addressPart(ctx, values, true);
 }
+
 fn articlePath(ctx: ?*Context, n: c_int, values: [*]?*SqlValue) callconv(.c) void {
     _ = n;
     addressPart(ctx, values, false);
 }
+
 fn addressPart(ctx: ?*Context, values: [*]?*SqlValue, host_part: bool) void {
     const raw = sqlite3_value_text(values[0]) orelse {
         sqlite3_result_null(ctx);
@@ -2307,9 +3034,34 @@ test "routine claims coalesce missed runs and survive job lease recovery" {
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const view = try db.viewPut(a, null, "All", try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(core.selector.Rule{}, .{})}), null, 1000);
+    const view = try db.viewPut(
+        a,
+        null,
+        "All",
+        try std.fmt.allocPrint(
+            a,
+            "{f}",
+            .{std.json.fmt(
+                core.selector.Rule{},
+                .{},
+            )},
+        ),
+        null,
+        1000,
+    );
     const vid = view.object.get("id").?.integer;
-    const routine = try db.routinePut(a, null, "Daily", vid, "{\"kind\":\"daily\",\"time\":\"09:00\"}", "[{\"kind\":\"notify\"}]", true, null, 1000, 2000);
+    const routine = try db.routinePut(
+        a,
+        null,
+        "Daily",
+        vid,
+        "{\"kind\":\"daily\",\"time\":\"09:00\"}",
+        "[{\"kind\":\"notify\"}]",
+        true,
+        null,
+        1000,
+        2000,
+    );
     const rid = routine.object.get("id").?.integer;
     const now = 5 * 86400000;
     try testing.expectEqual(@as(usize, 1), (try db.dueRoutines(a, now)).len);

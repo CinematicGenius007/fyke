@@ -142,7 +142,16 @@ pub fn main(init: std.process.Init) !u8 {
         try homeDirectory(arena, io, init.environ_map);
 
     if (std.mem.eql(u8, command, "daemon") and args.positional() == null) {
-        daemon.run(init.gpa, io, home_path, arena, .{ .log_to_file = args.has("--log"), .environ = init.minimal.environ }) catch |err| {
+        daemon.run(
+            init.gpa,
+            io,
+            home_path,
+            arena,
+            .{
+                .log_to_file = args.has("--log"),
+                .environ = init.minimal.environ,
+            },
+        ) catch |err| {
             std.debug.print("fyke: daemon: {s}\n", .{@errorName(err)});
             return 1;
         };
