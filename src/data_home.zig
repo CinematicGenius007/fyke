@@ -62,6 +62,13 @@ fn renameLegacyFiles(arena: std.mem.Allocator, io: Io, path: []const u8) !void {
         error.FileNotFound => return,
         else => return err,
     };
+    // A database under the new name means the migration already happened. The old
+    // files belong to whatever still uses them, and nothing is renamed or removed.
+    const new_db = try std.fmt.allocPrint(arena, "{s}/fyke.db", .{path});
+    if (cwd.access(io, new_db, .{})) |_| return else |err| switch (err) {
+        error.FileNotFound => {},
+        else => return err,
+    }
 
     const lock_path = try std.fmt.allocPrint(arena, "{s}/rssd.lock", .{path});
     if (cwd.openFile(io, lock_path, .{ .mode = .read_write })) |lock_file| {
