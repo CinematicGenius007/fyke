@@ -203,11 +203,13 @@ private struct FloatPanelStyle: ViewModifier {
     @Environment(\.palette) private var p
 
     func body(content: Content) -> some View {
+        // The popover look from the design rules: radius 10, a hairline, two shadows.
         content
             .padding(padding)
             .background {
-                RoundedRectangle(cornerRadius: Radii.panel).fill(p.ground)
-                    .shadow(color: .black.opacity(p.isDark ? 0.5 : 0.12), radius: 15, y: 10)
+                RoundedRectangle(cornerRadius: Radii.panel).fill(p.isDark ? p.surface : p.ground)
+                    .shadow(color: .black.opacity(p.isDark ? 0.45 : 0x1F / 255), radius: 16, y: 12)
+                    .shadow(color: .black.opacity(p.isDark ? 0.3 : 0x14 / 255), radius: 3, y: 2)
             }
             .overlay(RoundedRectangle(cornerRadius: Radii.panel).stroke(p.hairline))
     }

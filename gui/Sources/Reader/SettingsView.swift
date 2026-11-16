@@ -411,8 +411,21 @@ private struct ShortcutsPane: View {
     }
 }
 
+/// Opens Settings at a tab from anywhere, such as a failed brief's next action.
+@MainActor enum SettingsOpener {
+    static func open(tab: SettingsView.Tab, model: AppModel) {
+        model.settingsTab = tab
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+    }
+}
+
+/// Who writes briefs, and what agents connected over MCP may do.
 private struct AgentsPane: View {
+    @Environment(AppModel.self) private var model
     @Environment(\.palette) private var p
+    @State private var checking: String?
+    @State private var problem: String?
+    @State private var copied = false
     private var tier: String { Prefs.shared.ui.agentTier }
 
     private var snippet: String {
@@ -423,51 +436,126 @@ private struct AgentsPane: View {
 
     var body: some View {
         PaneScroll { content }
+            .task { await model.library.loadWriters() }
     }
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 0) {
             PaneTitle(text: "Agents")
-            SettingRow(title: "What agents can do", detail: "Article text can try to mislead an agent, so start low") {
-                HStack(spacing: 0) {
-                    ForEach(["read", "annotate", "manage"], id: \.self) { item in
-                        Button { Prefs.shared.ui.agentTier = item } label: {
-                            Text(item.capitalized).font(.ui(14))
-                                .foregroundStyle(tier == item ? p.ground : p.ink)
-                                .padding(.horizontal, 12).padding(.vertical, 5)
-                                .background(tier == item ? p.ink : .clear)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
+            Text("Who writes your briefs").font(.ui(14, .semibold))
+            Text("Fyke hands the chosen articles and your recipe to an agent already on this Mac. Nothing is sent anywhere else by Fyke itself.")
+                .font(.ui(13)).foregroundStyle(p.muted).fixedSize(horizontal: false, vertical: true).padding(.top, 2).padding(.bottom, 12)
+            VStack(spacing: 0) {
+                if model.library.writers.isEmpty {
+                    Text(model.library.available ? "Looking for Codex and Claude Code…" : "Writers need a newer Fyke service. Quit and open Fyke again.")
+                        .font(.ui(13)).foregroundStyle(p.muted).padding(16).frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .clipShape(RoundedRectangle(cornerRadius: Radii.control))
-                .overlay(RoundedRectangle(cornerRadius: Radii.control).stroke(p.control))
+                ForEach(Array(model.library.writers.enumerated()), id: \.element.id) { index, writer in
+                    if index > 0 { Rule() }
+                    writerRow(writer)
+                }
             }
-            VStack(alignment: .leading, spacing: 10) {
+            .background(p.ground, in: RoundedRectangle(cornerRadius: Radii.panel))
+            .overlay(RoundedRectangle(cornerRadius: Radii.panel).stroke(p.hairline))
+            if let problem { Text(problem).font(.ui(13)).foregroundStyle(p.ink).padding(.top, 8) }
+
+            Text("Let agents use Fyke").font(.ui(14, .semibold)).padding(.top, 28)
+            Text("Agents connected over MCP can search and read your articles, views and briefs. Article text can try to mislead an agent, so changes start off.")
+                .font(.ui(13)).foregroundStyle(p.muted).fixedSize(horizontal: false, vertical: true).padding(.top, 2).padding(.bottom, 12)
+            VStack(spacing: 0) {
+                HStack {
+                    Text("Read articles, views and briefs").font(.ui(14))
+                    Spacer()
+                    Text("Always on").font(.ui(13)).foregroundStyle(p.muted)
+                }
+                .padding(.horizontal, 16).frame(height: 48)
                 Rule()
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Connect an agent").font(.ui(14))
-                        Text("Add this to Claude Code, Codex or any MCP client").font(.ui(13)).foregroundStyle(p.muted)
+                        Text("Make changes").font(.ui(14))
+                        Text("Mark read and star; or also edit views, recipes and routines").font(.ui(12)).foregroundStyle(p.muted)
                     }
                     Spacer()
-                    Button("Copy") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(snippet, forType: .string)
-                    }
-                    .buttonStyle(Plain())
+                    SelectBox(selection: Binding(get: { tier }, set: { Prefs.shared.ui.agentTier = $0 }), options: [
+                        SelectOption(value: "read", label: "Never"),
+                        SelectOption(value: "annotate", label: "Reading state only"),
+                        SelectOption(value: "manage", label: "Everything"),
+                    ], width: 190)
+                    .accessibilityLabel("What agents may change")
                 }
-                .padding(.top, 4)
-                Text(snippet).font(.code(13)).lineSpacing(3).textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 12).padding(.horizontal, 14)
-                    .background(p.surface, in: RoundedRectangle(cornerRadius: 8))
-                    .padding(.bottom, 4)
+                .padding(.horizontal, 16).frame(height: 60)
             }
-            SettingRow(title: "Briefing is written by", detail: "Arrives with the aggregator", last: true) {
-                Text("Not set up").font(.ui(14)).foregroundStyle(p.muted)
+            .background(p.ground, in: RoundedRectangle(cornerRadius: Radii.panel))
+            .overlay(RoundedRectangle(cornerRadius: Radii.panel).stroke(p.hairline))
+            HStack {
+                Text("Add Fyke to another agent with this configuration.").font(.ui(13)).foregroundStyle(p.muted)
+                Spacer()
+                Button(copied ? "Copied" : "Copy MCP config") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(snippet, forType: .string)
+                    copied = true
+                    Task { try? await Task.sleep(for: .seconds(2)); copied = false }
+                }
+                .buttonStyle(ActionStyle(kind: .secondary))
             }
+            .padding(.top, 16)
+            Text(snippet).font(.code(12)).lineSpacing(3).textSelection(.enabled)
+                .foregroundStyle(p.inkSoft)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 12).padding(.horizontal, 14)
+                .background(p.surface, in: RoundedRectangle(cornerRadius: Radii.control))
+                .padding(.top, 10)
+        }
+    }
+
+    private func writerRow(_ writer: Writer) -> some View {
+        HStack(spacing: 12) {
+            Text(writer.id == "codex" ? "Cx" : String(writer.name.prefix(1)))
+                .font(.ui(12, .semibold)).foregroundStyle(p.ground)
+                .frame(width: 28, height: 28).background(writer.found ? p.ink : p.control, in: RoundedRectangle(cornerRadius: Radii.control))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(writer.name).font(.ui(14))
+                Text(status(writer)).font(.ui(12)).foregroundStyle(writer.problem != nil ? p.ink : p.muted).lineLimit(2)
+            }
+            Spacer()
+            if checking == writer.id {
+                Spinner(size: 12)
+            } else {
+                Button("Check") { check(writer) }.buttonStyle(ActionStyle(kind: .quiet, height: 28))
+                    .help("Run \(writer.name)'s version check again")
+            }
+            if writer.selected {
+                Text("Default").font(.ui(12)).foregroundStyle(p.inkSoft).padding(.horizontal, 8).frame(height: 24)
+                    .background(p.selected, in: RoundedRectangle(cornerRadius: Radii.control))
+            } else {
+                Button("Make default") { choose(writer) }.buttonStyle(ActionStyle(kind: .secondary, height: 28))
+                    .disabled(!writer.found)
+            }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 12)
+        .accessibilityElement(children: .contain)
+    }
+
+    private func status(_ writer: Writer) -> String {
+        if let problem = writer.problem { return problem }
+        guard writer.found else { return "Not found on this Mac" }
+        let path = writer.path.map { " · found at " + $0.replacingOccurrences(of: NSHomeDirectory(), with: "~") } ?? ""
+        return "Ready" + (writer.version.map { " · \($0)" } ?? "") + path
+    }
+
+    private func check(_ writer: Writer) {
+        checking = writer.id
+        problem = nil
+        Task {
+            do { try await model.library.check(writer.id) } catch { problem = AppModel.words(for: error) }
+            checking = nil
+        }
+    }
+
+    private func choose(_ writer: Writer) {
+        problem = nil
+        Task {
+            do { try await model.library.choose(writer.id) } catch { problem = "Could not make \(writer.name) the default: \(AppModel.words(for: error))" }
         }
     }
 }

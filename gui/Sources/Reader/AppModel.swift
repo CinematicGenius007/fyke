@@ -2,18 +2,30 @@
 // reloads from it when an event says something changed.
 import AppKit
 import Observation
+import ReaderLogic
 import SwiftUI
 
 enum Place: Hashable {
-    case briefing, all, starred
+    case today, all, starred
     case feed(Int64)
     case folder(Int64)
+    case view(Int64)
+    case routines
 }
 
 /// What the sidebar is renaming in place.
 enum Renaming: Equatable {
     case feed(Int64)
     case folder(Int64)
+    case view(Int64)
+}
+
+/// What the reader pane shows in place of an article.
+enum Detail: Equatable {
+    /// A recipe, opened from the brief it wrote, so that "Back" returns there.
+    case recipe(Int64, brief: Int64?)
+    /// A question and its answer.
+    case ask
 }
 
 enum Confirmation: Identifiable {
@@ -101,6 +113,30 @@ final class AppModel {
     var dataMove: DataMove?
     var settingsTab = SettingsView.Tab(rawValue: ProcessInfo.processInfo.environment["FYKE_TAB"] ?? "") ?? .General
 
+    let library = Library()
+    let undo = UndoCenter()
+    let commands = CommandModel()
+    let ask = AskModel()
+    var detail: Detail?
+    var catchUp: CatchUpModel?
+    var showingActivity = false
+    /// The brief Today shows.
+    var selectedBrief: Int64?
+    /// The routine the editor shows: one that exists, or a new one not yet saved.
+    var routineDraft: Routine?
+    /// The feed whose failure is open beside the sidebar.
+    var healthFeed: Int64?
+    /// Counts ⌘S presses that are not a search to keep. The open recipe or routine saves.
+    var saveRequests = 0
+
+    func saveCommand() {
+        if search.isShowing {
+            if !search.isBlank { saveSearchAsView() }
+        } else {
+            saveRequests += 1
+        }
+    }
+
     private var pendingReload: Task<Void, Never>?
 
     var totalUnread: Int64 { feeds.reduce(0) { $0 + $1.unread } }
@@ -108,11 +144,13 @@ final class AppModel {
 
     var placeTitle: String {
         switch place {
-        case .briefing: "Briefing"
+        case .today: "Today"
         case .all: "All"
         case .starred: "Starred"
         case .feed(let id): feeds.first { $0.id == id }?.name ?? "Feed"
         case .folder(let id): folders.first { $0.id == id }?.name ?? "Folder"
+        case .view(let id): library.view(id)?.name ?? "View"
+        case .routines: "Routines"
         }
     }
 
@@ -120,6 +158,7 @@ final class AppModel {
         switch place {
         case .feed(let id): feeds.first { $0.id == id }?.unread ?? 0
         case .folder(let id): feedsInside(id).reduce(0) { $0 + $1.unread }
+        case .view(let id): library.view(id)?.unread ?? 0
         default: totalUnread
         }
     }
@@ -165,12 +204,12 @@ final class AppModel {
         do {
             let stats: Stats = try await Daemon.shared.call("stats.get")
             await reload()
+            await library.load()
             hasLoaded = true
             await openRequestedScreen()
             await openRequestedMove()
             for await event in Daemon.shared.events(since: stats.lastEventSeq) {
-                _ = event
-                scheduleReload()
+                await handle(event)
             }
         } catch {
             problem = error.localizedDescription
@@ -178,16 +217,33 @@ final class AppModel {
         }
     }
 
+    /// Events about features reload only what they name. Notifications from routines
+    /// reach the system while the app runs.
+    private func handle(_ event: Event) async {
+        switch event.type {
+        case "view.changed", "recipe.changed", "routine.changed", "job.changed", "artifact.new":
+            await library.handle(event.type)
+            if event.type == "view.changed", case .view = place { try? await reloadEntries() }
+            if event.type == "artifact.new", place == .today, selectedBrief == nil { selectedBrief = library.briefs.first?.id }
+        case "routine.notify":
+            Notifier.post(title: "Fyke", body: "A routine has something for you")
+        default:
+            scheduleReload()
+        }
+    }
+
     /// `FYKE_SCREEN` opens one screen at launch, for rendering checks.
     private func openRequestedScreen() async {
-        switch ProcessInfo.processInfo.environment["FYKE_SCREEN"] {
+        let environment = ProcessInfo.processInfo.environment
+        if await openFeatureScreen(environment["FYKE_SCREEN"] ?? "", environment) { return }
+        switch environment["FYKE_SCREEN"] {
         case "feed":
             let index = Int(ProcessInfo.processInfo.environment["FYKE_FEED"] ?? "") ?? 0
             guard feeds.indices.contains(index) else { return }
             go(to: .feed(feeds[index].id))
             try? await Task.sleep(for: .milliseconds(300))
             if let row = entries.dropFirst().first { await open(row.id) }
-        case "briefing": go(to: .briefing)
+        case "briefing", "today": go(to: .today)
         case "shortcuts": showingShortcuts = true
         case "web":
             if let url = URL(string: ProcessInfo.processInfo.environment["FYKE_ADDRESS"] ?? "") { web = WebState(address: url) }
@@ -231,6 +287,7 @@ final class AppModel {
             feeds = feedList.items
             folders = folderList.items
             try await reloadEntries()
+            await library.loadViews()
             updatedAt = Date()
             problem = nil
         } catch {
@@ -238,25 +295,32 @@ final class AppModel {
         }
     }
 
-    private struct ListParams: Encodable, Sendable {
+    struct ListParams: Encodable, Sendable {
         var feedId: Int64?
         var folderId: Int64?
-        var unreadOnly: Bool
-        var starredOnly: Bool
+        var viewId: Int64?
+        var rule: SelectionRule?
+        var unreadOnly: Bool?
+        var starredOnly: Bool?
         var limit: Int
         var before: String?
         var withSummary = true
     }
 
-    private var listParams: ListParams {
+    /// A view's rule replaces every other filter, which the daemon refuses to mix.
+    var listParams: ListParams {
+        if case .view(let id) = place { return ListParams(viewId: id, limit: 100) }
         var params = ListParams(unreadOnly: unreadOnly, starredOnly: place == .starred, limit: 100)
         if case .feed(let id) = place { params.feedId = id }
         if case .folder(let id) = place { params.folderId = id }
         return params
     }
 
-    private func reloadEntries() async throws {
-        guard place != .briefing else {
+    /// Today and Routines list briefs and routines, not articles.
+    var listsEntries: Bool { place != .today && place != .routines }
+
+    func reloadEntries() async throws {
+        guard listsEntries else {
             entries = []
             return
         }
@@ -288,14 +352,17 @@ final class AppModel {
         web = nil
         article = nil
         selectedId = nil
+        detail = nil
         entries = []
+        if place == .today { selectedBrief = selectedBrief ?? library.briefs.first?.id }
+        if place == .routines, routineDraft == nil, let first = library.routines.first { routineDraft = first }
         Task { try? await reloadEntries() }
     }
 
-    /// Opens a search result where the reader can show it, which Briefing cannot.
+    /// Opens a search result where the reader can show it.
     func openResult(_ id: Int64) {
         search.close()
-        if place == .briefing { go(to: .all) }
+        if !listsEntries { go(to: .all) }
         Task { await open(id) }
     }
 
@@ -319,6 +386,7 @@ final class AppModel {
         selectedId = id
         fullTextStatus = nil
         web = nil
+        detail = nil
         do {
             let entry: Entry = try await Daemon.shared.call("entries.get", GetParams(id: id))
             let blocks = try JSONDecoder().decode([Block].self, from: Data(entry.body.utf8))
@@ -396,7 +464,7 @@ final class AppModel {
     /// the timeline with the reader.
     var usesPanes: Bool {
         switch place {
-        case .feed, .folder: true
+        case .feed, .folder, .view, .today, .routines: true
         default: false
         }
     }
@@ -408,6 +476,11 @@ final class AppModel {
     func back() {
         if web != nil {
             closeWeb()
+        } else if detail != nil {
+            detail = nil
+        } else if place == .today && article != nil {
+            article = nil
+            selectedId = nil
         } else if !usesPanes {
             article = nil
         }
@@ -690,8 +763,36 @@ final class AppModel {
         change { let _: AddResult = try await Daemon.shared.callSlow("feeds.refresh", IdParams(id: id)) }
     }
 
-    func markAllRead(feed: Int64? = nil, folder: Int64? = nil) {
-        change { let _: Ok = try await Daemon.shared.call("entries.mark_all", MarkAllParams(feedId: feed, folderId: folder)) }
+    /// Marks a feed, a folder or a view read at once, and offers Undo. The unread
+    /// articles are read first so that exactly those can be put back.
+    func markAllRead(feed: Int64? = nil, folder: Int64? = nil, view: Int64? = nil) {
+        Task {
+            var params = ListParams(feedId: feed, folderId: folder, viewId: view, unreadOnly: view == nil ? true : nil, limit: 1000)
+            if view != nil { params.rule = nil }
+            do {
+                var ids: [Int64] = []
+                var cursor: String?
+                repeat {
+                    params.before = cursor
+                    let page: EntryPage = try await Daemon.shared.call("entries.list", params)
+                    ids += page.items.filter { !$0.read }.map(\.id)
+                    cursor = page.nextCursor
+                } while cursor != nil && ids.count < 20000
+                guard !ids.isEmpty else { return }
+                let previous = try await library.mark(ids, read: true)
+                let name = view.flatMap { library.view($0)?.name } ?? feed.flatMap { id in feeds.first { $0.id == id }?.name } ?? folder.flatMap { id in folders.first { $0.id == id }?.name } ?? "All"
+                undo.push("Marked \(Plural.count(ids.count, "article")) in \(name) as read") { [self] in
+                    try? await self.library.restore(previous)
+                    await self.reload()
+                }
+            } catch let failure as RPCFailure where failure.isUnknownMethod && view == nil {
+                // A daemon without mark_many still marks; it cannot offer Undo.
+                let _: Ok? = try? await Daemon.shared.call("entries.mark_all", MarkAllParams(feedId: feed, folderId: folder))
+            } catch {
+                problem = error.localizedDescription
+            }
+            await reload()
+        }
     }
 
     func toggleFolder(_ id: Int64) {

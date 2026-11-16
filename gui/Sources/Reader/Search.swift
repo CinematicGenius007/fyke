@@ -236,6 +236,13 @@ struct SearchPanel: View {
                 Text("Esc Close")
             }
             .font(.ui(13)).foregroundStyle(p.muted)
+            // A search worth keeping becomes a view, named for its words.
+            Button { model.saveSearchAsView() } label: {
+                HStack(spacing: 6) { Text("Save as view"); KeyHint(text: "⌘S") }
+            }
+            .buttonStyle(ActionStyle(kind: .secondary, height: 28))
+            .disabled(search.isBlank || !model.library.available)
+            .padding(.leading, 8)
         }
         .padding(.horizontal, 20).padding(.vertical, 12)
     }

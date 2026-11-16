@@ -3,10 +3,12 @@
 
     python3 tools/bundle_app.py && python3 tools/e2e_gui.py
 
-Each scenario opens the app, plays keys, and checks which entry the daemon marked
-read, since opening an article is the one effect that outlives the window.
+Each scenario opens the app, plays keys, and checks what the daemon holds afterwards,
+such as which entry it marked read, since that is the effect that outlives the window.
+The reader features run against a stand-in writer, and each of their screens is saved
+as a picture in zig-out/gui-snapshots for a person to look at.
 """
-import http.server, json, os, pathlib, shutil, socketserver, subprocess, sys, tempfile, threading
+import http.server, json, os, pathlib, shutil, socket, socketserver, subprocess, sys, tempfile, threading
 
 # Unix socket paths are short, so macOS and Linux use /tmp. Windows has no /tmp.
 TMP = tempfile.gettempdir() if os.name == "nt" else "/tmp"
@@ -14,7 +16,19 @@ TMP = tempfile.gettempdir() if os.name == "nt" else "/tmp"
 root = pathlib.Path(__file__).resolve().parent.parent
 app = root / "zig-out/Fyke.app/Contents/MacOS"
 home = tempfile.mkdtemp(prefix="fyke-g-", dir=TMP)
-env = dict(os.environ, FYKE_HOME=home, FYKE_BIN=str(app / "fyke"))
+# Writes a brief or an answer that cites the first sources it is given, as the writer
+# contract in docs/reader-features.md asks, without calling any model.
+WRITER = pathlib.Path(home) / "writer.py"
+WRITER.write_text("""import json, re, sys
+text = sys.stdin.read()
+found = re.search(r"UNTRUSTED SOURCES JSON:\\n(.*)\\nEND SOURCES", text, re.S)
+ids = [s["id"] for s in json.loads(found.group(1))] if found else []
+print(json.dumps({"title": "Needles, briefly", "sections": [{"heading": "", "claims": [
+    {"text": "Three needles arrived this week.", "sources": ids[:2] or ids},
+    {"text": "The first one is the newest.", "sources": ids[:1]}]}]}))
+""")
+env = dict(os.environ, FYKE_HOME=home, FYKE_BIN=str(app / "fyke"), FYKE_WRITER_CMD=f"{sys.executable} {WRITER}")
+snapshots = root / "zig-out/gui-snapshots"
 passed = 0
 
 ITEMS = "".join(f"<item><title>Needle {name}</title><guid>{name}</guid><pubDate>{day} Nov 2026 09:00:00 GMT</pubDate><description>needle text</description></item>"
@@ -122,6 +136,95 @@ if rss("feeds", "--json") != before or os.path.exists(moved + "/data"):
 print("ok   a refused move changes nothing, and the daemon answers afterwards")
 passed += 1
 shutil.rmtree(moved, ignore_errors=True)
+
+# Reader features: views, undo, catch up, briefs, answers, routines and the palette.
+
+def call(method, params=None):
+    """One request on the daemon's socket, for setup and checks the CLI has no command for."""
+    with socket.socket(socket.AF_UNIX) as sock:
+        sock.connect(str(pathlib.Path(home) / "fyked.sock"))
+        sock.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}}) + "\n").encode())
+        data = b""
+        while not data.endswith(b"\n"):
+            data += sock.recv(1 << 20)
+    reply = json.loads(data)
+    if "error" in reply:
+        raise RuntimeError(f"{method}: {reply['error']}")
+    return reply["result"]
+
+
+def column(sql):
+    return [row[0] for row in json.loads(rss("query", sql))["rows"]]
+
+
+def fail(name, detail):
+    print(f"FAIL {name}: {detail}")
+    rss("daemon", "stop"); shutil.rmtree(home, ignore_errors=True); sys.exit(1)
+
+
+def scenario(name, keys, check, screen=None, query=None, settle=0):
+    """Resets reading state, plays keys on a screen, then asks `check` for a problem."""
+    global passed
+    for entry in json.loads(rss("list", "--json"))["items"]:
+        rss("mark", str(entry["id"]), "--unread")
+    later = column("SELECT entry_id FROM entry_state WHERE later_at IS NOT NULL")
+    if later:
+        call("entries.mark_many", {"ids": later, "later": False})
+    extra = {"FYKE_KEYS": keys + " wait" * settle}
+    if screen: extra["FYKE_SCREEN"] = screen
+    if query: extra["FYKE_QUERY"] = query
+    subprocess.run([str(app / "Reader"), "-theme", "light", "-followSystem", "NO"], env=dict(env, **extra), capture_output=True, timeout=90)
+    problem = check()
+    if problem:
+        fail(name, problem)
+    print(f"ok   {name}")
+    passed += 1
+
+
+def views():
+    return column("SELECT name FROM views ORDER BY position, id")
+
+
+scenario("command-S keeps a search as a view, named for its words", "cmd+f needle cmd+s wait wait return",
+         lambda: None if views() == ["Needle"] else f"views {views()}")
+scenario("command-Z takes the new view back", "cmd+f text cmd+s wait wait return wait cmd+z wait",
+         lambda: None if views() == ["Needle"] else f"views {views()}")
+scenario("catch up: left skips, down saves for later", "cmd+j wait left down wait",
+         lambda: None if read_titles() == ["Needle one"] and column("SELECT e.title FROM entries e JOIN entry_state s ON s.entry_id = e.id WHERE s.later_at IS NOT NULL") == ["Needle two"]
+         else f"read {read_titles()}")
+scenario("catch up: command-Z puts the last one back", "cmd+j wait left left cmd+z wait",
+         lambda: None if read_titles() == ["Needle one"] else f"read {read_titles()}")
+scenario("the palette finds a command by its letters", "cmd+k markallread return wait",
+         lambda: None if len(read_titles()) == 3 else f"read {read_titles()}")
+scenario("command-Z takes back mark all read", "cmd+k markallread return wait wait cmd+z wait",
+         lambda: None if read_titles() == [] else f"read {read_titles()}")
+
+before = len(column("SELECT id FROM artifacts WHERE kind = 'digest'"))
+scenario("command-R writes a brief, cited from the articles", "wait cmd+r", screen="today", settle=6,
+         check=lambda: None if len(column("SELECT id FROM artifacts WHERE kind = 'digest'")) == before + 1 else "no brief")
+scenario("a question becomes a cited answer", "wait", screen="ask", query="Which needle is newest?", settle=6,
+         check=lambda: None if column("SELECT question FROM artifacts WHERE kind = 'answer'") == ["Which needle is newest?"] else "no answer")
+scenario("a routine starts from a view and saves with command-S", "wait cmd+s wait", screen="routines",
+         check=lambda: None if column("SELECT view_id FROM routines") == [call("views.list")["items"][0]["id"]] else "no routine")
+
+# Pictures of every feature screen, in both themes, for a person to look at.
+shutil.rmtree(snapshots, ignore_errors=True)
+snapshots.mkdir(parents=True)
+for screen in ["today", "view", "recipe", "routines", "catchup", "palette", "ask", "activity", "health", "toast", "search"]:
+    for theme in ["light", "dark"]:
+        target = snapshots / f"{screen}-{theme}.png"
+        subprocess.run([str(app / "Reader"), "-theme", theme, "-followSystem", "NO"], timeout=90, capture_output=True,
+                       env=dict(env, FYKE_SCREEN=screen, FYKE_QUERY="needle", FYKE_SNAPSHOT=str(target), FYKE_SNAPSHOT_DELAY="4"))
+        if not target.exists() or target.stat().st_size < 10000:
+            fail(f"snapshot {screen} {theme}", "no picture")
+for theme in ["light", "dark"]:
+    target = snapshots / f"settings-agents-{theme}.png"
+    subprocess.run([str(app / "Reader"), "-theme", theme, "-followSystem", "NO"], timeout=90, capture_output=True,
+                   env=dict(env, FYKE_SCREEN="settings", FYKE_TAB="Agents", FYKE_SNAPSHOT=str(target), FYKE_SNAPSHOT_DELAY="4"))
+    if not target.exists():
+        fail(f"snapshot settings {theme}", "no picture")
+print(f"ok   snapshots in {snapshots.relative_to(root)}")
+passed += 1
 
 rss("daemon", "stop")
 shutil.rmtree(home, ignore_errors=True)

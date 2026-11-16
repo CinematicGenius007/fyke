@@ -1,3 +1,4 @@
+import ReaderLogic
 import SwiftUI
 
 struct RootView: View {
@@ -31,29 +32,41 @@ struct RootView: View {
         .onChange(of: model.confirmation == nil) { _, closed in if closed { focused = true } }
         .onChange(of: model.search.isShowing) { _, showing in if !showing { focused = true } }
         .onChange(of: model.showingAddFeed) { _, showing in if !showing { focused = true } }
+        .onChange(of: model.commands.isShowing) { _, showing in if !showing { focused = true } }
+        .onChange(of: model.catchUp == nil) { _, closed in if closed { focused = true } }
+        .onChange(of: model.detail) { _, detail in if detail == nil { focused = true } }
         .sheet(isPresented: $model.showingAddFeed) { AddFeedSheet() }
+        .overlay { if let catchUp = model.catchUp { CatchUpView(catchUp: catchUp).transition(.opacity) } }
         .overlay { if model.search.isShowing { SearchPanel() } }
+        .overlay { if model.commands.isShowing { CommandPalette() } }
         .overlay { if model.showingShortcuts { ShortcutsPopup() } }
         .overlay {
             if let confirmation = model.confirmation { ConfirmationDialog(confirmation: confirmation).id(confirmation.id) }
         }
         .overlay(alignment: .bottom) {
-            if let problem = model.problem ?? Prefs.shared.fileProblem.map({ "config.json has a mistake, so the last good settings stay in use: \($0)" }) {
-                Text(problem)
-                    .font(.ui(13))
-                    .foregroundStyle(p.onAccent)
+            VStack(spacing: 8) {
+                if let problem = model.problem ?? Prefs.shared.fileProblem.map({ "config.json has a mistake, so the last good settings stay in use: \($0)" }) {
+                    HStack(spacing: 10) {
+                        Text(problem).font(.ui(13)).foregroundStyle(p.ground)
+                        Button { model.problem = nil } label: { Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).foregroundStyle(p.ground) }
+                            .buttonStyle(.plain).accessibilityLabel("Dismiss")
+                    }
                     .padding(.horizontal, 12).padding(.vertical, 7)
                     .background(p.ink, in: RoundedRectangle(cornerRadius: Radii.control))
-                    .padding(.bottom, 20)
+                }
+                if let toast = model.undo.toast {
+                    UndoToast(item: toast, center: model.undo).transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
+            .padding(.bottom, 20)
+            .motion(model.undo.toast?.id)
         }
+        .motion(model.catchUp == nil)
     }
 
     @ViewBuilder private var content: some View {
         if model.isEmpty {
             FirstRunView()
-        } else if model.place == .briefing && model.web == nil {
-            BriefingView()
         } else if model.usesPanes {
             Panes()
         } else if model.article != nil || model.web != nil {
@@ -68,6 +81,8 @@ struct RootView: View {
         if press.modifiers.contains(.command) { return .ignored }
         // A dialog is modal: its own buttons act, and keys must not reach the app behind.
         if model.confirmation != nil { return .handled }
+        // These hold their own focus and keys.
+        if model.catchUp != nil || model.commands.isShowing || model.search.isShowing { return .ignored }
         if model.showingShortcuts {
             if press.key == .escape || press.characters == "?" { model.showingShortcuts = false }
             return .handled
@@ -119,9 +134,33 @@ struct Panes: View {
             let widest = max(Self.smallest, min(640, proxy.size.width - Self.readerMinimum))
             let width = min(max(live ?? Prefs.shared.ui.listWidth, Self.smallest), widest)
             HStack(spacing: 0) {
-                EntryList().frame(width: width)
+                list.frame(width: width)
                 divider(current: width, widest: widest)
-                ReaderPane()
+                reader
+            }
+        }
+    }
+
+    @Environment(AppModel.self) private var model
+
+    @ViewBuilder private var list: some View {
+        switch model.place {
+        case .today: BriefList()
+        case .routines: RoutineList()
+        default: EntryList()
+        }
+    }
+
+    /// A recipe or an answer opens over whatever the reader showed, and Back returns.
+    @ViewBuilder private var reader: some View {
+        switch model.detail {
+        case .recipe(let id, let brief): RecipeView(recipeId: id, briefId: brief).id(id)
+        case .ask: AskView()
+        case nil:
+            switch model.place {
+            case .today: TodayReader()
+            case .routines: RoutineEditor()
+            default: ReaderPane()
             }
         }
     }
@@ -194,6 +233,12 @@ struct EntryList: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 2) {
+                        if model.entries.isEmpty, let view = model.library.view(model.place.viewId) {
+                            InlineState(tone: .empty, label: "View · \(view.name)", title: "Nothing matches yet",
+                                        detail: "No article fits this rule right now. New articles that fit appear here as they arrive; tap a word above to widen it.",
+                                        primary: view.rule.state == .unread ? ("Include read articles", { var rule = view.rule; rule.setState(.any); model.setRule(rule, of: view.id) }) : nil)
+                                .padding(.horizontal, 12).padding(.top, 28)
+                        }
                         ForEach(model.entries) { row in
                             rowView(row).id(row.id)
                                 .onAppear {
@@ -212,13 +257,29 @@ struct EntryList: View {
         .background(p.ground)
     }
 
+    @Environment(FloatLayer.self) private var layer
+    @State private var menuFrame = CGRect.zero
+
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(model.placeTitle).font(.ui(20, .semibold)).tracking(-0.2).lineLimit(1)
-            Spacer()
-            Text("\(model.placeUnread) unread").font(.ui(13)).foregroundStyle(p.muted)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(model.placeTitle).font(.ui(20, .semibold)).tracking(-0.2).lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer()
+                Text("\(model.placeUnread) unread").font(.ui(13)).foregroundStyle(p.muted)
+                if let view = model.library.view(model.place.viewId) {
+                    SymbolButton(symbol: "ellipsis", label: "View actions", size: 24) {
+                        layer.show(at: menuFrame) { ViewMenu(view: view) }
+                    }
+                    .floatFrame($menuFrame)
+                }
+            }
+            if let view = model.library.view(model.place.viewId) {
+                ViewSentence(view: view)
+            }
         }
         .padding(.horizontal, 24).padding(.top, 48).padding(.bottom, 16)
+        .overlay(alignment: .bottom) { if model.place.viewId != nil { Rule() } }
     }
 
     private func rowView(_ row: EntrySummary) -> some View {
@@ -361,24 +422,6 @@ struct TimelineView: View {
         }
         .onHover { hovered = $0 ? row.id : (hovered == row.id ? nil : hovered) }
         .buttonStyle(.plain)
-    }
-}
-
-/// Shown until the aggregator produces a digest.
-struct BriefingView: View {
-    @Environment(\.palette) private var p
-    @Environment(\.readingFamily) private var family
-    @Environment(\.titleFamily) private var titleFamily
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(Date.now.formatted(.dateTime.weekday(.wide)) + ",\n" + Date.now.formatted(.dateTime.day().month(.wide)))
-                .font(.custom(titleFamily, fixedSize: 64).weight(.semibold)).tracking(-1)
-            Text("No briefing yet. It arrives with the aggregator.")
-                .font(.custom(family, fixedSize: 21)).foregroundStyle(p.inkSoft)
-        }
-        .padding(.leading, 96).padding(.top, 72)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
