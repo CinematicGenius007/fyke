@@ -1,6 +1,6 @@
 # Architecture
 
-Status: parser, fetcher, store, daemon, CLI, MCP server, TUI and GUI are built. The aggregator is design, so `aggregate` and `runners` below are planned modules. See the [roadmap](roadmap.md). The language choice is in [decisions/0001-language.md](decisions/0001-language.md).
+Status: parser, fetcher, store, daemon, CLI, MCP server, TUI and GUI are built. Saved views, cited briefs and answers, and routines are built through the operation registry. Story clustering and ranking remain planned. See the [roadmap](roadmap.md). The language choice is in [decisions/0001-language.md](decisions/0001-language.md).
 
 ## Goals
 
@@ -108,11 +108,13 @@ Dependencies only point downward. The bottom layer does no I/O, which keeps it t
 | | `daemon` | JSON-RPC over the socket, event streaming |
 | Engine | `service` | Shared state, scheduler, workers, housekeeping |
 | | `pipeline` | Runs ingest from bytes to committed rows |
-| | `aggregate` | Lenses, stages, job queue (planned) |
+| | `features`, `runner` | Durable reader jobs, installed writers and routines |
+| | `aggregate` | Story clustering and ranking (planned) |
 | | `runners` | `http`, `exec`, `acp` backends (planned) |
 | I/O | `fetch` | HTTP, redirects, validators, SSRF guard |
 | | `store` | The only module containing SQL |
-| Pure | `xml` | Lenient streaming pull parser |
+| Pure | `selector`, `writer`, `schedule` | Rule validation, cited output contracts and injected-clock scheduling |
+| | `xml` | Lenient streaming pull parser |
 | | `html` | Tokenizer, then HTML to blocks |
 | | `extract`, `robots` | Article extraction, robots.txt rules |
 | | `feed`, `opml` | RSS, Atom and JSON Feed to `Entry`, and subscription lists |
@@ -175,6 +177,7 @@ Renderers: native text views in the GUI, ANSI in the TUI, Markdown for agents. M
 | Content | `entries`, `enclosures` |
 | Your state | `entry_state`, `tags`, `entry_tags`, `notes` |
 | Search | `entries_fts`, `embeddings` |
+| Reader definitions | `views`, `recipes`, `recipe_revisions`, `routines`, `routine_runs` |
 | Aggregation | `runners`, `lenses`, `stories`, `story_entries`, `jobs`, `artifacts`, `artifact_sources` |
 | Change feed | `events` |
 

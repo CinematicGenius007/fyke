@@ -98,6 +98,8 @@ The writer must return JSON: `{"title": "...", "sections": [{"heading": "...", "
 
 `FYKE_WRITER_CMD` replaces the writer with any command that speaks the same contract. The tests use it with a stand-in written in Python.
 
+Codex uses `--output-schema` and `--output-last-message`; Claude runs with an empty explicit MCP configuration and no tools. `writers.check` saves a timestamped version probe under `ai.checks`. The owner selects a writer with `config.set` under `ai.writer`.
+
 Selection is bounded: at most 60 articles and 120 000 characters of text, newest first. A brief records how many matching articles were left out, and the GUI says so.
 
 ## Recipes
@@ -112,15 +114,15 @@ A routine has three parts, shown as three lines in the editor:
 - **Look in**: a view.
 - **Then**: any of: write a brief with a recipe, notify, mark the matches read, star them, add a tag.
 
-The daemon's scheduler runs due routines. A run first records its matches (articles in the view that arrived since the routine's last run), then performs each action and records its result. Marking read sets an explicit value and never toggles, so a retried run cannot undo a later manual change. If the computer was asleep through several occurrences, one run catches up. Two runs of one routine never overlap.
+The daemon's scheduler runs due routines at startup, on changes and within 60 seconds while idle. A spring daylight-saving gap advances a missing time to the first valid minute; a repeated autumn time runs once. A first run captures all matching entries. A run first records its matches (articles in the view that arrived since the routine's last run), then performs each action and records its result. A brief action queues a separate writing job over those captured IDs and records that job ID. Marking read sets an explicit value and never toggles, so a retried run cannot undo a later manual change. If the computer was asleep through several occurrences, one run catches up. Two runs of one routine never overlap.
 
-`routines.dry_run` evaluates the view over the last 7 days, day by day, and reports matches per day and what each action would have done.
+`routines.dry_run` evaluates the view over the last 7 days, over the current local calendar day and the preceding six days, and reports matches per day and the configured actions. Day boundaries follow daylight-saving changes.
 
 Notify appends a `routine.notify` event. The GUI turns it into a system notification while it is running. Delivery with every window closed is planned.
 
 ## Catch-up and undo
 
-`later` is a third reading state beside read and starred. Catch-up walks a view's unread articles one at a time: Skip (←) marks read, Later (↓) marks later, Read now (→) opens it. Every mark returns the previous state, and the GUI keeps an undo stack (⌘Z) for the session.
+`later` is an independent flag beside read and starred; setting it does not implicitly mark an article read. Catch-up walks a view's unread articles one at a time: Skip (←) marks read, Later (↓) marks later, Read now (→) opens it. Every mark returns the previous state, and the GUI keeps an undo stack (⌘Z) for the session.
 
 ## macOS GUI
 
@@ -144,3 +146,5 @@ The GUI follows [design-rules.md](design-rules.md):
 | `zig build test` | Rule validation and sentences, store queries for every rule field, recipe revisions and conflicts, citation validation, routine scheduling with an injected clock (daylight saving, missed occurrences) |
 | `tools/e2e_features.py` | Every operation above over the socket and MCP with a stand-in writer: views and counts, previews, briefs and failed output, cancellation, routines, dry runs, undo |
 | `tools/e2e_gui.py` | Key presses and clicks through each screen, with snapshots |
+
+The concrete operation parameters, defaults, result shapes and revision-conflict errors are documented in [api.md](api.md#views-writing-and-routines). Normalized address columns are indexed by host; measurements at the architecture's million-entry target are planned.

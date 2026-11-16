@@ -59,7 +59,7 @@ fn jsonType(comptime T: type) []const u8 {
         .optional => |o| jsonType(o.child),
         .bool => "boolean",
         .int => "integer",
-        .pointer => "string",
+        .pointer => |p| if (p.child == u8) "string" else "array",
         else => @compileError("no JSON type for " ++ @typeName(T)),
     };
 }
@@ -74,10 +74,11 @@ fn inputSchema(comptime Op: type) []const u8 {
         var required: []const u8 = "";
         for (info.field_names, info.field_types, info.field_attrs) |name, T, attrs| {
             if (properties.len != 0) properties = properties ++ ",";
-            properties = properties ++ "\"" ++ name ++ "\":{\"type\":\"" ++ jsonType(T) ++ "\"";
+            properties = properties ++ "\"" ++ name ++ "\":{\"type\":\"" ++ (if (std.mem.eql(u8, name, "actions")) "array" else jsonType(T)) ++ "\"";
             if (@hasDecl(Op, "docs") and @hasField(@TypeOf(Op.docs), name)) {
                 properties = properties ++ ",\"description\":\"" ++ @field(Op.docs, name) ++ "\"";
             }
+            if (std.mem.eql(u8, name, "actions")) properties = properties ++ ",\"items\":{\"type\":\"object\"}" else if (jsonType(T)[0] == 'a') properties = properties ++ ",\"items\":{\"type\":\"integer\"}";
             properties = properties ++ "}";
             if (attrs.default_value_ptr == null) {
                 if (required.len != 0) required = required ++ ",";
@@ -341,8 +342,7 @@ fn callDaemon(s: *Server, arena: std.mem.Allocator, method: []const u8, params: 
     const line = try s.call(arena, method, params);
     const parsed = try std.json.parseFromSliceLeaky(Value, arena, line, .{});
     if (parsed.object.get("error")) |failure| {
-        const message = if (failure == .object) failure.object.get("message") else null;
-        return .{ .result = null, .failure = if (message != null and message.? == .string) message.?.string else "Failed" };
+        return .{ .result = null, .failure = try std.fmt.allocPrint(arena, "{f}", .{std.json.fmt(failure, .{})}) };
     }
     return .{ .result = try std.fmt.allocPrint(arena, "{f}", .{std.json.fmt(parsed.object.get("result") orelse .null, .{})}), .failure = "" };
 }

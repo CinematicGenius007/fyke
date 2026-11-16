@@ -46,6 +46,9 @@ jobs:
       - name: e2e_mcp
         if: ${{ !cancelled() }}
         run: python tools/e2e_mcp.py zig-out/bin/fyke.exe
+      - name: e2e_features
+        if: ${{ !cancelled() }}
+        run: python tools/e2e_features.py zig-out/bin/fyke.exe
       - name: e2e_service
         if: ${{ !cancelled() }}
         run: python tools/e2e_service_windows.py zig-out/bin/fyke.exe
@@ -85,6 +88,9 @@ jobs:
       - name: e2e_mcp
         if: ${{ !cancelled() }}
         run: python3 tools/e2e_mcp.py zig-out/bin/fyke
+      - name: e2e_features
+        if: ${{ !cancelled() }}
+        run: python3 tools/e2e_features.py zig-out/bin/fyke
       - name: e2e_service
         if: ${{ !cancelled() }}
         run: python3 tools/e2e_service.py zig-out/bin/fyke

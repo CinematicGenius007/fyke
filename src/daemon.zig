@@ -22,6 +22,7 @@ pub const socket_name = "fyked.sock";
 pub const Options = struct {
     /// Log to `fyked.log` in place of stderr, for a daemon started in the background.
     log_to_file: bool = false,
+    environ: std.process.Environ = .empty,
 };
 
 const code_parse = -32700;
@@ -66,6 +67,7 @@ pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem
         .io = io,
         .home = home,
         .config = config,
+        .environ = options.environ,
         .started_at = Io.Clock.real.now(io).toMilliseconds(),
         .client = .{ .allocator = gpa, .io = fetch.withCancelableConnect(io) },
         .writer = try .open(db_path, .writer),
@@ -82,6 +84,7 @@ pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem
     var group: Io.Group = .init;
     for (0..s.config.workers) |_| try group.concurrent(io, service.workerLoop, .{&s});
     try group.concurrent(io, service.schedulerLoop, .{&s});
+    try group.concurrent(io, service.readerLoop, .{&s});
     s.full_text.store(s.config.full_text, .monotonic);
     s.remove_read_after_days.store(s.config.remove_read_after_days, .monotonic);
     if (s.config.auto_poll) try group.concurrent(io, service.fullTextLoop, .{&s});
@@ -188,6 +191,15 @@ fn handle(s: *Service, arena: std.mem.Allocator, line: []const u8, out: *Io.Writ
         };
         return writeError(out, id, code, @errorName(err));
     };
+    if (std.mem.endsWith(u8, method, ".put") or std.mem.eql(u8, method, "views.remove") or std.mem.eql(u8, method, "recipes.reset")) {
+        const value = try std.json.parseFromSliceLeaky(std.json.Value, arena, result.written(), .{});
+        if (value == .object) if (value.object.get("kind")) |kind| {
+            if (kind == .string and (std.mem.eql(u8, kind.string, "revision_conflict") or std.mem.eql(u8, kind.string, "in_use"))) {
+                try out.print("{{\"jsonrpc\":\"2.0\",\"id\":{f},\"error\":{{\"code\":{d},\"message\":{f},\"data\":{f}}}}}\n", .{ std.json.fmt(id, .{}), code_failed, std.json.fmt(kind.string, .{}), std.json.fmt(value, .{}) });
+                return;
+            }
+        };
+    }
     try out.print("{{\"jsonrpc\":\"2.0\",\"id\":{f},\"result\":{s}}}\n", .{ std.json.fmt(id, .{}), result.written() });
 }
 

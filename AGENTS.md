@@ -2,7 +2,7 @@
 
 Local-first RSS reader with AI aggregation, built from scratch. One daemon owns a SQLite database; the GUI, TUI, CLI and MCP server are thin clients of one API.
 
-Status: milestones 1 to 6 are implemented: parser, HTML to blocks, fetcher, SQLite store, daemon, operation registry, the `fyke` CLI as a socket client, `fyke mcp`, `fyke tui`, `fyke service` and the SwiftUI app in `gui/`. No aggregator yet. `spikes/` is throwaway. Language: Zig 0.17.1 core, SwiftUI macOS GUI.
+Status: milestones 1 to 6 are implemented: parser, HTML to blocks, fetcher, SQLite store, daemon, operation registry, the `fyke` CLI as a socket client, `fyke mcp`, `fyke tui`, `fyke service` and the SwiftUI app in `gui/`. Cited briefs, answers, saved views and routines are implemented; story clustering and ranking are planned. `spikes/` is throwaway. Language: Zig 0.17.1 core, SwiftUI macOS GUI.
 
 ## Read in this order
 
@@ -53,6 +53,7 @@ python3 tools/oracle_html.py html.jsonl     # compares with Python's HTML parser
 python3 tools/e2e.py ./zig-out/bin/fyke      # full behavior against a recording server
 python3 tools/e2e_daemon.py ./zig-out/bin/fyke  # socket, tiers, events, OPML, crash recovery
 python3 tools/e2e_mcp.py ./zig-out/bin/fyke     # MCP protocol, both eras
+python3 tools/e2e_features.py ./zig-out/bin/fyke  # views, writers, routines and undo over socket and MCP
 python3 tools/e2e_service.py ./zig-out/bin/fyke  # service install, status, uninstall, with a stand-in service manager
 python3 tools/e2e_service_windows.py ./zig-out/bin/fyke.exe  # Windows: service install, status, uninstall, in the real Run key
 python3 tools/release.py                    # builds dist/ for every target; --notes prints the changelog section

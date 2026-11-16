@@ -11,6 +11,7 @@ pub const opml = @import("opml.zig");
 pub const robots = @import("robots.zig");
 pub const terminal = @import("terminal.zig");
 pub const url = @import("url.zig");
+pub const selector = @import("selector.zig");
 pub const xml = @import("xml.zig");
 
 test {
@@ -26,5 +27,6 @@ test {
     _ = terminal;
     _ = url;
     _ = xml;
+    _ = selector;
     _ = @import("fuzz.zig");
 }

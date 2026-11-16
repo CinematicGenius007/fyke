@@ -23,6 +23,8 @@ pub fn build(b: *std.Build) void {
     app.addAnonymousImport("schema3", .{ .root_source_file = b.path("schema/0003_skip_hints.sql") });
     app.addAnonymousImport("schema4", .{ .root_source_file = b.path("schema/0004_raw_index.sql") });
     app.addAnonymousImport("schema5", .{ .root_source_file = b.path("schema/0005_full_text_retries.sql") });
+    app.addAnonymousImport("schema6", .{ .root_source_file = b.path("schema/0006_reader_features.sql") });
+    app.addAnonymousImport("schema7", .{ .root_source_file = b.path("schema/0007_article_addresses.sql") });
     app.addCSourceFile(.{
         .file = b.path("vendor/sqlite/sqlite3.c"),
         .flags = &.{ "-DSQLITE_ENABLE_FTS5", "-DSQLITE_ENABLE_DBSTAT_VTAB", "-DSQLITE_DQS=0", "-DSQLITE_THREADSAFE=2", "-O3", "-fno-sanitize=undefined" },
