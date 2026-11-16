@@ -12,7 +12,8 @@ Status: milestones 1 to 6 are implemented: parser, HTML to blocks, fetcher, SQLi
 4. [docs/aggregator.md](docs/aggregator.md): AI pipeline
 5. [docs/rss-primer.md](docs/rss-primer.md): feed formats and HTTP behavior
 6. [docs/roadmap.md](docs/roadmap.md): milestones
-7. [CONTRIBUTING.md](CONTRIBUTING.md): how changes are made
+7. [docs/design-rules.md](docs/design-rules.md): interface rules, the source of truth for every GUI
+8. [CONTRIBUTING.md](CONTRIBUTING.md): how changes are made
 
 ## Rules that must hold
 
@@ -71,7 +72,7 @@ python3 tools/gen_tokens.py                 # gui/tokens.css to Tokens.swift
 cd site && pnpm install && pnpm build        # the website, which renders docs/ ; pnpm dev to preview
 ```
 
-Colors, fonts and radii are designed in the Paper file. Export them to `gui/tokens.css`, regenerate, and never edit `Tokens.swift`. The reading default must be a font in `gui/Fonts`, which `gen_tokens.py` checks. Anything else is chosen in Settings, on the machine that has it, and is stored in `config.json` under `ui`. `FYKE_KEYS` plays key presses and clicks and quits, as `tools/e2e_gui.py` shows. `FYKE_SNAPSHOT=out.png` makes the app save its window and quit, with `FYKE_SCREEN` choosing a screen and `-theme dark -followSystem NO` a theme. Use `FYKE_HOME` so that checks never touch real data.
+Interface work follows [docs/design-rules.md](docs/design-rules.md): the principles, measurements and interaction rules every screen must meet. Colors, fonts and radii are designed in the Paper file. Export them to `gui/tokens.css`, regenerate, and never edit `Tokens.swift`. The reading default must be a font in `gui/Fonts`, which `gen_tokens.py` checks. Anything else is chosen in Settings, on the machine that has it, and is stored in `config.json` under `ui`. `FYKE_KEYS` plays key presses and clicks and quits, as `tools/e2e_gui.py` shows. `FYKE_SNAPSHOT=out.png` makes the app save its window and quit, with `FYKE_SCREEN` choosing a screen and `-theme dark -followSystem NO` a theme. Use `FYKE_HOME` so that checks never touch real data.
 
 A new capability is a struct in `src/ops.zig`. Add it to `all`, and the socket and MCP serve it. Give it `docs` for its parameters, or `agent_visible = false`.
 
