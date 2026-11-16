@@ -22,6 +22,10 @@ No deadlines. Each milestone produces something you can use, and each has a test
 
 MCP comes before the GUI because it is small, gives immediate value, and the GUI work benefits from a settled API.
 
+## Planned next phase
+
+The [next-phase proposal](next-phase.md) adds saved views, editable Codex brief instructions, and routines that collect matches, notify, and apply article actions. The [implementation plan](implementation-plan.md) maps the Paper screens to core and client changes. These capabilities are planned. Desktop delivery prioritizes Windows first and Linux next; the milestone table and results below retain their existing implementation status.
+
 ## Milestone 1 results
 
 Measured 2026-11-06 on a corpus of 756 real URLs. Rebuild it with `tools/fetch_corpus.py`.
