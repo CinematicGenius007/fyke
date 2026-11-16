@@ -165,11 +165,14 @@ struct Panes: View {
         }
     }
 
+    /// A 1 point line centered in a grab area as wide as `Metrics.dividerGrab`. The grab
+    /// area takes layout width rather than lying over the panes, because the panes'
+    /// scroll views are AppKit views and would take the pointer first.
     private func divider(current: Double, widest: Double) -> some View {
         ZStack {
             Rectangle().fill(hovering || dragStart != nil ? p.control : p.hairline).frame(width: 1)
         }
-        .frame(width: 9)
+        .frame(width: Metrics.dividerGrab)
         .contentShape(Rectangle())
         .pointerStyle(.columnResize)
         .onHover { hovering = $0 }
@@ -237,7 +240,7 @@ struct EntryList: View {
                             InlineState(tone: .empty, label: "View · \(view.name)", title: "Nothing matches yet",
                                         detail: "No article fits this rule right now. New articles that fit appear here as they arrive; tap a word above to widen it.",
                                         primary: view.rule.state == .unread ? ("Include read articles", { var rule = view.rule; rule.setState(.any); model.setRule(rule, of: view.id) }) : nil)
-                                .padding(.horizontal, 12).padding(.top, 28)
+                                .padding(.horizontal, 12).padding(.top, 20)
                         }
                         ForEach(model.entries) { row in
                             rowView(row).id(row.id)
@@ -246,7 +249,7 @@ struct EntryList: View {
                                 }
                         }
                     }
-                    .padding(.horizontal, 12).padding(.bottom, 12)
+                    .padding(.horizontal, Metrics.listEdge).padding(.top, Metrics.listTop).padding(.bottom, Metrics.listEdge)
                 }
                 .themedScrollbar()
                 .onChange(of: model.selectedId) { _, id in
@@ -279,7 +282,7 @@ struct EntryList: View {
             }
         }
         .padding(.horizontal, 24).padding(.top, 48).padding(.bottom, 16)
-        .overlay(alignment: .bottom) { if model.place.viewId != nil { Rule() } }
+        .overlay(alignment: .bottom) { if model.place.viewId != nil { Rule().meetsDivider() } }
     }
 
     private func rowView(_ row: EntrySummary) -> some View {

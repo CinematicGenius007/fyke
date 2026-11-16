@@ -10,6 +10,7 @@ import SwiftUI
 enum Glyph {
     case search, briefing, inbox, star, circle, globe, reload, left, right, down, up
     case check, lock, folder, arrowLeft, arrowRight, close, plus, warning
+    case gear, sparkle, database
 
     func path() -> Path {
         var p = Path()
@@ -55,6 +56,21 @@ enum Glyph {
         case .arrowRight: line((3, 8), (12.5, 8)); line((9, 4.5), (12.5, 8), (9, 11.5))
         case .close: line((4, 4), (12, 12)); line((12, 4), (4, 12))
         case .plus: line((8, 3), (8, 13)); line((3, 8), (13, 8))
+        case .gear:
+            p.addEllipse(in: CGRect(x: 6, y: 6, width: 4, height: 4))
+            line((8, 1.75), (8, 3.5)); line((8, 12.5), (8, 14.25)); line((1.75, 8), (3.5, 8)); line((12.5, 8), (14.25, 8))
+            line((3.6, 3.6), (4.8, 4.8)); line((11.2, 11.2), (12.4, 12.4)); line((3.6, 12.4), (4.8, 11.2)); line((11.2, 4.8), (12.4, 3.6))
+        case .sparkle:
+            line((8, 2), (9.4, 6.6), (14, 8), (9.4, 9.4), (8, 14), (6.6, 9.4), (2, 8), (6.6, 6.6))
+            p.closeSubpath()
+        case .database:
+            p.addEllipse(in: CGRect(x: 3, y: 2, width: 10, height: 4))
+            p.move(to: CGPoint(x: 3, y: 4))
+            p.addLine(to: CGPoint(x: 3, y: 12))
+            p.addCurve(to: CGPoint(x: 13, y: 12), control1: CGPoint(x: 3, y: 14.7), control2: CGPoint(x: 13, y: 14.7))
+            p.addLine(to: CGPoint(x: 13, y: 4))
+            p.move(to: CGPoint(x: 3, y: 8))
+            p.addCurve(to: CGPoint(x: 13, y: 8), control1: CGPoint(x: 3, y: 10.7), control2: CGPoint(x: 13, y: 10.7))
         case .warning:
             line((8, 2.5), (14, 13), (2, 13)); p.closeSubpath()
             line((8, 6.5), (8, 9.5)); line((8, 11.25), (8, 11.26))

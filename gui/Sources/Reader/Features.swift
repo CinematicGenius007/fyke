@@ -199,6 +199,10 @@ extension AppModel {
                 try? await Task.sleep(for: .milliseconds(300))
                 if let row = entries.first { await open(row.id) }
             }
+        case "all":
+            go(to: .all)
+            try? await Task.sleep(for: .milliseconds(300))
+            if let row = entries.first { await open(row.id) }
         case "routines":
             go(to: .routines)
             if library.routines.isEmpty { newRoutine() }
@@ -241,7 +245,8 @@ extension Feed {
 /// System notifications for routines that ask to notify, while the app runs.
 enum Notifier {
     static func post(title: String, body: String) {
-        guard Bundle.main.bundleIdentifier != nil else { return }
+        // A headless check must not reach the notification center of the person at this Mac.
+        guard Bundle.main.bundleIdentifier != nil, !TestMode.headless else { return }
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
             guard granted else { return }

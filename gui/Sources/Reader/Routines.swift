@@ -16,7 +16,7 @@ struct RoutineList: View {
                     .disabled(model.library.views.isEmpty)
             }
             .padding(.horizontal, 24).padding(.top, 48).padding(.bottom, 16)
-            Rule()
+            Rule().meetsDivider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 4) {
                     if let draft = model.routineDraft, draft.id == nil {
@@ -30,7 +30,7 @@ struct RoutineList: View {
                             .font(.ui(13)).foregroundStyle(p.muted).padding(12)
                     }
                 }
-                .padding(12)
+                .padding(.horizontal, Metrics.listEdge).padding(.top, Metrics.listTop).padding(.bottom, Metrics.listEdge)
             }
             .themedScrollbar()
         }

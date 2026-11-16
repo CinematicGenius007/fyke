@@ -30,8 +30,23 @@ enum Metrics {
     static let panelRow: CGFloat = 32
     /// Inset of a popover's rows from its edge.
     static let panelEdge: CGFloat = 16
+    /// Inset of a list pane's rows from the pane's edges. The top inset keeps a hovered or
+    /// selected first row off the hairline under the pane's header.
+    static let listEdge: CGFloat = 12
+    static let listTop: CGFloat = 8
+    /// The grab area of the divider between the list and the reader. Its line sits in the
+    /// middle, half of this from the list's edge.
+    static let dividerGrab: CGFloat = 9
     /// The unread dot, and every status dot drawn like it.
     static let dot: CGFloat = 6
+}
+
+extension View {
+    /// Runs a list pane's header rule on under the divider's grab area, so the rule meets
+    /// the divider's line instead of stopping short of it.
+    func meetsDivider() -> some View {
+        padding(.trailing, -(Metrics.dividerGrab - 1) / 2)
+    }
 }
 
 extension Radii {
@@ -117,7 +132,8 @@ private struct ActionBody: View {
 
     var body: some View {
         configuration.label
-            .font(.ui(14, .medium))
+            // A compact button sets its words a size down, as the 13 pt rows around it are.
+            .font(.ui(height <= Metrics.compactControl ? 13 : 14, .medium))
             .foregroundStyle(ink)
             .lineLimit(1)
             .padding(.horizontal, kind == .quiet || kind == .link ? 10 : 14)

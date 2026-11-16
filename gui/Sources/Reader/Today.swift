@@ -11,10 +11,10 @@ struct BriefList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ListHeader(title: "Today", trailing: Date.now.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)))
-            Rule()
+            Rule().meetsDivider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 4) {
-                    SectionLabel(text: "Briefs").padding(.horizontal, 12).padding(.top, 20).padding(.bottom, 8)
+                    SectionLabel(text: "Briefs").padding(.horizontal, 12).padding(.top, 12).padding(.bottom, 8)
                     if let job = model.briefJob {
                         WritingRow(job: job)
                     }
@@ -26,7 +26,7 @@ struct BriefList: View {
                             .padding(.horizontal, 12).padding(.vertical, 8)
                     }
                 }
-                .padding(.horizontal, 12).padding(.bottom, 12)
+                .padding(.horizontal, Metrics.listEdge).padding(.top, Metrics.listTop).padding(.bottom, Metrics.listEdge)
             }
             .themedScrollbar()
         }

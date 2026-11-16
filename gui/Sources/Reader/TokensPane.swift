@@ -415,7 +415,7 @@ struct TokensPane: View {
     var body: some View {
         PaneScroll {
             VStack(alignment: .leading, spacing: 0) {
-                PaneTitle(text: "Tokens").padding(.bottom, -6)
+                BackToReading().padding(.bottom, 12)
                 chooser.padding(.bottom, 14)
                 Rule()
                 header

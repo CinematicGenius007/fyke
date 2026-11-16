@@ -63,8 +63,7 @@ struct ReaderApp: App {
         Settings {
             Themed { SettingsView() }
                 .environment(model)
-                .frame(width: 880, height: 600)
-                .background(BorderlessTitle())
+                .frame(width: 720, height: 640)
         }
     }
 }
@@ -90,22 +89,6 @@ extension ReaderApp {
         default: model.markAllRead()
         }
     }
-}
-
-/// SwiftUI's hidden title bar style does not reach the Settings window.
-struct BorderlessTitle: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            guard let window = view.window else { return }
-            window.titleVisibility = .hidden
-            window.titlebarAppearsTransparent = true
-            window.styleMask.insert(.fullSizeContentView)
-        }
-        return view
-    }
-
-    func updateNSView(_ view: NSView, context: Context) {}
 }
 
 /// Applies the active theme to everything inside.
@@ -137,155 +120,13 @@ struct Themed<Content: View>: View {
     }
 }
 
-/// `FYKE_SNAPSHOT=file.png` draws the window once it settles, saves it, and quits.
-/// It gives checks a real rendering with no screen recording permission.
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        MainActor.assumeIsolated { TestMode.prepare() }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Checks click at window coordinates and compare pictures, so they need the
-        // default size, not the frame the window last had on this Mac.
-        let environment = ProcessInfo.processInfo.environment
-        if environment["FYKE_KEYS"] != nil || environment["FYKE_SNAPSHOT"] != nil {
-            DispatchQueue.main.async {
-                for window in NSApp.windows where window.isVisible && window.frame.width >= 960 {
-                    window.setContentSize(NSSize(width: 1440, height: 900))
-                }
-            }
-        }
-        KeyReplay.startIfRequested()
-        guard let path = ProcessInfo.processInfo.environment["FYKE_SNAPSHOT"] else { return }
-        // With keys to play, the replay calls `snapshot` once its last key is sent.
-        if environment["FYKE_KEYS"] == nil { Launch.whenReady { Self.snapshot(to: path) } }
-    }
-
-    /// Saves the window after `FYKE_SNAPSHOT_DELAY` seconds, for screens that are still
-    /// loading or animating once the app is ready.
-    @MainActor static func snapshot(to path: String) {
-        let delay = Double(ProcessInfo.processInfo.environment["FYKE_SNAPSHOT_DELAY"] ?? "") ?? 1
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            // Settings is the smaller window, and it may not have become key.
-            let wanted = ProcessInfo.processInfo.environment["FYKE_SCREEN"] == "settings" ? NSApp.windows.first { $0.isVisible && $0.frame.width < 1000 } : nil
-            // FYKE_SNAPSHOT_CHROME takes the frame around the content too, which holds the window buttons.
-            let chrome = ProcessInfo.processInfo.environment["FYKE_SNAPSHOT_CHROME"] != nil
-            guard let window = wanted ?? NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }),
-                let view = chrome ? window.contentView?.superview : window.contentView,
-                let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)
-            else { exit(1) }
-            view.cacheDisplay(in: view.bounds, to: bitmap)
-            try? bitmap.representation(using: .png, properties: [:])?.write(to: URL(filePath: path))
-            exit(0)
-        }
-    }
-}
-
-/// Waits for the first load to finish, then for the window to become key and draw.
-/// Checks start from here, not from a fixed delay, because a cold start after a
-/// rebuild can take several seconds longer than a warm one.
-@MainActor enum Launch {
-    private static let limit = Date.now.addingTimeInterval(60)
-    /// Time for the window to lay out and for focus to land after the first load.
-    private static let settleSeconds = 0.5
-
-    static func whenReady(_ run: @escaping @MainActor () -> Void) {
-        let window = NSApp.windows.first { $0.isVisible && $0.frame.width >= 960 }
-        if AppModel.launched && window != nil || Date.now > limit {
-            NSApp.activate(ignoringOtherApps: true)
-            window?.makeKeyAndOrderFront(nil)
-            DispatchQueue.main.asyncAfter(deadline: .now() + settleSeconds) { run() }
-            return
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { whenReady(run) }
-    }
-}
-
-/// `FYKE_KEYS` plays key presses into the window once it settles, then quits, for
-/// tools/e2e_gui.py. Steps are separated by spaces: `cmd+K` or `shift+cmd+K` for any
-/// letter or digit K, `up`, `down`, `left`, `right`, `tab`, `space`, `return`, `esc`, `wait`,
-/// `click:X,Y`, `rclick:X,Y`, `drag:X1,Y1,X2,Y2`, or text to type. Coordinates count from the
-/// window's top left. The events take the same path as real ones from there on.
-@MainActor private enum KeyReplay {
-    private static let stepSeconds = 0.5
-
-    static func startIfRequested() {
-        guard let script = ProcessInfo.processInfo.environment["FYKE_KEYS"] else { return }
-        let steps = script.split(separator: " ").map(String.init)
-        Launch.whenReady { play(steps[...]) }
-    }
-
-    private static func play(_ steps: ArraySlice<String>) {
-        // With a snapshot requested, that is what ends the run.
-        guard let step = steps.first else {
-            if let path = ProcessInfo.processInfo.environment["FYKE_SNAPSHOT"] { AppDelegate.snapshot(to: path) } else { exit(0) }
-            return
-        }
-        send(step)
-        DispatchQueue.main.asyncAfter(deadline: .now() + stepSeconds) { play(steps.dropFirst()) }
-    }
-
-    private static func send(_ step: String) {
-        switch step {
-        case _ where step.hasPrefix("cmd+") || step.hasPrefix("shift+cmd+"):
-            let key = String(step.split(separator: "+").last ?? "")
-            press(key, code: keyCodes[key] ?? 0, flags: step.hasPrefix("shift") ? [.command, .shift] : .command)
-        case "up": press(String(UnicodeScalar(NSUpArrowFunctionKey)!), code: 126)
-        case "down": press(String(UnicodeScalar(NSDownArrowFunctionKey)!), code: 125)
-        case "left": press(String(UnicodeScalar(NSLeftArrowFunctionKey)!), code: 123)
-        case "right": press(String(UnicodeScalar(NSRightArrowFunctionKey)!), code: 124)
-        case "tab": press("\t", code: 48)
-        case "space": press(" ", code: 49)
-        case "return": press("\r", code: 36)
-        case "esc": press("\u{1B}", code: 53)
-        case "wait": break
-        case _ where step.hasPrefix("click:"): mouse(step.dropFirst(6), down: .leftMouseDown, up: .leftMouseUp)
-        case _ where step.hasPrefix("drag:"): drag(step.dropFirst(5))
-        case _ where step.hasPrefix("rclick:"): mouse(step.dropFirst(7), down: .rightMouseDown, up: .rightMouseUp)
-        default: step.forEach { press(String($0), code: 0) }
-        }
-    }
-
-    /// ANSI key codes, which menus match key equivalents against with the characters.
-    private static let keyCodes: [String: UInt16] = [
-        "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7, "c": 8, "v": 9, "b": 11, "q": 12, "w": 13, "e": 14, "r": 15,
-        "y": 16, "t": 17, "1": 18, "2": 19, "3": 20, "4": 21, "6": 22, "5": 23, "9": 25, "7": 26, "8": 28, "0": 29, "o": 31, "u": 32,
-        "i": 34, "p": 35, "l": 37, "j": 38, "k": 40, "n": 45, "m": 46,
-    ]
-
-    /// Posted, not sent, so that they pass through the event queue and become
-    /// `NSApp.currentEvent`, as real clicks do.
-    private static func mouse(_ point: Substring, down: NSEvent.EventType, up: NSEvent.EventType) {
-        let parts = point.split(separator: ",").compactMap { Double($0) }
-        guard parts.count == 2, let window = NSApp.keyWindow, let height = window.contentView?.bounds.height else { return }
-        for type in [down, up] {
-            let event = NSEvent.mouseEvent(
-                with: type, location: NSPoint(x: parts[0], y: height - parts[1]), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
-            if let event { NSApp.postEvent(event, atStart: false) }
-        }
-    }
-
-    /// `drag:x1,y1,x2,y2` presses at the first point and releases at the second.
-    private static func drag(_ spec: Substring) {
-        let p = spec.split(separator: ",").compactMap { Double($0) }
-        guard p.count == 4, let window = NSApp.keyWindow, let height = window.contentView?.bounds.height else { return }
-        let steps = 8
-        let moves: [(NSEvent.EventType, Double, Double)] =
-            [(.leftMouseDown, p[0], p[1])]
-            + (1...steps).map { n in (.leftMouseDragged, p[0] + (p[2] - p[0]) * Double(n) / Double(steps), p[1] + (p[3] - p[1]) * Double(n) / Double(steps)) }
-            + [(.leftMouseUp, p[2], p[3])]
-        for (type, x, y) in moves {
-            let event = NSEvent.mouseEvent(
-                with: type, location: NSPoint(x: x, y: height - y), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1)
-            if let event { NSApp.postEvent(event, atStart: false) }
-        }
-    }
-
-    private static func press(_ text: String, code: UInt16, flags: NSEvent.ModifierFlags = []) {
-        for type in [NSEvent.EventType.keyDown, .keyUp] {
-            let event = NSEvent.keyEvent(
-                with: type, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
-                windowNumber: NSApp.keyWindow?.windowNumber ?? 0, context: nil, characters: text,
-                charactersIgnoringModifiers: text, isARepeat: false, keyCode: code)
-            if let event { NSApp.sendEvent(event) }
-        }
+        MainActor.assumeIsolated { TestMode.start() }
     }
 }
