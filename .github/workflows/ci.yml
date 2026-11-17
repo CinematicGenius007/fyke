@@ -97,3 +97,48 @@ jobs:
       - name: e2e_tui
         if: ${{ !cancelled() }}
         run: python3 tools/e2e_tui.py zig-out/bin/fyke
+
+  # The Windows GUI's library and view-model tests. They need no Windows, so they run on both
+  # systems: a bug that only the Unix socket on one of them shows is found here. Pull requests run
+  # them only when gui-windows/ changed; pushes to main and the release workflow always do.
+  windows-dotnet:
+    name: windows-dotnet (${{ matrix.os }})
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Did gui-windows change?
+        id: gate
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$BASE_SHA" HEAD | grep -q '^gui-windows/'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "gui-windows/ is unchanged, so its tests are skipped."
+          fi
+
+      # The SDK version is the one in gui-windows/global.json.
+      - uses: actions/setup-dotnet@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          global-json-file: gui-windows/global.json
+
+      - name: Client tests
+        if: steps.gate.outputs.run == 'true'
+        run: dotnet test gui-windows/tests/Fyke.Client.Tests -c Release
+      - name: View-model tests
+        if: ${{ steps.gate.outputs.run == 'true' && !cancelled() }}
+        run: dotnet test gui-windows/tests/Fyke.ViewModels.Tests -c Release
