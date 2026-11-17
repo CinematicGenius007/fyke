@@ -66,8 +66,10 @@ for theme in ("light", "dark"):
         xaml.append(f'      <SolidColorBrush x:Key="{key}Brush" Color="{{StaticResource {key}Color}}" />')
     xaml.append('    </ResourceDictionary>')
 xaml += ['  </ResourceDictionary.ThemeDictionaries>']
-fonts = {"Inter": "Inter[opsz,wght].ttf", "Newsreader": "Newsreader[opsz,wght].ttf",
-         "JetBrains Mono": "JetBrainsMono[wght].ttf"}
+# The XAML compiler cannot read the brackets in the macOS file names, so the copies bundled
+# with the Windows app are named without them.
+fonts = {"Inter": "Inter-Variable.ttf", "Newsreader": "Newsreader-Variable.ttf",
+         "JetBrains Mono": "JetBrainsMono-Variable.ttf"}
 for name, value in tokens.items():
     if name.startswith("font-"):
         family = value.strip().strip('"')

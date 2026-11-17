@@ -59,9 +59,9 @@
       <SolidColorBrush x:Key="ScrimBrush" Color="{StaticResource ScrimColor}" />
     </ResourceDictionary>
   </ResourceDictionary.ThemeDictionaries>
-  <FontFamily x:Key="FontReading">ms-appx:///Fonts/Newsreader[opsz,wght].ttf#Newsreader</FontFamily>
-  <FontFamily x:Key="FontUi">ms-appx:///Fonts/Inter[opsz,wght].ttf#Inter</FontFamily>
-  <FontFamily x:Key="FontCode">ms-appx:///Fonts/JetBrainsMono[wght].ttf#JetBrains Mono</FontFamily>
+  <FontFamily x:Key="FontReading">ms-appx:///Fonts/Newsreader-Variable.ttf#Newsreader</FontFamily>
+  <FontFamily x:Key="FontUi">ms-appx:///Fonts/Inter-Variable.ttf#Inter</FontFamily>
+  <FontFamily x:Key="FontCode">ms-appx:///Fonts/JetBrainsMono-Variable.ttf#JetBrains Mono</FontFamily>
   <CornerRadius x:Key="RadiusControl">6</CornerRadius>
   <CornerRadius x:Key="RadiusPanel">10</CornerRadius>
   <CornerRadius x:Key="RadiusSheet">12</CornerRadius>

@@ -146,25 +146,3 @@ jobs:
       - name: Build the app
         if: ${{ steps.gate.outputs.run == 'true' && matrix.os == 'windows-latest' && !cancelled() }}
         run: dotnet build gui-windows/src/Fyke.App -c Release -p:Platform=x64
-      # The XAML compiler exits 1 with no message: strip the real app down in copies, one step at a time.
-      - name: XAML diagnostics
-        if: ${{ steps.gate.outputs.run == 'true' && matrix.os == 'windows-latest' && failure() }}
-        shell: pwsh
-        run: |
-          $src = "gui-windows/src"
-          foreach ($name in 'W5','W6','W7') {
-            $d = "$src/$name"
-            if (Test-Path $d) { Remove-Item $d -Recurse -Force }
-            Copy-Item "$src/Fyke.App" $d -Recurse -Exclude obj,bin
-            Rename-Item "$d/Fyke.App.csproj" "$name.csproj"
-            Set-Content "$d/MainWindow.xaml.cs" "namespace Fyke.App;`npublic sealed partial class MainWindow : Microsoft.UI.Xaml.Window { public MainWindow() { InitializeComponent(); } }"
-            $x = Get-Content "$d/MainWindow.xaml" -Raw
-            if ($name -eq 'W5') { $x = $x -replace '\{ThemeResource \w+\}','Black' }
-            if ($name -eq 'W6') { $x = $x -replace 'FontFamily="\{StaticResource FontUi\}"','' }
-            if ($name -eq 'W7') { $x = $x -replace 'CornerRadius="\{StaticResource RadiusControl\}"','' }
-            Set-Content "$d/MainWindow.xaml" $x
-            "== $name"
-            $out = dotnet build "$d/$name.csproj" -c Release -p:Platform=x64 -v:q 2>&1 | Out-String
-            if ($out -match 'MSB3073') { "XAML COMPILER FAILED" } elseif ($out -match 'Build succeeded') { "BUILD OK" } else { "other" }
-            ($out -split "`n" | Select-String 'error' | Select-Object -First 3 | ForEach-Object { $_.Line.Trim().Substring(0, [Math]::Min(200, $_.Line.Trim().Length)) })
-          }
