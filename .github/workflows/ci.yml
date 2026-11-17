@@ -146,19 +146,22 @@ jobs:
       - name: Build the app
         if: ${{ steps.gate.outputs.run == 'true' && matrix.os == 'windows-latest' && !cancelled() }}
         run: dotnet build gui-windows/src/Fyke.App -c Release -p:Platform=x64
-      # The XAML compiler exits 1 without a message in the build log, so run it by hand.
-      - name: XAML compiler diagnostics
+      # The XAML compiler exits 1 with no message, so build trimmed copies to find which file it dislikes.
+      - name: XAML bisect
         if: ${{ failure() && matrix.os == 'windows-latest' }}
         shell: pwsh
         run: |
-          $exe = Get-ChildItem "$HOME/.nuget/packages/microsoft.windowsappsdk.winui" -Recurse -Filter XamlCompiler.exe | Where-Object { $_.FullName -match 'net472' } | Select-Object -First 1
-          Push-Location gui-windows/src/Fyke.App
-          $dir = 'obj/x64/Release/net10.0-windows10.0.22621.0'
-          $input = Get-Content "$dir/input.json" -Raw | ConvertFrom-Json
-          $input | Select-Object * -ExcludeProperty ReferenceAssemblies | ConvertTo-Json -Depth 4
-          "reference assemblies: " + $input.ReferenceAssemblies.Count
-          $input.ReferenceAssemblies | ForEach-Object { $_.FullPath } | Where-Object { $_ -notmatch 'Microsoft.NETCore.App.Ref|Microsoft.WindowsDesktop' } | Select-Object -First 40
-          Start-Process -FilePath $exe.FullName -ArgumentList "$dir/input.json","$dir/output.json" -NoNewWindow -Wait -RedirectStandardOutput so.txt -RedirectStandardError se.txt
-          "stdout:"; Get-Content so.txt -Raw; "stderr:"; Get-Content se.txt -Raw
-          "events:"; Get-WinEvent -FilterHashtable @{LogName='Application'; StartTime=(Get-Date).AddMinutes(-15)} -ErrorAction SilentlyContinue | Where-Object { $_.Message -match 'XamlCompiler' } | Select-Object -First 3 | ForEach-Object { $_.Message }
-          Pop-Location
+          $src = 'gui-windows/src'
+          function Try-Variant($name, $prepare) {
+            $dir = "$src/$name"
+            if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+            Copy-Item "$src/Fyke.App" $dir -Recurse -Exclude obj,bin
+            Rename-Item "$dir/Fyke.App.csproj" "$name.csproj"
+            & $prepare $dir
+            "== $name"
+            dotnet build "$dir/$name.csproj" -c Release -p:Platform=x64 -v:q 2>&1 | Select-String 'error' | ForEach-Object { $_.Line.Trim().Substring(0, [Math]::Min(220, $_.Line.Trim().Length)) } | Select-Object -First 3
+          }
+          $emptyWindow = '<Window x:Class="Fyke.App.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"><Grid x:Name="Root" /></Window>'
+          Try-Variant 'V1' { param($d) Set-Content "$d/MainWindow.xaml" $emptyWindow }
+          Try-Variant 'V2' { param($d) Set-Content "$d/MainWindow.xaml" $emptyWindow; Remove-Item "$d/Themes/Tokens.xaml"; Set-Content "$d/App.xaml" '<Application x:Class="Fyke.App.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"></Application>' }
+          Try-Variant 'V3' { param($d) Set-Content "$d/App.xaml" '<Application x:Class="Fyke.App.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"></Application>'; Remove-Item "$d/Themes/Tokens.xaml" }
