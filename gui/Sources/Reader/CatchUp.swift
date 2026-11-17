@@ -160,11 +160,11 @@ struct CatchUpView: View {
             Text([row.feedTitle, Dates.relative(row.date)].compactMap { $0 }.joined(separator: " · "))
                 .font(.ui(12)).foregroundStyle(p.muted).padding(.bottom, 16)
             Text(row.title ?? "Untitled")
-                .font(.custom(titleFamily, fixedSize: 32).weight(.semibold)).tracking(-0.4)
+                .font(.title(titleFamily, 32, .semibold)).tracking(-0.4)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 20)
             if let text = row.preview {
-                Text(text).font(.custom(family, fixedSize: 17)).foregroundStyle(p.inkSoft).line(28, size: 17).lineLimit(5)
+                Text(text).font(.reading(family, 17)).foregroundStyle(p.inkSoft).line(28, size: 17).lineLimit(5)
             }
             Spacer(minLength: 0)
         }

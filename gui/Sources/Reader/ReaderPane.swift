@@ -59,7 +59,7 @@ struct ReaderPane: View {
             Text([entry.feedTitle, Dates.long(date)].compactMap { $0 }.joined(separator: " · "))
                 .font(.ui(13)).foregroundStyle(p.muted).padding(.bottom, 20)
             Text(entry.title ?? "Untitled")
-                .font(.custom(titleFamily, fixedSize: 48).weight(.semibold)).tracking(-0.72)
+                .font(.title(titleFamily, 48, .semibold)).tracking(-0.72)
                 .padding(.bottom, 32)
                 .textSelection(.enabled)
             if let status = model.fullTextStatus {
@@ -67,7 +67,7 @@ struct ReaderPane: View {
             }
             if article.blocks.isEmpty {
                 Text("This feed sent no text for this article.")
-                    .font(.custom(family, fixedSize: textSize)).foregroundStyle(p.inkSoft).padding(.bottom, 16)
+                    .font(.reading(family, textSize)).foregroundStyle(p.inkSoft).padding(.bottom, 16)
                 HStack(spacing: 8) {
                     Button("Fetch full article") { model.fetchFull() }.buttonStyle(Plain())
                     Button("Open page") { model.openPage() }.buttonStyle(Plain())
@@ -130,8 +130,8 @@ struct BlocksView: View {
     private var leading: CGFloat { max(0, size * spacing - size * 1.2) }
 
     private func font(_ size: Double, bold: Bool = false, italic: Bool = false, heading: Bool = false) -> Font {
-        var font = Font.custom(heading ? titleFamily : family, fixedSize: size)
-        if bold { font = font.weight(.semibold) }
+        var font = heading ? Font.title(titleFamily, size, bold ? .semibold : .regular)
+            : Font.reading(family, size, bold ? .semibold : .regular)
         if italic { font = font.italic() }
         return font
     }
