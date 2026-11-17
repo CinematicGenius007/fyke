@@ -146,8 +146,11 @@ jobs:
       - name: Build the app
         if: ${{ steps.gate.outputs.run == 'true' && matrix.os == 'windows-latest' && !cancelled() }}
         run: dotnet build gui-windows/src/Fyke.App -c Release -p:Platform=x64
-      # The XAML compiler keeps its diagnostics in a file the build log does not show.
+      # The XAML compiler's own messages do not reach the normal build log.
       - name: XAML compiler diagnostics
         if: ${{ failure() && matrix.os == 'windows-latest' }}
         shell: pwsh
-        run: Get-ChildItem gui-windows/src/Fyke.App/obj -Recurse -Filter output.json | ForEach-Object { Get-Content $_.FullName }
+        run: |
+          dotnet build gui-windows/src/Fyke.App -c Release -p:Platform=x64 -v:diag > xaml.log
+          Select-String -Path xaml.log -Pattern 'WMC|XLS|XamlCompiler|error ' | Select-Object -First 60 | ForEach-Object { $_.Line.Trim() }
+          Get-ChildItem gui-windows/src/Fyke.App/obj -Recurse -Include input.json,output.json | ForEach-Object { $_.FullName }
