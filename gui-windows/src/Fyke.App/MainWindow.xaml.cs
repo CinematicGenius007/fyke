@@ -3,7 +3,9 @@ using System.Threading;
 using Fyke.Client;
 using Fyke.ViewModels;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Media;
 
 namespace Fyke.App;
 
@@ -20,6 +22,8 @@ public sealed partial class MainWindow : Window
         var queue = DispatcherQueue.GetForCurrentThread();
         ViewModel = new ConnectionViewModel(client, action => queue.TryEnqueue(() => action()));
         InitializeComponent();
+        Title = "Fyke";
+        SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
         Root.DataContext = ViewModel;
