@@ -7,7 +7,7 @@
         <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"
                     Spacing="12" MaxWidth="400"
                     x:Name="InlineState">
-            <TextBlock Text="{Binding Message}" FontSize="20" TextWrapping="Wrap"
+            <TextBlock x:Name="MessageText" Text="{Binding Message}" FontSize="20" TextWrapping="Wrap"
                        Foreground="{ThemeResource InkBrush}" />
             <TextBlock x:Name="DetailText" Text="{Binding Detail}" TextWrapping="Wrap"
                        Foreground="{ThemeResource InkSoftBrush}" />

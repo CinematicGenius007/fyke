@@ -26,8 +26,11 @@ public sealed partial class MainWindow : Window
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
-        // The XAML compiler rejects a font family resource used from markup, so it is set here.
-        InlineState.FontFamily = (FontFamily)Application.Current.Resources["FontUi"];
+        // StackPanel has no font of its own, so the text elements take it from the token.
+        var ui = (FontFamily)Application.Current.Resources["FontUi"];
+        MessageText.FontFamily = ui;
+        DetailText.FontFamily = ui;
+        RetryButton.FontFamily = ui;
         Root.DataContext = ViewModel;
         ViewModel.PropertyChanged += (_, _) => ShowState();
         ShowState();
