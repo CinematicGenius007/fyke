@@ -426,7 +426,7 @@ private struct AgentsPane: View {
     private var snippet: String {
         let binary = Bundle.main.executableURL!.deletingLastPathComponent().appending(path: "fyke").path
         let args = tier == "read" ? "[\"mcp\"]" : "[\"mcp\", \"--tier\", \"\(tier)\"]"
-        return "{ \"mcpServers\": { \"rss\": {\n    \"command\": \"\(binary)\",\n    \"args\": \(args) } } }"
+        return "{ \"mcpServers\": { \"fyke\": {\n    \"command\": \"\(binary)\",\n    \"args\": \(args) } } }"
     }
 
     var body: some View {
