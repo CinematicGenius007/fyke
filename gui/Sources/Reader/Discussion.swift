@@ -109,9 +109,10 @@ struct DiscussionSection: View {
             if count == 0 {
                 Text("No one has commented yet.").font(.ui(13)).foregroundStyle(p.muted)
             }
+            let counts = Self.replyCounts(discussion.comments)
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(visible(discussion.comments)) { comment in
-                    row(comment, replies: replies(of: comment, in: discussion.comments))
+                    row(comment, replies: counts[comment.id] ?? 0)
                 }
             }
         }
@@ -129,9 +130,17 @@ struct DiscussionSection: View {
         return shown
     }
 
-    private func replies(of comment: DiscussionComment, in comments: [DiscussionComment]) -> Int {
-        guard let start = comments.firstIndex(where: { $0.id == comment.id }) else { return 0 }
-        return comments[(start + 1)...].prefix { $0.depth > comment.depth }.count
+    /// How many replies sit under each comment, in one pass over the reading order:
+    /// a comment's replies are the run of deeper comments that follow it.
+    static func replyCounts(_ comments: [DiscussionComment]) -> [Int64: Int] {
+        var counts: [Int64: Int] = [:]
+        var open: [DiscussionComment] = []
+        for comment in comments {
+            while let last = open.last, last.depth >= comment.depth { open.removeLast() }
+            for parent in open { counts[parent.id, default: 0] += 1 }
+            open.append(comment)
+        }
+        return counts
     }
 
     private func row(_ comment: DiscussionComment, replies: Int) -> some View {
