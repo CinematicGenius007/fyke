@@ -88,6 +88,7 @@ private struct ToastButton: ButtonStyle {
                 .background(p.ground.opacity(configuration.isPressed ? 0.28 : hovering ? 0.2 : 0.12), in: RoundedRectangle(cornerRadius: Radii.control))
                 .contentShape(Rectangle())
                 .onHover { hovering = $0 }
+                .interactiveCursor()
                 .motion(hovering, Motion.quick)
         }
     }

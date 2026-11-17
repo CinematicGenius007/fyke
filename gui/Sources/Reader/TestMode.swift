@@ -29,8 +29,8 @@ import ObjectiveC
     /// Runs before any window exists, so that none is ever shown visibly.
     static func prepare() {
         guard headless else { return }
-        // A prohibited app cannot be activated at all, so nothing it does, including
-        // opening Settings, can take focus from the app in front.
+        // A prohibited app cannot be activated at all, so nothing it does can take focus
+        // from the app in front.
         NSApp.setActivationPolicy(.prohibited)
         HiddenWindows.install()
         // Activation should be impossible. If a later macOS allows it, the check fails
@@ -57,12 +57,11 @@ import ObjectiveC
     }
 
     static var mainWindow: NSWindow? { NSApp.windows.first { $0.isVisible && $0.frame.width >= 960 } }
-    static var settingsWindow: NSWindow? { NSApp.windows.first { $0.isVisible && $0.frame.width < 960 && $0.contentView != nil } }
 
-    /// The window that keys, clicks and the picture go to: Settings when the run opened
-    /// it, otherwise the main window. Key-window status cannot decide, because a headless
-    /// app has no key window.
-    static var target: NSWindow? { screen == "settings" ? settingsWindow ?? mainWindow : mainWindow }
+    /// The window that keys, clicks and the picture go to. Every screen, Settings too, is
+    /// in the main window. Key-window status cannot decide, because a headless app has no
+    /// key window.
+    static var target: NSWindow? { mainWindow }
 
     /// Saves the window after `FYKE_SNAPSHOT_DELAY` seconds, for screens that are still
     /// loading or animating once the app is ready. `FYKE_SNAPSHOT_CHROME` takes the frame
@@ -91,8 +90,8 @@ import ObjectiveC
     private static var revealed = Set<ObjectIdentifier>()
 
     /// Orders in, once each, the titled windows SwiftUI made but the activation policy
-    /// kept off screen: the main window at launch, and Settings when a check opens it.
-    /// A window that later closes stays closed. Panels, popovers and menus are left to
+    /// kept off screen, such as the main window at launch. A window that later closes
+    /// stays closed. Panels, popovers and menus are left to
     /// show themselves, and sheets are not attached, which is a limit of headless runs.
     static func revealEachOnce() {
         for window in NSApp.windows where !window.isVisible && window.styleMask.contains(.titled) && window.sheetParent == nil && !(window is NSPanel) {
@@ -201,7 +200,7 @@ extension NSWindow {
     private static let keyCodes: [String: UInt16] = [
         "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7, "c": 8, "v": 9, "b": 11, "q": 12, "w": 13, "e": 14, "r": 15,
         "y": 16, "t": 17, "1": 18, "2": 19, "3": 20, "4": 21, "6": 22, "5": 23, "9": 25, "7": 26, "8": 28, "0": 29, "o": 31, "u": 32,
-        "i": 34, "p": 35, "l": 37, "j": 38, "k": 40, "n": 45, "m": 46,
+        "i": 34, "p": 35, "l": 37, "j": 38, "k": 40, ",": 43, "n": 45, "m": 46,
     ]
 
     /// A prohibited app never has a key window, and AppKit treats a mouse-down in a window

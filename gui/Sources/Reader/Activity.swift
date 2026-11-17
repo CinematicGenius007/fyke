@@ -124,7 +124,7 @@ struct ActivityPanel: View {
             Spacer(minLength: 8)
             Button(writerProblem ? "Writers" : "Try again") {
                 layer.close()
-                if writerProblem { SettingsOpener.open(tab: .Agents, model: model) } else if job.isWriting { model.runBrief() } else { model.refresh() }
+                if writerProblem { model.openSettings(.Agents) } else if job.isWriting { model.runBrief() } else { model.refresh() }
             }
             .buttonStyle(ActionStyle(kind: .inverse, height: Metrics.compactControl))
         }

@@ -51,14 +51,14 @@ struct Sidebar: View {
             SidebarRow(title: "Search", symbol: "magnifyingglass", selected: false, action: { model.commands.show() }) {
                 Text("⌘K").font(.ui(12)).foregroundStyle(p.muted)
             }
-            SidebarRow(title: "Today", symbol: "calendar", selected: model.place == .today, action: { model.go(to: .today) }) {
+            SidebarRow(title: "Today", symbol: "calendar", selected: model.isShowing(.today), action: { model.go(to: .today) }) {
                 if model.briefJob != nil { Spinner(size: 10) }
                 else if hasNewBrief { Circle().fill(p.unread).frame(width: Metrics.dot, height: Metrics.dot).accessibilityLabel("New brief") }
             }
-            SidebarRow(title: "All", symbol: "tray", selected: model.place == .all, action: { model.go(to: .all) }) {
+            SidebarRow(title: "All", symbol: "tray", selected: model.isShowing(.all), action: { model.go(to: .all) }) {
                 if !model.feeds.isEmpty { Count(value: model.totalUnread) }
             }
-            SidebarRow(title: "Starred", symbol: "star", selected: model.place == .starred, action: { model.go(to: .starred) }) {
+            SidebarRow(title: "Starred", symbol: "star", selected: model.isShowing(.starred), action: { model.go(to: .starred) }) {
                 if model.totalStarred > 0 { Count(value: model.totalStarred, quiet: true) }
             }
             SidebarRow(title: "Catch up", symbol: "rectangle.stack", selected: model.catchUp != nil, action: { model.startCatchUp() }) {
@@ -92,7 +92,7 @@ struct Sidebar: View {
             }
             .themedScrollbar()
 
-            SidebarRow(title: "Routines", symbol: "clock.arrow.circlepath", selected: model.place == .routines, action: { model.go(to: .routines) }) {
+            SidebarRow(title: "Routines", symbol: "clock.arrow.circlepath", selected: model.isShowing(.routines), action: { model.go(to: .routines) }) {
                 if let next = model.library.nextRoutine?.nextRunAt {
                     Text("Next \(next.formatted(.dateTime.hour().minute()))").font(.ui(12)).foregroundStyle(p.muted)
                 }
@@ -163,12 +163,10 @@ struct Sidebar: View {
             .floatFrame($statusFrame)
             .accessibilityLabel("Activity: \(model.statusWords)")
             .accessibilityHint("Shows background work")
-            SettingsLink {
-                Image(systemName: "gearshape").font(.system(size: 13)).frame(width: 28, height: 28)
+            SymbolButton(symbol: "gearshape", label: "Settings (⌘,)", selected: model.showingSettings) {
+                if model.showingSettings { model.showingSettings = false } else { model.openSettings() }
             }
-            .buttonStyle(SymbolStyle())
-            .help("Settings")
-            .accessibilityLabel("Settings")
+            .accessibilityAddTraits(model.showingSettings ? .isSelected : [])
         }
         .padding(.top, 4)
         .overlay(alignment: .top) { Rule() }
@@ -224,6 +222,7 @@ private struct RowBody: View {
             .opacity(enabled ? 1 : 0.5)
             .background(fill, in: RoundedRectangle(cornerRadius: Radii.control))
             .onHover { hovering = $0 }
+            .interactiveCursor()
             .motion(hovering, Motion.quick)
     }
 
@@ -271,7 +270,7 @@ private struct ViewRow: View {
     @Environment(AppModel.self) private var model
     @Environment(\.palette) private var p
 
-    private var selected: Bool { model.place == .view(view.id) }
+    private var selected: Bool { model.isShowing(.view(view.id)) }
 
     var body: some View {
         Group {
@@ -351,7 +350,7 @@ private struct FolderRow: View {
 
     private var unread: Int64 { model.feedsInside(folder.id).reduce(0) { $0 + $1.unread } }
     private var closed: Bool { Prefs.shared.ui.collapsedFolders.contains(folder.id) }
-    private var selected: Bool { model.place == .folder(folder.id) }
+    private var selected: Bool { model.isShowing(.folder(folder.id)) }
 
     var body: some View {
         Group {
@@ -391,7 +390,7 @@ private struct FolderRow: View {
             Image(systemName: closed ? "chevron.right" : "chevron.down").font(.system(size: 10, weight: .semibold)).foregroundStyle(p.muted)
                 .frame(width: SidebarGrid.icon, height: 24).contentShape(Rectangle().inset(by: -4))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
         .help(closed ? "Open folder" : "Close folder")
         .accessibilityLabel(closed ? "Open \(folder.name)" : "Close \(folder.name)")
     }
@@ -432,7 +431,7 @@ private struct FeedRow: View {
     @Environment(\.palette) private var p
     @State private var frame = CGRect.zero
 
-    private var selected: Bool { model.place == .feed(feed.id) }
+    private var selected: Bool { model.isShowing(.feed(feed.id)) }
 
     var body: some View {
         Group {
@@ -609,6 +608,7 @@ struct Solid: ButtonStyle {
             .padding(.horizontal, 12).padding(.vertical, 6)
             .background(p.ink, in: RoundedRectangle(cornerRadius: Radii.control))
             .opacity(configuration.isPressed ? 0.8 : 1)
+            .interactiveCursor()
     }
 }
 
@@ -620,7 +620,7 @@ enum ShortcutList {
     static let act = [
         ("Star", "s"), ("Read or unread", "m"), ("Unread only", "u"), ("Open page here", "o"), ("Open in browser", "⇧O"),
         ("Fetch full article", "f"), ("Refresh", "r"), ("Add feed", "a"), ("Text and theme", "t"),
-        ("Save search as view", "⌘S"), ("Catch up", "⌘J"), ("Ask your feeds", "⇧⌘A"), ("Undo", "⌘Z"),
+        ("Save search as view", "⌘S"), ("Settings", "⌘,"), ("Catch up", "⌘J"), ("Ask your feeds", "⇧⌘A"), ("Undo", "⌘Z"),
     ]
 }
 

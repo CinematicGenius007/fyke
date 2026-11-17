@@ -150,7 +150,7 @@ private struct SheetBody: View {
                 .onSubmit { if canSubscribe { onSubscribe() } else { onLookup() } }
             details
             HStack {
-                Button("Import OPML", action: onImport).buttonStyle(.plain).font(.ui(13)).foregroundStyle(p.muted)
+                Button("Import OPML", action: onImport).buttonStyle(.bare).font(.ui(13)).foregroundStyle(p.muted)
                 Spacer()
                 Button("Cancel", action: onCancel).buttonStyle(Plain()).keyboardShortcut(.cancelAction)
                 if case .failed = phase {
@@ -268,7 +268,7 @@ private struct SheetBody: View {
             .padding(.vertical, 10)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
     }
 }
 

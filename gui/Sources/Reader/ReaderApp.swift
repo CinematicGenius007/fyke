@@ -19,6 +19,10 @@ struct ReaderApp: App {
         .defaultSize(width: 1440, height: 900)
         .windowStyle(.hiddenTitleBar)
         .commands {
+            // Settings is a destination of the main window, not a window of its own.
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") { model.openSettings() }.keyboardShortcut(",")
+            }
             CommandGroup(replacing: .newItem) {
                 Button("Add Feed…") { model.showingAddFeed = true }.keyboardShortcut("n")
                 Button("New Folder") { model.newFolder(in: nil) }
@@ -58,12 +62,6 @@ struct ReaderApp: App {
             CommandGroup(replacing: .help) {
                 Button("Keyboard Shortcuts") { model.showingShortcuts = true }
             }
-        }
-
-        Settings {
-            Themed { SettingsView() }
-                .environment(model)
-                .frame(width: 720, height: 640)
         }
     }
 }

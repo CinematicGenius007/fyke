@@ -5,7 +5,6 @@ struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.palette) private var p
     @Environment(FloatLayer.self) private var layer
-    @Environment(\.openSettings) private var openSettings
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -23,9 +22,6 @@ struct RootView: View {
         .onKeyPress(phases: .down) { press in handle(press) }
         .onAppear { focused = true }
         .task { await model.start() }
-        .task {
-            if ProcessInfo.processInfo.environment["FYKE_SCREEN"] == "settings" { openSettings() }
-        }
         .onChange(of: model.showingShortcuts) { _, showing in if !showing { focused = true } }
         .onChange(of: model.renaming) { _, renaming in if renaming == nil { focused = true } }
         .onChange(of: model.web == nil) { _, closed in if closed { focused = true } }
@@ -34,7 +30,10 @@ struct RootView: View {
         .onChange(of: model.showingAddFeed) { _, showing in if !showing { focused = true } }
         .onChange(of: model.commands.isShowing) { _, showing in if !showing { focused = true } }
         .onChange(of: model.catchUp == nil) { _, closed in if closed { focused = true } }
-        .onChange(of: model.detail) { _, detail in if detail == nil { focused = true } }
+        .onChange(of: model.detail) { _, detail in
+            if detail == nil { focused = true } else { model.showingSettings = false }
+        }
+        .onChange(of: model.showingSettings) { focused = true }
         .sheet(isPresented: $model.showingAddFeed) { AddFeedSheet() }
         .overlay { if let catchUp = model.catchUp { CatchUpView(catchUp: catchUp).transition(.opacity) } }
         .overlay { if model.search.isShowing { SearchPanel() } }
@@ -49,7 +48,7 @@ struct RootView: View {
                     HStack(spacing: 8) {
                         Text(problem).font(.ui(13)).foregroundStyle(p.ground)
                         Button { model.problem = nil } label: { Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).foregroundStyle(p.ground) }
-                            .buttonStyle(.plain).accessibilityLabel("Dismiss")
+                            .buttonStyle(.bare).accessibilityLabel("Dismiss")
                     }
                     .padding(.horizontal, 12).padding(.vertical, 7)
                     .background(p.ink, in: RoundedRectangle(cornerRadius: Radii.control))
@@ -65,7 +64,9 @@ struct RootView: View {
     }
 
     @ViewBuilder private var content: some View {
-        if model.isEmpty {
+        if model.showingSettings {
+            SettingsView()
+        } else if model.isEmpty {
             FirstRunView()
         } else if model.usesPanes {
             Panes()
@@ -85,6 +86,13 @@ struct RootView: View {
         if model.catchUp != nil || model.commands.isShowing || model.search.isShowing { return .ignored }
         if model.showingShortcuts {
             if press.key == .escape || press.characters == "?" { model.showingShortcuts = false }
+            return .handled
+        }
+        // Settings takes typing into its own fields; Esc closes it and returns to the
+        // place it covered.
+        if model.showingSettings {
+            guard press.key == .escape else { return .ignored }
+            if layer.item != nil { layer.close() } else { model.showingSettings = false }
             return .handled
         }
         switch press.key {
@@ -303,7 +311,7 @@ struct EntryList: View {
             .background(selected ? p.selected : .clear, in: RoundedRectangle(cornerRadius: 8))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
         .overlay(alignment: .bottomTrailing) {
             StarToggle(row: row, showing: selected || hovered == row.id).padding(6)
         }
@@ -326,7 +334,7 @@ struct StarToggle: View {
                     .frame(width: 26, height: 26)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bare)
             .help(row.starred ? "Remove star" : "Star")
         }
     }
@@ -356,7 +364,7 @@ struct TimelineView: View {
                         Button { model.toggleUnreadOnly() } label: {
                             Text(model.unreadOnly ? "Unread · \(model.totalUnread)" : "All · \(model.totalUnread) unread")
                                 .font(.ui(14, .medium)).foregroundStyle(p.inkSoft)
-                        }.buttonStyle(.plain)
+                        }.buttonStyle(.bare)
                     }
                     .padding(.bottom, 36)
                     LazyVStack(alignment: .leading, spacing: 0) {
@@ -424,7 +432,7 @@ struct TimelineView: View {
             .contentShape(Rectangle())
         }
         .onHover { hovered = $0 ? row.id : (hovered == row.id ? nil : hovered) }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
     }
 }
 
@@ -452,7 +460,7 @@ struct FirstRunView: View {
             }
             HStack(spacing: 4) {
                 Text("Moving from another reader?").foregroundStyle(p.muted)
-                Button("Import OPML") { OPML.importFile(model) }.buttonStyle(.plain).foregroundStyle(p.unread)
+                Button("Import OPML") { OPML.importFile(model) }.buttonStyle(.bare).foregroundStyle(p.unread)
             }
             .font(.ui(14)).padding(.top, 16)
         }
@@ -475,6 +483,7 @@ struct Primary: ButtonStyle {
             .padding(.horizontal, 14).padding(.vertical, 6)
             .background(p.unread, in: RoundedRectangle(cornerRadius: Radii.control))
             .opacity(configuration.isPressed ? 0.8 : 1)
+            .interactiveCursor()
     }
 }
 
@@ -487,5 +496,6 @@ struct Plain: ButtonStyle {
             .overlay(RoundedRectangle(cornerRadius: Radii.control).stroke(p.control))
             .contentShape(Rectangle())
             .opacity(configuration.isPressed ? 0.7 : 1)
+            .interactiveCursor()
     }
 }

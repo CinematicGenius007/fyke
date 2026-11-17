@@ -241,7 +241,7 @@ struct WebPane: View {
                 .padding(.leading, 6).padding(.trailing, 10).frame(height: 30)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bare)
             .keyboardShortcut(.cancelAction)
             IconButton(glyph: .arrowLeft, help: "Previous page", enabled: state.canGoBack) { state.back() }
             IconButton(glyph: .arrowRight, help: "Next page", enabled: state.canGoForward) { state.forward() }

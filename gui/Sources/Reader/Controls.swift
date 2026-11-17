@@ -120,7 +120,7 @@ struct IconButton: View {
                 .frame(width: 30, height: 30)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
         .disabled(!enabled)
         .help(help)
     }
@@ -255,11 +255,27 @@ struct MenuRow: View {
             }
             .padding(.leading, 8 + indent).padding(.trailing, 8)
             .frame(minHeight: 30)
-            .background(hovering ? p.selected : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MenuRowStyle(hovering: hovering))
         .onHover { hovering = $0 }
+    }
+}
+
+/// A menu row's fill: the hover color, a step darker while pressed.
+private struct MenuRowStyle: ButtonStyle {
+    let hovering: Bool
+    func makeBody(configuration: Configuration) -> some View { MenuRowBody(configuration: configuration, hovering: hovering) }
+}
+
+private struct MenuRowBody: View {
+    let configuration: ButtonStyle.Configuration
+    let hovering: Bool
+    @Environment(\.palette) private var p
+    var body: some View {
+        configuration.label
+            .background(configuration.isPressed ? p.selectedStrong : hovering ? p.selected : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
+            .interactiveCursor()
     }
 }
 
@@ -313,7 +329,7 @@ struct SelectBox<Value: Hashable>: View {
             .overlay(RoundedRectangle(cornerRadius: Radii.control).stroke(p.control))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
         .floatFrame($frame)
     }
 
@@ -358,7 +374,7 @@ struct DetailsToggle: View {
             .frame(height: 22)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
     }
 }
 
@@ -367,17 +383,20 @@ struct DetailsToggle: View {
 struct Checkbox: View {
     @Binding var on: Bool
     @Environment(\.palette) private var p
+    @State private var hovering = false
 
     var body: some View {
         Button { on.toggle() } label: {
             ZStack {
                 RoundedRectangle(cornerRadius: 4).fill(on ? p.unread : p.ground)
-                RoundedRectangle(cornerRadius: 4).stroke(on ? p.unread : p.control)
+                RoundedRectangle(cornerRadius: 4).stroke(on ? p.unread : hovering ? p.muted : p.control)
                 if on { Icon(glyph: .check, size: 13, color: p.onAccent) }
             }
             .frame(width: 18, height: 18)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
+        .onHover { hovering = $0 }
+        .motion(hovering, Motion.quick)
     }
 }
 

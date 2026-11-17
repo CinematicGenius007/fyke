@@ -229,6 +229,16 @@ def move():
     shutil.rmtree(moved, ignore_errors=True)
 
 
+@check("settings-route", tags=["settings"])
+def settings_route():
+    """Settings opens in the main window. While it shows, reader keys such as n do
+    nothing; Esc, or any other destination, returns to the reader."""
+    play("command-comma opens Settings, which keeps reader keys from the list", "cmd+, wait n wait", [])
+    play("Esc closes Settings and keys reach the reader again", "cmd+, wait esc n wait", ["Needle one"])
+    play("the palette opens Settings too", "cmd+k settings return wait n wait", [])
+    play("another destination closes Settings", "cmd+, wait cmd+2 wait n wait", ["Needle one"])
+
+
 @check("view-save", tags=["view", "undo"])
 def view_save():
     scenario("command-S keeps a search as a view, named for its words", "cmd+f needle cmd+s wait wait return",
@@ -296,8 +306,8 @@ for screen in SCREENS + ["citation"]:
 for tab in SETTINGS_TABS:
     name = f"settings-{tab.lower()}"
     check(f"shot:{name}", tags=[name, "settings", "snapshots"])(
-        # With the title bar, which holds the window buttons, so their placement shows.
-        lambda name=name, tab=tab: snapshot(name, {"FYKE_SCREEN": "settings", "FYKE_TAB": tab, "FYKE_SNAPSHOT_CHROME": "1"}))
+        # Settings is in the main window, beside the sidebar.
+        lambda name=name, tab=tab: snapshot(name, {"FYKE_SCREEN": "settings", "FYKE_TAB": tab}))
 
 
 def select(names):

@@ -72,7 +72,7 @@ private struct RoutineRow: View {
             .background(selected ? p.selected : hovering ? p.selected.opacity(0.5) : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
         .overlay(alignment: .topTrailing) {
             // Outside the row's button, so that it toggles without selecting.
             if routine.id != nil {
@@ -162,7 +162,7 @@ struct RoutineEditor: View {
                     Button { renaming = true } label: {
                         Text(routine.name).font(.custom(titleFamily, fixedSize: 34).weight(.semibold)).tracking(-0.5)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.bare)
                     .help("Rename")
                     .accessibilityHint("Rename the routine")
                 }

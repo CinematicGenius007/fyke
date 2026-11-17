@@ -99,7 +99,7 @@ private struct BriefRow: View {
             .background(selected ? p.selected : hovering ? p.selected.opacity(0.5) : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
         .onHover { hovering = $0 }
         .motion(hovering, Motion.quick)
         .accessibilityAddTraits(selected ? .isSelected : [])
@@ -194,7 +194,7 @@ struct TodayReader: View {
                                title: "\(job.writer?.capitalized ?? "The writer") could not write the brief",
                                detail: "\(job.error ?? "It stopped before it finished.") Nothing was lost: your articles and earlier briefs are as they were.",
                                primary: ("Try again", { model.runBrief() }),
-                               secondary: ("Choose a writer", { SettingsOpener.open(tab: .Agents, model: model) }))
+                               secondary: ("Choose a writer", { model.openSettings(.Agents) }))
         }
         if selected == nil {
             return InlineState(tone: .empty, label: "Today", title: "No brief yet",

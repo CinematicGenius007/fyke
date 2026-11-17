@@ -51,16 +51,16 @@ struct StoragePane: View {
                 SettingRow(title: "Data folder", detail: tilde(Daemon.shared.home.resolvingSymlinksInPath())) {
                     HStack(spacing: 8) {
                         Button("Open") { NSWorkspace.shared.open(Daemon.shared.home) }
-                            .buttonStyle(ActionStyle(kind: .quiet, height: Metrics.compactControl))
+                            .buttonStyle(ActionStyle(kind: .quiet))
                         Button("Change…") { model.chooseDataFolder() }
-                            .buttonStyle(ActionStyle(kind: .secondary, height: Metrics.compactControl))
+                            .buttonStyle(ActionStyle(kind: .secondary))
                             // FYKE_HOME names the folder for this run, so there is no default to repoint.
                             .disabled(ProcessInfo.processInfo.environment["FYKE_HOME"] != nil)
                     }
                 }
                 SettingRow(title: "Settings file", detail: tilde(settingsFile), last: true) {
                     Button("Open") { NSWorkspace.shared.open(settingsFile) }
-                        .buttonStyle(ActionStyle(kind: .secondary, height: Metrics.compactControl))
+                        .buttonStyle(ActionStyle(kind: .secondary))
                 }
             }
             SettingsSection(title: "Disk space", detail: checkedText, trailing: AnyView(
@@ -70,12 +70,12 @@ struct StoragePane: View {
                         Text("Refresh")
                     }
                 }
-                .buttonStyle(ActionStyle(kind: .secondary, height: Metrics.compactControl))
+                .buttonStyle(ActionStyle(kind: .secondary))
             )) {
                 VStack(alignment: .leading, spacing: 0) {
                     if let use { content(use) } else { Text("Measuring…").font(.ui(13)).foregroundStyle(p.muted) }
                 }
-                .padding(16)
+                .padding(.vertical, 12)
             }
         }
         .task { await measure() }
@@ -111,7 +111,7 @@ struct StoragePane: View {
                     Segment(label: "Other", bytes: a.otherBytes, color: p.control),
                 ], height: 4, legendSquare: false)
                 HStack {
-                    Button("Free up space…") { confirming = "articles" }.buttonStyle(ActionStyle(kind: .secondary, height: Metrics.compactControl)).disabled(working)
+                    Button("Free up space…") { confirming = "articles" }.buttonStyle(ActionStyle(kind: .secondary)).disabled(working)
                     Spacer()
                     Text("Remove read articles after").font(.ui(13)).foregroundStyle(p.muted)
                     SelectBox(selection: retention, options: [
@@ -119,7 +119,7 @@ struct StoragePane: View {
                         SelectOption(value: 30, label: "30 days"),
                         SelectOption(value: 90, label: "90 days"),
                         SelectOption(value: 365, label: "1 year"),
-                    ], height: Metrics.compactControl)
+                    ], height: Metrics.control)
                 }
                 if confirming == "articles" {
                     confirm("Removes the text of \(a.removable.formatted()) articles read over 90 days ago. Titles, links and starred articles stay.") {
@@ -134,7 +134,7 @@ struct StoragePane: View {
         section("copies", title: "Feed copies", bytes: use.rawBytes, detail: "Up to 20 per feed, kept so a parser fix can replay them.") {
             AnyView(VStack(alignment: .leading, spacing: 8) {
                 Text("\(use.rawFiles.formatted()) copies").font(.ui(13)).foregroundStyle(p.muted)
-                Button("Free up space…") { confirming = "copies" }.buttonStyle(ActionStyle(kind: .secondary, height: Metrics.compactControl)).disabled(working)
+                Button("Free up space…") { confirming = "copies" }.buttonStyle(ActionStyle(kind: .secondary)).disabled(working)
                 if confirming == "copies" {
                     confirm("Keeps the newest copy of each feed and removes the rest.") {
                         await free(FreeParams(feedCopies: true))
@@ -148,12 +148,12 @@ struct StoragePane: View {
         HStack(spacing: 8) {
             Text(text).font(.ui(13)).foregroundStyle(p.inkSoft).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
-            Button("Cancel") { confirming = nil }.buttonStyle(ActionStyle(kind: .secondary, height: Metrics.compactControl))
+            Button("Cancel") { confirming = nil }.buttonStyle(ActionStyle(kind: .secondary))
             Button("Free up space") {
                 confirming = nil
                 Task { await run() }
             }
-            .buttonStyle(ActionStyle(kind: .primary, height: Metrics.compactControl))
+            .buttonStyle(ActionStyle(kind: .primary))
         }
         .padding(10)
         .background(p.surface, in: RoundedRectangle(cornerRadius: Radii.control))

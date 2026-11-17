@@ -114,7 +114,7 @@ private struct CitationMark: View {
                 .padding(.horizontal, 2)
                 .background(hovering || active ? p.selected : .clear, in: RoundedRectangle(cornerRadius: Radii.mark))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
         .frameIn("brief") { frame = $0 }
         .onHover { inside in
             hovering = inside
@@ -228,7 +228,7 @@ private struct SourceRow: View {
             .frame(height: 36)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
         .onHover { hovering = $0 }
         .accessibilityLabel("Source \(citation.number), \(citation.title), \(citation.feedTitle ?? "")")
     }

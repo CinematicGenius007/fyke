@@ -85,7 +85,8 @@ final class CommandModel {
             Command(id: "do.activity", group: .act, title: "Show activity", symbol: "waveform.path.ecg") { model.showingActivity = true },
             Command(id: "do.unread", group: .act, title: model.unreadOnly ? "Show all articles" : "Show unread only", symbol: "circle", shortcut: "U") { model.toggleUnreadOnly() },
             Command(id: "do.shortcuts", group: .act, title: "Keyboard shortcuts", symbol: "keyboard", shortcut: "?") { model.showingShortcuts = true },
-            Command(id: "do.agents", group: .act, title: "Settings · Agents", symbol: "gearshape") { SettingsOpener.open(tab: .Agents, model: model) },
+            Command(id: "do.settings", group: .act, title: "Settings", symbol: "gearshape", shortcut: "⌘,") { model.openSettings() },
+            Command(id: "do.agents", group: .act, title: "Settings · Agents", symbol: "gearshape") { model.openSettings(.Agents) },
         ]
         if model.undo.canUndo {
             out.append(Command(id: "do.undo", group: .act, title: "Undo: \(model.undo.stack.last?.message ?? "")", symbol: "arrow.uturn.backward", shortcut: "⌘Z") { model.undo.undoLast() })
@@ -279,7 +280,7 @@ struct CommandPalette: View {
             .background(selected ? p.selected : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 

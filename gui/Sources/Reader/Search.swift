@@ -205,7 +205,7 @@ struct SearchPanel: View {
             .background(selected ? p.selected : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
     }
 
     /// Marks each searched word in the snippet.
@@ -228,7 +228,7 @@ struct SearchPanel: View {
                 Text(search.unreadOnly ? "Unread only" : "All articles")
                     .font(.ui(13, .medium)).foregroundStyle(p.inkSoft)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bare)
             Spacer()
             HStack(spacing: 16) {
                 Text("↑↓ Move")

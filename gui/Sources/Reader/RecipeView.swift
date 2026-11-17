@@ -322,7 +322,7 @@ private struct RecipeHistory: View {
                         .frame(height: 44)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.bare)
                     if open == revision.revision {
                         Text(texts[revision.revision] ?? "…").font(.code(12)).foregroundStyle(p.inkSoft).lineSpacing(4)
                             .textSelection(.enabled)

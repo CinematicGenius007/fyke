@@ -36,7 +36,7 @@ The indent for a depth is one value, computed from the formula above, and every 
 - **Undo instead of confirm.** A bulk or destructive action happens at once and offers Undo (⌘Z) in a toast. Ask first only when the action cannot be undone, such as deleting data from disk.
 - **States say three things.** An empty, failed or in-progress state says what happened, what is safe, and the one next action. It appears inline, where the work is. There are no modal error dialogs.
 - **One place for background work.** Jobs, refreshes and routine runs show in the Activity popover, which opens from the status line at the foot of the sidebar.
-- **Every control has every state.** Rest, hover, pressed, focused (a visible keyboard ring), selected and disabled. Motion is short (120 to 200 ms, ease out) and is turned off when the system asks for reduced motion.
+- **Every control has every state.** Rest, hover, pressed, focused (a visible keyboard ring), selected and disabled. The pointer shows a hand over anything that acts on a click, an I-beam over text input, a resize cursor over dividers, and the arrow over disabled controls. Motion is short (120 to 200 ms, ease out) and is turned off when the system asks for reduced motion.
 - **The keyboard reaches everything.** Every action has a menu item, and the frequent ones have shortcuts. ⌘K opens a palette of all of them.
 - **Generated text is labeled.** AI output is marked as generated, names its writer and recipe, and links each claim to its source article.
 

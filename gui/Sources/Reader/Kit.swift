@@ -22,6 +22,8 @@ enum Metrics {
     static let barEdge: CGFloat = 16
     /// Top inset that centers a compact control in the bar: (48 - 28) / 2.
     static let barControlTop: CGFloat = (barHeight - compactControl) / 2
+    /// The full control height from the rules: buttons, fields and selects.
+    static let control: CGFloat = 32
     /// A button where a full 32 pt one would crowd its row: popovers, bars and lists.
     static let compactControl: CGFloat = 28
     /// A popover's header row.
@@ -85,6 +87,39 @@ private struct MotionModifier<V: Equatable>: ViewModifier {
     }
 }
 
+// MARK: Pointer
+
+extension View {
+    /// The pointing hand over anything that acts on a click, and the arrow again once it is
+    /// disabled. Every shared button style and row applies it, so a control built from
+    /// them gets the cursor without asking. Text fields keep the I-beam AppKit gives them,
+    /// and dividers set the resize cursor themselves.
+    func interactiveCursor() -> some View {
+        modifier(InteractiveCursor())
+    }
+}
+
+private struct InteractiveCursor: ViewModifier {
+    @Environment(\.isEnabled) private var enabled
+    func body(content: Content) -> some View {
+        content.pointerStyle(enabled ? .link : nil)
+    }
+}
+
+/// The system's plain button with the pointing hand added: a label drawn entirely by
+/// the view that uses it, such as a list row or a theme tile. It wraps the system
+/// style rather than copying it, so focus, disabled dimming and accessibility stay the
+/// system's. Write `.buttonStyle(.bare)` where `.plain` would go.
+struct BareButtonStyle: PrimitiveButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button(configuration).buttonStyle(.plain).interactiveCursor()
+    }
+}
+
+extension PrimitiveButtonStyle where Self == BareButtonStyle {
+    static var bare: BareButtonStyle { BareButtonStyle() }
+}
+
 // MARK: Buttons
 
 /// The one button shape: 32 high, radius 6. `primary` is the one action a view is
@@ -94,7 +129,7 @@ struct ActionStyle: ButtonStyle {
     enum Kind { case primary, secondary, quiet, link, inverse }
     var kind: Kind = .secondary
     var selected = false
-    var height: CGFloat = 32
+    var height: CGFloat = Metrics.control
 
     func makeBody(configuration: Configuration) -> some View {
         ActionBody(configuration: configuration, kind: kind, selected: selected, height: height)
@@ -144,6 +179,7 @@ private struct ActionBody: View {
             }
             .contentShape(RoundedRectangle(cornerRadius: Radii.control))
             .onHover { hovering = $0 }
+            .interactiveCursor()
             .motion(hovering, Motion.quick)
             .motion(configuration.isPressed, Motion.quick)
     }
@@ -185,6 +221,7 @@ private struct SymbolBody: View {
             .background(configuration.isPressed || selected ? p.selectedStrong : hovering && enabled ? p.selected : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
             .contentShape(Rectangle())
             .onHover { hovering = $0 }
+            .interactiveCursor()
             .motion(hovering, Motion.quick)
     }
 }
@@ -232,6 +269,7 @@ private struct ChipBody: View {
             .background(background, in: RoundedRectangle(cornerRadius: Radii.control))
             .contentShape(RoundedRectangle(cornerRadius: Radii.control))
             .onHover { hovering = $0 }
+            .interactiveCursor()
             .motion(hovering, Motion.quick)
             .motion(selected, Motion.quick)
     }
@@ -284,10 +322,13 @@ private struct TabBody: View {
                     RoundedRectangle(cornerRadius: Radii.control).fill(p.ground).shadow(color: .black.opacity(0.08), radius: 1, y: 1)
                 } else if configuration.isPressed {
                     RoundedRectangle(cornerRadius: Radii.control).fill(p.selectedStrong)
+                } else if hovering {
+                    RoundedRectangle(cornerRadius: Radii.control).fill(p.selectedStrong.opacity(0.5))
                 }
             }
             .contentShape(Rectangle())
             .onHover { hovering = $0 }
+            .interactiveCursor()
             .motion(selected, Motion.quick)
     }
 }

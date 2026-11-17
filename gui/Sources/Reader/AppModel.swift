@@ -116,6 +116,9 @@ final class AppModel {
     var fullTextStatus: String?
     var dataMove: DataMove?
     var settingsTab = SettingsView.Tab(rawValue: ProcessInfo.processInfo.environment["FYKE_TAB"] ?? "") ?? .General
+    /// Settings fills the list and reader panes while this is set. The place behind it
+    /// keeps its article and selection, so closing Settings returns to them.
+    var showingSettings = false
 
     let library = Library()
     let undo = UndoCenter()
@@ -251,6 +254,7 @@ final class AppModel {
             if let row = entries.dropFirst().first { await open(row.id) }
         case "briefing", "today": go(to: .today)
         case "shortcuts": showingShortcuts = true
+        case "settings": openSettings()
         case "web":
             if let url = URL(string: ProcessInfo.processInfo.environment["FYKE_ADDRESS"] ?? "") { web = WebState(address: url) }
         case "delete-folder":
@@ -354,6 +358,11 @@ final class AppModel {
     }
 
     func go(to place: Place) {
+        // Choosing the place Settings covers only uncovers it, with nothing reset.
+        if showingSettings {
+            showingSettings = false
+            if place == self.place { return }
+        }
         self.place = place
         web = nil
         article = nil
@@ -368,6 +377,7 @@ final class AppModel {
     /// Opens a search result where the reader can show it.
     func openResult(_ id: Int64) {
         search.close()
+        showingSettings = false
         if !listsEntries { go(to: .all) }
         Task { await open(id) }
     }
@@ -468,6 +478,15 @@ final class AppModel {
 
     /// Feeds and folders show list and reader side by side. All and Starred replace
     /// the timeline with the reader.
+    /// Whether the sidebar marks `place` as the one showing. None is while Settings is.
+    func isShowing(_ place: Place) -> Bool { !showingSettings && self.place == place }
+
+    /// Shows Settings in the main window, at `tab` when one is named.
+    func openSettings(_ tab: SettingsView.Tab? = nil) {
+        if let tab { settingsTab = tab }
+        showingSettings = true
+    }
+
     var usesPanes: Bool {
         switch place {
         case .feed, .folder, .view, .today, .routines: true

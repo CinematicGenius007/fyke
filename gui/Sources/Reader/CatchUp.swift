@@ -221,7 +221,7 @@ struct CatchUpView: View {
                 Text(summary)
                 if !catchUp.session.history.isEmpty {
                     Text("·")
-                    Button("Undo last ⌘Z") { catchUp.undo() }.buttonStyle(.plain).foregroundStyle(p.unread)
+                    Button("Undo last ⌘Z") { catchUp.undo() }.buttonStyle(.bare).foregroundStyle(p.unread)
                 }
             }
         }

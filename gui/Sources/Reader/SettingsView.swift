@@ -1,12 +1,13 @@
 import AppKit
 import SwiftUI
 
-/// Settings, as the macOS toolbar of tabs: the window's own title bar names the tab, and
-/// the tabs sit under it on the surface color. Tokens has no tab of its own; it opens
-/// from Reading, which stays highlighted while it shows.
+/// Settings, as a destination of the main window: it fills the list and reader panes
+/// while the sidebar stays, so the reader is one Esc away. The header names it and holds
+/// the tabs; each tab's rows sit in the reading column below. Tokens has no tab of its
+/// own; it opens from Reading, which stays selected while it shows.
 struct SettingsView: View {
     enum Tab: String, CaseIterable { case General, Reading, Tokens, Agents, Data }
-    /// The tabs in the bar, in order.
+    /// The tabs in the header, in order.
     static let bar: [Tab] = [.General, .Reading, .Agents, .Data]
 
     @Environment(AppModel.self) private var model
@@ -15,16 +16,7 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 4) {
-                ForEach(Self.bar, id: \.self) { item in
-                    SettingsTabButton(tab: item, selected: tab == item || (tab == .Tokens && item == .Reading)) {
-                        model.settingsTab = item
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.top, 4).padding(.bottom, 8)
-            .background(p.surface)
+            header
             Rule()
             Group {
                 switch tab {
@@ -36,94 +28,55 @@ struct SettingsView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(p.ground)
         }
-        // The content stays inside the safe area, below the title bar; only the surface
-        // color runs up under it, so the title bar and the tabs read as one strip.
-        .background(p.surface.ignoresSafeArea())
-        .navigationTitle(tab == .Tokens ? "Theme Tokens" : tab.rawValue)
-        .background(SettingsWindowChrome(surface: p.surface, dark: p.isDark))
+        .background(p.ground)
         .overlay { if let move = model.dataMove { MoveDialog(move: move) } }
     }
-}
 
-/// One tab in the bar: 72 by 48, an 18 point icon over an 11 point label.
-private struct SettingsTabButton: View {
-    let tab: SettingsView.Tab
-    let selected: Bool
-    let action: () -> Void
-    @Environment(\.palette) private var p
-    @Environment(\.readingFamily) private var reading
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                icon.frame(minWidth: 18, minHeight: 18)
-                Text(tab.rawValue).font(.ui(11, selected ? .medium : .regular))
-            }
-            .foregroundStyle(selected ? p.unread : p.muted)
-            .frame(width: 72, height: 48)
-            .background(selected ? p.selectedStrong : hovering ? p.selected : .clear, in: RoundedRectangle(cornerRadius: 8))
-            .contentShape(RoundedRectangle(cornerRadius: 8))
+    /// The title and the tabs, on the reading column's edges, at the height of the list
+    /// pane's header so the two line up across a switch.
+    private var header: some View {
+        HStack(alignment: .center, spacing: 16) {
+            Text(tab == .Tokens ? "Theme tokens" : "Settings").font(.ui(20, .semibold)).tracking(-0.2).lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 16)
+            Tabs(selection: Binding(get: { tab == .Tokens ? .Reading : tab }, set: { model.settingsTab = $0 }),
+                 items: Self.bar.map { ($0, $0.rawValue) })
+            SymbolButton(symbol: "xmark", label: "Close Settings (Esc)") { model.showingSettings = false }
         }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .motion(hovering, Motion.quick)
-        .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-
-    @ViewBuilder private var icon: some View {
-        let ink = selected ? p.unread : p.muted
-        switch tab {
-        case .General: Icon(glyph: .gear, size: 18, color: ink)
-        case .Reading, .Tokens: Text("Aa").font(.custom(reading, fixedSize: 17)).foregroundStyle(ink).fixedSize().frame(height: 18)
-        case .Agents: Icon(glyph: .sparkle, size: 18, color: ink)
-        case .Data: Icon(glyph: .database, size: 18, color: ink)
-        }
+        .settingsColumn()
+        .padding(.top, Metrics.barHeight).padding(.bottom, 16)
     }
 }
 
-/// Gives the Settings window a transparent title bar over full-size content. The title
-/// bar keeps its standard height and the close, minimize and zoom buttons stay in it;
-/// SwiftUI's safe area holds the tabs below it, so nothing is drawn under the buttons.
-struct SettingsWindowChrome: NSViewRepresentable {
-    let surface: Color
-    let dark: Bool
-
-    func makeNSView(context: Context) -> NSView { NSView() }
-
-    func updateNSView(_ view: NSView, context: Context) {
-        let color = NSColor(surface)
-        DispatchQueue.main.async {
-            guard let window = view.window else { return }
-            window.styleMask.insert(.fullSizeContentView)
-            window.titleVisibility = .visible
-            window.titlebarAppearsTransparent = true
-            window.titlebarSeparatorStyle = .none
-            window.backgroundColor = color
-            window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-        }
+extension View {
+    /// Sets Settings content in the reading column, centered in the space it has, with
+    /// the page gutter on both sides when that space is narrow.
+    func settingsColumn() -> some View {
+        frame(maxWidth: Metrics.readingColumn, alignment: .leading)
+            .padding(.horizontal, Metrics.pageGutter)
+            .frame(maxWidth: .infinity)
     }
 }
 
-/// Holds a pane's sections at the margins every pane shares, and scrolls them when they
-/// are taller than the window.
+/// Holds a pane's sections in the reading column, and scrolls them when they are taller
+/// than the window.
 struct PaneScroll<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) { content }
-                .padding(.horizontal, 32).padding(.top, 24).padding(.bottom, 28)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+            VStack(alignment: .leading, spacing: 40) { content }
+                .settingsColumn()
+                .padding(.top, 32).padding(.bottom, Metrics.pageGutter)
         }
         .themedScrollbar()
     }
 }
 
-/// A titled group: a 13 point heading, a line saying what it is for, then its rows in a
-/// hairline box.
+/// A group of settings: a caps label, a muted line saying what the group is for when it
+/// needs one, then its rows on the ground color with a hairline between each. There is
+/// no box around a group; the label and the rules are enough to hold it together.
 struct SettingsSection<Content: View>: View {
     let title: String
     var detail: String?
@@ -132,25 +85,25 @@ struct SettingsSection<Content: View>: View {
     @Environment(\.palette) private var p
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .bottom) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.ui(13, .semibold)).foregroundStyle(p.ink)
-                    if let detail {
-                        Text(detail).font(.ui(12)).foregroundStyle(p.muted).fixedSize(horizontal: false, vertical: true)
-                    }
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center) {
+                SectionLabel(text: title)
                 Spacer(minLength: 16)
                 if let trailing { trailing }
             }
-            VStack(spacing: 0) { content }
-                .background(p.ground, in: RoundedRectangle(cornerRadius: Radii.panel))
-                .overlay(RoundedRectangle(cornerRadius: Radii.panel).stroke(p.hairline))
+            .frame(minHeight: 20)
+            if let detail {
+                Text(detail).font(.ui(13)).foregroundStyle(p.muted).fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
+            }
+            Rule().padding(.top, 8)
+            VStack(alignment: .leading, spacing: 0) { content }
         }
     }
 }
 
-/// A row in a section: 48 high with a title alone, 56 with a detail line under it.
+/// A row in a section: the title on the left and its control on the right, 48 high,
+/// with a muted line under the title only when the title alone would not say enough.
 /// Every row but the last draws the hairline under itself.
 struct SettingRow<Control: View>: View {
     let title: String
@@ -161,29 +114,21 @@ struct SettingRow<Control: View>: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(title).font(.ui(13)).foregroundStyle(p.ink)
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.ui(14)).foregroundStyle(p.ink)
                     if let detail {
-                        Text(detail).font(.ui(12)).foregroundStyle(p.muted).lineLimit(1).truncationMode(.middle)
+                        Text(detail).font(.ui(12)).foregroundStyle(p.muted).lineLimit(2).truncationMode(.middle)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 Spacer(minLength: 16)
                 control
             }
-            .padding(.horizontal, 16)
-            .frame(minHeight: detail == nil ? 48 : 56)
+            .padding(.vertical, 8)
+            .frame(minHeight: 48)
             if !last { Rule() }
         }
-    }
-}
-
-/// An 11 point capitals label inside a section, such as a list's heading.
-struct Label2: View {
-    let text: String
-    @Environment(\.palette) private var p
-    var body: some View {
-        Text(text).font(.ui(11, .semibold)).tracking(0.66).foregroundStyle(p.muted)
     }
 }
 
@@ -191,17 +136,26 @@ struct Switch: View {
     @Binding var on: Bool
     @Environment(\.palette) private var p
     @Environment(\.isEnabled) private var enabled
+    @State private var hovering = false
+
+    private var track: Color {
+        if on { return hovering && enabled ? p.unread.mix(with: .black, by: 0.08) : p.unread }
+        return hovering && enabled ? p.muted : p.control
+    }
 
     var body: some View {
         Button { on.toggle() } label: {
-            Capsule().fill(on ? p.unread : p.control)
+            Capsule().fill(track)
                 .frame(width: 28, height: 16)
                 .overlay(alignment: on ? .trailing : .leading) {
                     Circle().fill(p.onAccent).frame(width: 12, height: 12).padding(2)
                 }
                 .opacity(enabled ? 1 : 0.6)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
+        .onHover { hovering = $0 }
+        .motion(hovering, Motion.quick)
+        .motion(on, Motion.quick)
         .accessibilityValue(on ? "On" : "Off")
     }
 }
@@ -216,7 +170,7 @@ private struct GeneralPane: View {
     var body: some View {
         @Bindable var prefs = Prefs.shared
         PaneScroll {
-            SettingsSection(title: "Updates", detail: "Fyke checks each feed about as often as it posts.") {
+            SettingsSection(title: "Updates") {
                 SettingRow(title: "Check for new articles", detail: "Automatic follows how often each feed posts") {
                     Text("Automatic").font(.ui(13)).foregroundStyle(p.muted)
                 }
@@ -235,18 +189,18 @@ private struct GeneralPane: View {
                     SelectBox(selection: $prefs.ui.openLinks, options: [
                         SelectOption(value: "app", label: "In the app"),
                         SelectOption(value: "browser", label: "In your browser"),
-                    ], width: 160, height: Metrics.compactControl)
+                    ], width: 160, height: Metrics.control)
                 }
             }
             SettingsSection(title: "Subscriptions and keys") {
                 SettingRow(title: "Your subscriptions", detail: "Import or export as OPML") {
                     HStack(spacing: 8) {
-                        Button("Import OPML") { OPML.importFile(model) }.buttonStyle(ActionStyle(kind: .secondary, height: Metrics.compactControl))
-                        Button("Export") { OPML.export(model) }.buttonStyle(ActionStyle(kind: .secondary, height: Metrics.compactControl))
+                        Button("Import OPML") { OPML.importFile(model) }.buttonStyle(ActionStyle(kind: .secondary))
+                        Button("Export") { OPML.export(model) }.buttonStyle(ActionStyle(kind: .secondary))
                     }
                 }
                 SettingRow(title: "Keyboard shortcuts", detail: "Press ? anywhere in the reader to see them", last: true) {
-                    Button("Show") { model.showingShortcuts = true }.buttonStyle(ActionStyle(kind: .secondary, height: Metrics.compactControl))
+                    Button("Show") { model.showingShortcuts = true }.buttonStyle(ActionStyle(kind: .secondary))
                 }
             }
             if let problem = prefs.fileProblem {
@@ -317,6 +271,7 @@ private struct SliderRow: View {
                     }
                     .frame(height: 16)
                     .contentShape(Rectangle())
+                    .interactiveCursor()
                     .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
                         let raw = range.lowerBound + (drag.location.x - 8) / (geometry.size.width - 16) * (range.upperBound - range.lowerBound)
                         value = min(max((raw / step).rounded() * step, range.lowerBound), range.upperBound)
@@ -352,24 +307,20 @@ private struct ReadingPane: View {
     var body: some View {
         @Bindable var prefs = Prefs.shared
         PaneScroll {
-            VStack(alignment: .leading, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Theme").font(.ui(13, .semibold))
-                    Text("Colors for the whole app. Blue marks unread, purple marks read.").font(.ui(12)).foregroundStyle(p.muted)
-                }
+            SettingsSection(title: "Theme", detail: "Colors for the whole app. Blue marks unread, purple marks read.") {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
                     ForEach(prefs.allThemes, id: \.self) { tile($0) }
                     newTile
                 }
-                .padding(.vertical, 4)
+                .padding(.top, 16)
             }
             SettingsSection(title: "Day and night") {
                 SettingRow(title: "Follow system appearance", detail: "Uses your day theme by day, your night theme at night", last: !prefs.ui.followSystem) {
                     Switch(on: $prefs.ui.followSystem)
                 }
                 if prefs.ui.followSystem {
-                    SettingRow(title: "Day") { SelectBox(selection: $prefs.ui.dayTheme, options: themeOptions, width: 180, height: Metrics.compactControl) }
-                    SettingRow(title: "Night", last: true) { SelectBox(selection: $prefs.ui.nightTheme, options: themeOptions, width: 180, height: Metrics.compactControl) }
+                    SettingRow(title: "Day") { SelectBox(selection: $prefs.ui.dayTheme, options: themeOptions, width: 180, height: Metrics.control) }
+                    SettingRow(title: "Night", last: true) { SelectBox(selection: $prefs.ui.nightTheme, options: themeOptions, width: 180, height: Metrics.control) }
                 }
             }
             SettingsSection(title: "Fonts", detail: "Each theme keeps its own. A change here applies to the theme in use.") {
@@ -378,7 +329,7 @@ private struct ReadingPane: View {
                 fontRow("App", \.ui)
                 fontRow("Code", \.code)
                 SettingRow(title: "Colors, fonts and corners", detail: "Every token of every theme", last: true) {
-                    Button("Edit Tokens…") { model.settingsTab = .Tokens }.buttonStyle(ActionStyle(kind: .secondary, height: Metrics.compactControl))
+                    Button("Edit Tokens…") { model.settingsTab = .Tokens }.buttonStyle(ActionStyle(kind: .secondary))
                 }
             }
             FontChangeStrip(short: false)
@@ -391,7 +342,7 @@ private struct ReadingPane: View {
                         SelectOption(value: "scrolling", label: "While scrolling"),
                         SelectOption(value: "always", label: "Always"),
                         SelectOption(value: "never", label: "Never"),
-                    ], width: 160, height: Metrics.compactControl)
+                    ], width: 160, height: Metrics.control)
                 }
             }
         }
@@ -422,7 +373,7 @@ private struct ReadingPane: View {
                 Text(Prefs.shared.themeName(id)).font(.ui(12, selected ? .semibold : .regular)).foregroundStyle(selected ? p.ink : p.inkSoft).lineLimit(1)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
@@ -443,7 +394,7 @@ private struct ReadingPane: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
         .floatFrame($newFrame)
     }
 }
@@ -458,16 +409,8 @@ struct BackToReading: View {
                 Text("Reading")
             }
         }
-        .buttonStyle(ActionStyle(kind: .quiet, height: Metrics.compactControl))
+        .buttonStyle(ActionStyle(kind: .quiet))
         .padding(.leading, -10)
-    }
-}
-
-/// Opens Settings at a tab from anywhere, such as a failed brief's next action.
-@MainActor enum SettingsOpener {
-    static func open(tab: SettingsView.Tab, model: AppModel) {
-        model.settingsTab = tab
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
 }
 
@@ -496,14 +439,14 @@ private struct AgentsPane: View {
                         detail: "Fyke hands the selected articles and your recipe to an agent already on this Mac. Fyke itself sends nothing anywhere else.") {
             if model.library.writers.isEmpty {
                 Text(model.library.available ? "Looking for Codex and Claude Code…" : "Writers need a newer Fyke service. Quit and open Fyke again.")
-                    .font(.ui(13)).foregroundStyle(p.muted).padding(16).frame(maxWidth: .infinity, alignment: .leading)
+                    .font(.ui(13)).foregroundStyle(p.muted).padding(.vertical, 12).frame(maxWidth: .infinity, alignment: .leading)
             }
             ForEach(Array(model.library.writers.enumerated()), id: \.element.id) { index, writer in
                 if index > 0 { Rule() }
                 writerRow(writer)
             }
         }
-        if let problem { Text(problem).font(.ui(12)).foregroundStyle(p.ink).padding(.top, -16) }
+        if let problem { Text(problem).font(.ui(12)).foregroundStyle(p.ink).padding(.top, -32) }
         VStack(alignment: .leading, spacing: 8) {
             SettingsSection(title: "Let agents use Fyke",
                             detail: "Agents connected over MCP can search and read your articles. Article text can try to mislead an agent, so changes start off.") {
@@ -515,7 +458,7 @@ private struct AgentsPane: View {
                         SelectOption(value: "read", label: "Never"),
                         SelectOption(value: "annotate", label: "Reading state only"),
                         SelectOption(value: "manage", label: "Everything"),
-                    ], width: 180, height: Metrics.compactControl)
+                    ], width: 180, height: Metrics.control)
                     .accessibilityLabel("What agents may change")
                 }
             }
@@ -528,7 +471,7 @@ private struct AgentsPane: View {
                     copied = true
                     Task { try? await Task.sleep(for: .seconds(2)); copied = false }
                 }
-                .buttonStyle(ActionStyle(kind: .secondary, height: Metrics.compactControl))
+                .buttonStyle(ActionStyle(kind: .secondary))
             }
             .padding(.top, 4)
             Text(snippet).font(.code(12)).lineSpacing(3).textSelection(.enabled)
@@ -553,19 +496,19 @@ private struct AgentsPane: View {
             if checking == writer.id {
                 Spinner(size: 12)
             } else {
-                Button("Check") { check(writer) }.buttonStyle(ActionStyle(kind: .quiet, height: Metrics.compactControl))
+                Button("Check") { check(writer) }.buttonStyle(ActionStyle(kind: .quiet))
                     .help("Run \(writer.name)'s version check again")
             }
             if writer.selected {
                 Text("Default").font(.ui(11)).foregroundStyle(p.muted).padding(.horizontal, 8).frame(height: 22)
                     .background(p.selected, in: RoundedRectangle(cornerRadius: Radii.control))
             } else {
-                Button("Make default") { choose(writer) }.buttonStyle(ActionStyle(kind: .secondary, height: Metrics.compactControl))
+                Button("Make default") { choose(writer) }.buttonStyle(ActionStyle(kind: .secondary))
                     .disabled(!writer.found)
             }
         }
-        .padding(.horizontal, 16).padding(.vertical, 8)
-        .frame(minHeight: 52)
+        .padding(.vertical, 8)
+        .frame(minHeight: 56)
         .accessibilityElement(children: .contain)
     }
 
