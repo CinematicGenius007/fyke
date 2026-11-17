@@ -313,8 +313,9 @@ print(json.dumps({"title":"Morning brief","sections":[{"heading":"News","claims"
         child_pid=int(open(mode+".pid").read())
         client.close(); client=None
         check("restart stops daemon",cli("daemon","stop").returncode==0)
+        # On Windows the writer is usually gone already: its job object ends it with the daemon.
         try: os.kill(child_pid,9 if os.name!="nt" else 15)
-        except ProcessLookupError: pass
+        except OSError: pass
         set_mode("good")
         check("restart starts daemon",cli("status").returncode==0)
         client=client_type(home,env);client.home=home;client.env=env;call=client.call
