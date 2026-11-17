@@ -154,8 +154,11 @@ jobs:
           $exe = Get-ChildItem "$HOME/.nuget/packages/microsoft.windowsappsdk.winui" -Recurse -Filter XamlCompiler.exe | Where-Object { $_.FullName -match 'net472' } | Select-Object -First 1
           Push-Location gui-windows/src/Fyke.App
           $dir = 'obj/x64/Release/net10.0-windows10.0.22621.0'
-          (Get-Content "$dir/input.json" -Raw).Substring(0, 3000)
-          & $exe.FullName "$dir/input.json" "$dir/output.json" 2>&1 | Out-String
-          "exit: $LASTEXITCODE"
-          if (Test-Path "$dir/output.json") { Get-Content "$dir/output.json" -Raw }
+          $input = Get-Content "$dir/input.json" -Raw | ConvertFrom-Json
+          $input | Select-Object * -ExcludeProperty ReferenceAssemblies | ConvertTo-Json -Depth 4
+          "reference assemblies: " + $input.ReferenceAssemblies.Count
+          $input.ReferenceAssemblies | ForEach-Object { $_.FullPath } | Where-Object { $_ -notmatch 'Microsoft.NETCore.App.Ref|Microsoft.WindowsDesktop' } | Select-Object -First 40
+          Start-Process -FilePath $exe.FullName -ArgumentList "$dir/input.json","$dir/output.json" -NoNewWindow -Wait -RedirectStandardOutput so.txt -RedirectStandardError se.txt
+          "stdout:"; Get-Content so.txt -Raw; "stderr:"; Get-Content se.txt -Raw
+          "events:"; Get-WinEvent -FilterHashtable @{LogName='Application'; StartTime=(Get-Date).AddMinutes(-15)} -ErrorAction SilentlyContinue | Where-Object { $_.Message -match 'XamlCompiler' } | Select-Object -First 3 | ForEach-Object { $_.Message }
           Pop-Location
