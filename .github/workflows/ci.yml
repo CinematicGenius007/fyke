@@ -152,22 +152,19 @@ jobs:
         shell: pwsh
         run: |
           $src = "gui-windows/src"
-          $usings = "using System;`nusing System.Threading;`nusing Fyke.Client;`nusing Fyke.ViewModels;`nusing Microsoft.UI.Dispatching;`nusing Microsoft.UI.Composition.SystemBackdrops;`nusing Microsoft.UI.Xaml;`nusing Microsoft.UI.Xaml.Media;`n"
-          foreach ($name in 'U1','U2','U3','U4') {
+          $hdr = "using System;`nusing System.Threading;`nusing Fyke.Client;`nusing Fyke.ViewModels;`nusing Microsoft.UI.Dispatching;`nusing Microsoft.UI.Composition.SystemBackdrops;`nusing Microsoft.UI.Xaml;`nusing Microsoft.UI.Xaml.Media;`nnamespace Fyke.App;`npublic sealed partial class MainWindow : Window {`n"
+          $parts = @{
+            V1 = 'public MainWindow() { InitializeComponent(); Title = "Fyke"; ExtendsContentIntoTitleBar = true; SetTitleBar(TitleBar); Root.DataContext = null; }'
+            V2 = 'public MainWindow() { InitializeComponent(); InlineState.Visibility = Visibility.Collapsed; DetailText.Visibility = Visibility.Collapsed; RetryButton.Visibility = Visibility.Collapsed; }'
+            V3 = 'public MainWindow() { InitializeComponent(); Closed += OnClosed; } private async void OnClosed(object sender, WindowEventArgs args) { await System.Threading.Tasks.Task.CompletedTask; }'
+            V4 = 'public ConnectionViewModel ViewModel { get; } public MainWindow() { var queue = DispatcherQueue.GetForCurrentThread(); ViewModel = new ConnectionViewModel(new DaemonClient(new DaemonClientOptions()), action => queue.TryEnqueue(() => action())); InitializeComponent(); Root.DataContext = ViewModel; }'
+          }
+          foreach ($name in 'V1','V2','V3','V4') {
             $d = "$src/$name"
             if (Test-Path $d) { Remove-Item $d -Recurse -Force }
             Copy-Item "$src/Fyke.App" $d -Recurse -Exclude obj,bin
             Rename-Item "$d/Fyke.App.csproj" "$name.csproj"
-            Remove-Item "$d/Themes/Tokens.xaml"
-            Set-Content "$d/App.xaml" '<Application x:Class="Fyke.App.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"><Application.Resources><ResourceDictionary /></Application.Resources></Application>'
-            Set-Content "$d/MainWindow.xaml" '<Window x:Class="Fyke.App.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"><Grid x:Name="Root" /></Window>'
-            $body = 'public MainWindow() { InitializeComponent(); }'
-            if ($name -eq 'U3') { $body = 'public MainWindow() { InitializeComponent(); Title = "Fyke"; SystemBackdrop = new MicaBackdrop(); }' }
-            if ($name -eq 'U4') { $body = 'private readonly IDaemonClient client = new DaemonClient(new DaemonClientOptions()); public MainWindow() { InitializeComponent(); }' }
-            $head = $usings
-            if ($name -eq 'U2') { $head = "using Microsoft.UI.Xaml;`n" }
-            if ($name -eq 'U3') { $head = "using Microsoft.UI.Xaml;`nusing Microsoft.UI.Xaml.Media;`n" }
-            Set-Content "$d/MainWindow.xaml.cs" ($head + "namespace Fyke.App;`npublic sealed partial class MainWindow : Window { $body }")
+            Set-Content "$d/MainWindow.xaml.cs" ($hdr + $parts[$name] + "`n}")
             "== $name"
             $out = dotnet build "$d/$name.csproj" -c Release -p:Platform=x64 -v:q 2>&1 | Out-String
             if ($out -match 'MSB3073') { "XAML COMPILER FAILED" } elseif ($out -match 'Build succeeded') { "BUILD OK" } else { "other" }
