@@ -146,11 +146,16 @@ jobs:
       - name: Build the app
         if: ${{ steps.gate.outputs.run == 'true' && matrix.os == 'windows-latest' && !cancelled() }}
         run: dotnet build gui-windows/src/Fyke.App -c Release -p:Platform=x64
-      # The XAML compiler's own messages do not reach the normal build log.
+      # The XAML compiler exits 1 without a message in the build log, so run it by hand.
       - name: XAML compiler diagnostics
         if: ${{ failure() && matrix.os == 'windows-latest' }}
         shell: pwsh
         run: |
-          dotnet build gui-windows/src/Fyke.App -c Release -p:Platform=x64 -v:diag > xaml.log
-          Select-String -Path xaml.log -Pattern 'WMC|XLS|XamlCompiler|error ' | Select-Object -First 60 | ForEach-Object { $_.Line.Trim() }
-          Get-ChildItem gui-windows/src/Fyke.App/obj -Recurse -Include input.json,output.json | ForEach-Object { $_.FullName }
+          $exe = Get-ChildItem "$HOME/.nuget/packages/microsoft.windowsappsdk.winui" -Recurse -Filter XamlCompiler.exe | Where-Object { $_.FullName -match 'net472' } | Select-Object -First 1
+          Push-Location gui-windows/src/Fyke.App
+          $dir = 'obj/x64/Release/net10.0-windows10.0.22621.0'
+          (Get-Content "$dir/input.json" -Raw).Substring(0, 3000)
+          & $exe.FullName "$dir/input.json" "$dir/output.json" 2>&1 | Out-String
+          "exit: $LASTEXITCODE"
+          if (Test-Path "$dir/output.json") { Get-Content "$dir/output.json" -Raw }
+          Pop-Location
