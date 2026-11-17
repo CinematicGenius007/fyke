@@ -64,6 +64,8 @@ struct Entry: Decodable, Sendable {
     let firstSeenAt: Int64
     var read: Bool
     var starred: Bool
+    /// Where readers discuss the entry. Missing from daemons older than the field.
+    let discussionUrl: String?
     let body: String
 }
 

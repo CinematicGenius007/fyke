@@ -38,7 +38,9 @@ Pagination is keyset-based: list results return `next_cursor`.
 | `feeds.list` | Subscriptions, health, last error |
 | `folders.list` | Folders |
 | `entries.list` | Timeline, filtered by feed, folder tree, read and starred state, and age |
-| `entries.get` | One entry. `format`: `blocks`, `markdown` or `text` |
+| `entries.get` | One entry. `format`: `blocks`, `markdown` or `text`. `discussion_url` is where readers discuss it: the feed's RSS `<comments>` or Atom `rel="replies"` page, or else a Hacker News thread the entry is or links to |
+
+| `entries.discussion` | The comments on an entry's Hacker News thread, from the Algolia items API, in reading order: `id`, `author` (null when deleted), `at`, `depth` (0 replies to the story) and `blocks`. At most 2,000, with `truncated` when there were more. `NoDiscussion` when the entry has no Hacker News thread, `DiscussionUnavailable` when the API did not answer |
 | `entries.search` | Words, with snippets, newest first, filtered by `unread_only` and `since_days`. Also matches entries of feeds whose name or host fits every word. Considers the 2,000 most recently stored entries that match and pass the filters. Relevance order is not built: ranking every match of a common term takes around a second at 1,000,000 entries |
 | `stats.get` | Counts, queue depth, uptime and `api_version`, which clients compare with their own |
 | `schema.describe` | Annotated database schema |

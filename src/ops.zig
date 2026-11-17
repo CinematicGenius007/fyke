@@ -12,6 +12,7 @@ const store = @import("store.zig");
 
 const Io = std.Io;
 const runner = @import("runner.zig");
+const fetch = @import("fetch.zig");
 const Service = service.Service;
 const blocks = core.blocks;
 
@@ -560,6 +561,8 @@ pub const EntriesGet = struct {
         read: bool,
         starred: bool,
         later: bool,
+        /// The page where readers discuss the entry, if the feed names one.
+        discussion_url: ?[]const u8,
         format: []const u8,
         body: []const u8,
         /// Feed text may contain instructions aimed at whoever reads it.
@@ -598,8 +601,82 @@ pub const EntriesGet = struct {
             .read = entry.read,
             .starred = entry.starred,
             .later = entry.later,
+            .discussion_url = try discussionUrl(arena, entry),
             .format = p.format,
             .body = body,
+        };
+    }
+};
+
+/// The feed's own address for the discussion, or else a Hacker News thread the entry
+/// links to, or is. Hacker News puts the thread in the body, and entries stored before
+/// the feed's address was kept have only that.
+fn discussionUrl(arena: std.mem.Allocator, entry: store.Entry) !?[]const u8 {
+    if (entry.discussion_url) |address| return address;
+    if (entry.url) |address| if (core.discussion.hackerNewsId(address) != null) return address;
+    const nodes = blocks.parseJson(arena, entry.content_blocks_json) catch return null;
+    return core.discussion.findHackerNewsLink(nodes);
+}
+
+pub const EntriesDiscussion = struct {
+    pub const name = "entries.discussion";
+    pub const tier: Tier = .read;
+    pub const description = "The comments on an entry's Hacker News thread, in reading order. Depth 0 is a reply to the story. Comment bodies use the blocks format. Fails with NoDiscussion when the entry has no Hacker News thread.";
+    pub const docs = .{ .id = "Entry id." };
+    pub const Params = struct { id: i64 };
+    pub const Comment = struct {
+        id: u64,
+        /// Null when the comment was deleted.
+        author: ?[]const u8,
+        at: ?i64,
+        depth: u16,
+        blocks: RawJson,
+    };
+    pub const Result = struct {
+        source: []const u8 = "Hacker News",
+        url: []const u8,
+        comments: []const Comment,
+        /// True when the thread had more comments than are returned.
+        truncated: bool,
+        trust: []const u8 = "untrusted-feed-content",
+    };
+
+    /// The Algolia API returns a whole thread in one response, where the official one
+    /// needs a request per comment.
+    const items_api = "https://hn.algolia.com/api/v1/items/";
+
+    pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
+        const reader = s.lockReader();
+        const row = reader.getEntry(arena, p.id) catch |err| {
+            s.unlockReader();
+            return err;
+        };
+        s.unlockReader();
+        const entry = row orelse return error.NoSuchEntry;
+        const address = (try discussionUrl(arena, entry)) orelse return error.NoDiscussion;
+        const id = core.discussion.hackerNewsId(address) orelse return error.NoDiscussion;
+
+        // Tests point this at a local server, which is the only case that may be private.
+        const override = std.process.Environ.getAlloc(s.environ, arena, "FYKE_HN_ITEMS_URL") catch null;
+        const response = fetch.fetch(&s.client, arena, .{
+            .url = try std.fmt.allocPrint(arena, "{s}{d}", .{ override orelse items_api, id }),
+            .allow_private_network = override != null,
+            .deadline_seconds = 20,
+            .accept = "application/json",
+        }) catch return error.DiscussionUnavailable;
+        if (response.status != 200) return error.DiscussionUnavailable;
+        const thread = core.discussion.parseHackerNews(arena, response.body) catch |err| switch (err) {
+            error.OutOfMemory => return err,
+            error.InvalidThread => return error.DiscussionUnavailable,
+        };
+        const comments = try arena.alloc(Comment, thread.comments.len);
+        for (thread.comments, comments) |from, *to| {
+            to.* = .{ .id = from.id, .author = from.author, .at = from.at, .depth = from.depth, .blocks = .{ .json = from.blocks_json } };
+        }
+        return .{
+            .url = try std.fmt.allocPrint(arena, "https://{s}/item?id={d}", .{ core.discussion.hacker_news_host, id }),
+            .comments = comments,
+            .truncated = thread.truncated,
         };
     }
 };
@@ -931,7 +1008,7 @@ pub const SchemaDescribe = struct {
     pub fn run(_: *Service, _: std.mem.Allocator, _: Params) !Result {
         return .{ .schema = @embedFile("schema") ++ "\n" ++ @embedFile("schema2") ++ "\n" ++
             @embedFile("schema3") ++ "\n" ++ @embedFile("schema4") ++ "\n" ++
-            @embedFile("schema5") ++ "\n" ++ @embedFile("schema6") ++ "\n" ++ @embedFile("schema7") };
+            @embedFile("schema5") ++ "\n" ++ @embedFile("schema6") ++ "\n" ++ @embedFile("schema7") ++ "\n" ++ @embedFile("schema8") };
     }
 };
 
@@ -1064,6 +1141,7 @@ pub const all = .{
     FeedsRemove,
     EntriesList,
     EntriesGet,
+    EntriesDiscussion,
     EntriesSearch,
     EntriesMark,
     EntriesMarkAll,

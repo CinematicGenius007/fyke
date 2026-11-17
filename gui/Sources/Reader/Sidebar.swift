@@ -618,7 +618,7 @@ enum ShortcutList {
         ("Search", "/"), ("Today, All, Starred, Routines", "⌘1–4"), ("Everything", "⌘K"),
     ]
     static let act = [
-        ("Star", "s"), ("Read or unread", "m"), ("Unread only", "u"), ("Open page here", "o"), ("Open in browser", "⇧O"),
+        ("Star", "s"), ("Read or unread", "m"), ("Unread only", "u"), ("Open page here", "o"), ("Open in browser", "⇧O"), ("Comments", "c"),
         ("Fetch full article", "f"), ("Refresh", "r"), ("Add feed", "a"), ("Text and theme", "t"),
         ("Save search as view", "⌘S"), ("Settings", "⌘,"), ("Catch up", "⌘J"), ("Ask your feeds", "⇧⌘A"), ("Undo", "⌘Z"),
     ]

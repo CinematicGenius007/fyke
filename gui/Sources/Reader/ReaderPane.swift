@@ -7,6 +7,7 @@ struct ReaderPane: View {
     @Environment(\.titleFamily) private var titleFamily
     @Environment(FloatLayer.self) private var layer
     @State private var typeFrame = CGRect.zero
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var columnWidth: Double { Prefs.shared.ui.columnWidth }
     private var textSize: Double { Prefs.shared.ui.textSize }
@@ -17,11 +18,16 @@ struct ReaderPane: View {
             if let web = model.web {
                 WebPane(state: web).id(ObjectIdentifier(web))
             } else if let article = model.article {
-                ScrollView {
-                    column(article)
-                        .frame(maxWidth: columnWidth, alignment: .leading)
-                        .padding(.horizontal, Metrics.pageGutter).padding(.top, 72).padding(.bottom, 96)
-                        .frame(maxWidth: .infinity)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        column(article)
+                            .frame(maxWidth: columnWidth, alignment: .leading)
+                            .padding(.horizontal, Metrics.pageGutter).padding(.top, 72).padding(.bottom, 96)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .onChange(of: model.discussionRequest) {
+                        withAnimation(Motion.ease(reduce: reduceMotion)) { proxy.scrollTo(DiscussionSection.anchor, anchor: .top) }
+                    }
                 }
                 .themedScrollbar()
                 .id(article.entry.id)
@@ -68,6 +74,7 @@ struct ReaderPane: View {
                 }
             }
             BlocksView(blocks: article.blocks, size: textSize, spacing: spacing)
+            DiscussionSection(entry: entry, size: textSize, spacing: spacing)
         }
     }
 

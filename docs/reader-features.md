@@ -143,6 +143,8 @@ The GUI follows [design-rules.md](design-rules.md):
 - **⌘K**: a palette of every command and destination.
 - **Settings**: a destination of the main window, not a window of its own. ⌘,, the gear at the sidebar's foot, the palette and "More in Settings" open it over the list and reader panes with the sidebar still showing; Esc, or any other destination, returns to the place it covered with its article and selection intact. General, Reading, Agents and Data are tabs in its header, and each tab's settings are plain rows in the reading column.
 - **Settings · Agents**: writer choice and status, the Claude Code profile folder, and a ready-to-paste MCP configuration. "Make changes" picks the `--tier` written into that configuration: Never (`read`), Reading state only (`annotate`) or Everything (`manage`). Fyke has no per-change approval prompt; an agent's MCP client decides whether to ask before calling a tool.
+- **Comments**: an article with a discussion page ends in one quiet line about it. A Hacker News thread loads under the article on request ("Show comments", the c key, or the story's own Comments link), threaded and collapsible; any other discussion opens as a page.
+- **Web pages**: a page opened in the reader has a bar with back, forward, its address and reload, and "Open in" followed by the name and icon of the Mac's default browser. ⇧O does the same.
 - **States**: writing, failed and empty states are inline, say what is safe, and offer one next action. Bulk changes show an undo toast instead of a confirmation.
 
 ## Checks
@@ -151,7 +153,7 @@ The GUI follows [design-rules.md](design-rules.md):
 |---|---|
 | `zig build test` | Rule validation and sentences, store queries for every rule field, recipe revisions and conflicts, citation validation, routine scheduling with an injected clock (daylight saving, missed occurrences) |
 | `tools/e2e_features.py` | Every operation above over the socket and MCP with a stand-in writer: views and counts, previews, briefs and failed output, cancellation, routines, dry runs, undo |
-| `tools/e2e_gui.py` | Key presses and clicks through each screen, with snapshots |
+| `tools/e2e_gui.py` | Key presses and clicks through each screen, with snapshots. Hacker News threads come from a local stand-in set by `FYKE_HN_ITEMS_URL` |
 
 The concrete operation parameters, defaults, result shapes and revision-conflict errors are documented in [api.md](api.md#views-writing-and-routines). Normalized address columns are indexed by host; measurements at the architecture's million-entry target are planned.
 

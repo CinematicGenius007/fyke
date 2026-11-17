@@ -114,6 +114,10 @@ final class AppModel {
     /// The remote page showing in place of the reader.
     var web: WebState?
     var fullTextStatus: String?
+    /// The open article's comments.
+    var discussion: DiscussionLoad = .idle
+    /// Changes when the reader should scroll to the comments.
+    var discussionRequest = 0
     var dataMove: DataMove?
     var settingsTab = SettingsView.Tab(rawValue: ProcessInfo.processInfo.environment["FYKE_TAB"] ?? "") ?? .General
     /// Settings fills the list and reader panes while this is set. The place behind it
@@ -401,6 +405,7 @@ final class AppModel {
     func open(_ id: Int64) async {
         selectedId = id
         fullTextStatus = nil
+        discussion = .idle
         web = nil
         detail = nil
         do {
@@ -558,15 +563,55 @@ final class AppModel {
         if let text = pageAddress, let url = URL(string: text) { openLink(url) }
     }
 
+    /// The page open in the reader if there is one, or else the article's page.
     func openInBrowser() {
-        if let text = pageAddress { Links.open(text) }
+        if let web {
+            NSWorkspace.shared.open(web.browserAddress)
+        } else if let text = pageAddress {
+            Links.open(text)
+        }
+    }
+
+    /// The open article's comments: read here for Hacker News, as a page otherwise.
+    func openDiscussion() {
+        guard web == nil, let text = article?.entry.discussionUrl, let url = URL(string: text) else { return }
+        if Discussions.hackerNewsId(url) != nil { showDiscussion() } else { openLink(url) }
+    }
+
+    /// Scrolls to the open article's comments, loading them the first time.
+    func showDiscussion() {
+        if case .idle = discussion { loadDiscussion() }
+        if case .failed = discussion { loadDiscussion() }
+        discussionRequest += 1
+    }
+
+    func loadDiscussion() {
+        guard let id = article?.entry.id else { return }
+        discussion = .loading
+        Task {
+            do {
+                let thread: Discussion = try await Daemon.shared.callSlow("entries.discussion", IdParams(id: id))
+                if article?.entry.id == id { discussion = .loaded(thread) }
+            } catch {
+                guard article?.entry.id == id else { return }
+                let text = error.localizedDescription
+                discussion = .failed(text.contains("DiscussionUnavailable") ? "Hacker News did not answer." : text)
+            }
+        }
     }
 
     /// Command-click always means the browser. Feed content chooses these addresses,
     /// and the check in `Links` applies on both routes.
     func openLink(_ url: URL) {
         guard Links.isSafe(url) else { return }
-        if Prefs.shared.ui.openLinks == "browser" || NSEvent.modifierFlags.contains(.command) {
+        let toBrowser = Prefs.shared.ui.openLinks == "browser" || NSEvent.modifierFlags.contains(.command)
+        // The article's own Hacker News thread reads better under it than as a page.
+        if !toBrowser, web == nil, let thread = Discussions.hackerNewsId(url),
+           thread == Discussions.hackerNewsId(article?.entry.discussionUrl) {
+            showDiscussion()
+            return
+        }
+        if toBrowser {
             NSWorkspace.shared.open(url)
         } else {
             web = WebState(address: url)

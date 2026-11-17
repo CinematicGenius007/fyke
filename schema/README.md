@@ -38,3 +38,7 @@ Indexes cover sidebar ordering, recent jobs and artifacts, arriving entries,
 later state, due routines and routine history. Article hosts and timelines share an index; folder parent and feed folder
 indexes support descendant scopes. Sidebar counts are computed together, and
 bulk marks use parameter-bound set updates.
+
+Version 8 adds `entries.discussion_url`, the page where readers discuss an entry,
+from RSS `<comments>` or an Atom `rel="replies"` link. Entries stored earlier gain
+it on the next fetch of their feed, without counting as changed.

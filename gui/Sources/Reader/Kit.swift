@@ -26,6 +26,10 @@ enum Metrics {
     static let control: CGFloat = 32
     /// A button where a full 32 pt one would crowd its row: popovers, bars and lists.
     static let compactControl: CGFloat = 28
+    /// How far a reply sits in from the comment it answers.
+    static let replyIndent: CGFloat = 16
+    /// Replies deeper than this line up at this depth, so a long exchange keeps its width.
+    static let replyDepths = 6
     /// A popover's header row.
     static let panelHeader: CGFloat = 44
     /// A one-line row inside a popover or list.

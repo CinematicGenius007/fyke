@@ -2,6 +2,7 @@
 
 pub const blocks = @import("blocks.zig");
 pub const dates = @import("dates.zig");
+pub const discussion = @import("discussion.zig");
 pub const encoding = @import("encoding.zig");
 pub const extract = @import("extract.zig");
 pub const feed = @import("feed.zig");
@@ -19,6 +20,7 @@ pub const xml = @import("xml.zig");
 test {
     _ = blocks;
     _ = dates;
+    _ = discussion;
     _ = encoding;
     _ = extract;
     _ = feed;

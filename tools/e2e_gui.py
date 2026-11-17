@@ -70,11 +70,32 @@ ITEMS = "".join(f"<item><title>Needle {name}</title><guid>{name}</guid><pubDate>
 FEED = f'<rss version="2.0"><channel><title>Local</title>{ITEMS}</channel></rss>'.encode()
 
 
+# A Hacker News story, and its thread as the Algolia items API returns it. The
+# discussion check adds this feed, and removes it again so the others see three needles.
+THREAD_FEED = (b'<rss version="2.0"><channel><title>Hacker News</title><item><title>Unkernel in WASM</title>'
+               b'<link>https://example.org/unkernel</link><comments>https://news.ycombinator.com/item?id=41</comments>'
+               b'<description>&lt;a href="https://news.ycombinator.com/item?id=41"&gt;Comments&lt;/a&gt;</description></item></channel></rss>')
+THREAD = json.dumps({"id": 41, "type": "story", "children": [
+    {"id": 1, "type": "comment", "author": "ann", "created_at_i": int(time.time()) - 7200,
+     "text": "<p>This boots faster than I expected.<p>Has anyone tried it with <i>networking</i>?",
+     "children": [{"id": 2, "type": "comment", "author": "bo", "created_at_i": int(time.time()) - 3600,
+                   "text": "Yes, through a <a href=\"https://example.org/proxy\">WebSocket proxy</a>.", "children": []}]},
+    {"id": 3, "type": "comment", "author": None, "text": None, "children": [
+        {"id": 4, "type": "comment", "author": "cy", "created_at_i": int(time.time()) - 600, "text": "Still here.", "children": []}]}]}).encode()
+thread_requests = []
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *args): pass
     def do_GET(self):
-        self.send_response(200); self.send_header("Content-Type", "application/rss+xml")
-        self.send_header("Content-Length", str(len(FEED))); self.end_headers(); self.wfile.write(FEED)
+        body, kind = FEED, "application/rss+xml"
+        if self.path == "/thread.xml":
+            body = THREAD_FEED
+        elif self.path.startswith("/items/"):
+            thread_requests.append(self.path)
+            body, kind = THREAD, "application/json"
+        self.send_response(200); self.send_header("Content-Type", kind)
+        self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
 
 
 def rss(*args):
@@ -285,6 +306,33 @@ def routine_save():
     scenario("a routine starts from a view and saves with command-S", "wait cmd+s wait", screen="routines", check=test)
 
 
+@check("discussion", tags=["comments", "reader"])
+def discussion():
+    """The Comments link in a Hacker News story, and the c key, load its thread under
+    the article. Opening the story alone does not ask for the thread."""
+    port = server.server_address[1]
+    feed = call("feeds.add", {"url": f"http://127.0.0.1:{port}/thread.xml", "allow_private_network": True})["id"]
+    try:
+        thread_requests.clear()
+        launch({"FYKE_KEYS": "cmd+f unkernel return wait wait"}, "-theme", "light", "-followSystem", "NO")
+        if thread_requests:
+            fail("discussion", f"opening the story asked for its thread: {thread_requests}")
+        ok("opening a story leaves its comments unasked")
+        for theme in ["light", "dark"]:
+            target = snapshots / f"comments-{theme}.png"
+            target.unlink(missing_ok=True)
+            thread_requests.clear()
+            launch({"FYKE_KEYS": "cmd+f unkernel return wait c wait wait", "FYKE_SNAPSHOT": str(target), "FYKE_SNAPSHOT_DELAY": "1"},
+                   "-theme", theme, "-followSystem", "NO")
+            if thread_requests != ["/items/41"]:
+                fail("discussion", f"c should load the thread once, asked {thread_requests}")
+            if not target.exists() or target.stat().st_size < 10000:
+                fail(f"snapshot comments {theme}", "no picture")
+        ok(f"c loads the thread under the article, in {snapshots.relative_to(root)}")
+    finally:
+        call("feeds.remove", {"id": feed})
+
+
 def snapshot(name, extra):
     for theme in ["light", "dark"]:
         target = snapshots / f"{name}-{theme}.png"
@@ -336,6 +384,8 @@ chosen = select({name.strip() for name in args.only.split(",") if name.strip()})
 server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), Handler)
 server.daemon_threads = True
 threading.Thread(target=server.serve_forever, daemon=True).start()
+# The daemon starts with the first command, and reads Hacker News threads from here.
+env["FYKE_HN_ITEMS_URL"] = f"http://127.0.0.1:{server.server_address[1]}/items/"
 rss("add", f"http://127.0.0.1:{server.server_address[1]}/feed.xml", "--allow-private")
 # The daemon fetches a new feed in the background. The checks start once it holds all
 # three articles, not after a fixed pause, because a cold start after a rebuild is slow.

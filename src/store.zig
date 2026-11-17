@@ -56,6 +56,7 @@ const migrations = [_][*:0]const u8{
     @embedFile("schema5"),
     @embedFile("schema6"),
     @embedFile("schema7"),
+    @embedFile("schema8"),
 };
 
 pub const Feed = struct {
@@ -122,6 +123,7 @@ pub const Entry = struct {
     later: bool,
     read: bool,
     starred: bool,
+    discussion_url: ?[]const u8 = null,
 };
 
 pub const NewEnclosure = struct {
@@ -135,6 +137,8 @@ pub const NewEntry = struct {
     identity: []const u8,
     url: ?[]const u8,
     canonical_url: ?[]const u8,
+    /// Where readers discuss the entry, when the feed names a page for that.
+    discussion_url: ?[]const u8 = null,
     title: ?[]const u8,
     author: ?[]const u8,
     published_at: ?i64,
@@ -1074,15 +1078,22 @@ pub const Db = struct {
                 const id = sqlite3_column_int64(lookup, 0);
                 const pointer = sqlite3_column_text(lookup, 1) orelse continue;
                 const stored = pointer[0..@intCast(sqlite3_column_bytes(lookup, 1))];
-                if (std.mem.eql(u8, stored, entry.content_hash)) continue;
+                if (std.mem.eql(u8, stored, entry.content_hash)) {
+                    // The address is not part of the hash, so entries stored before it
+                    // was kept gain it here without counting as changed.
+                    if (entry.discussion_url) |address| {
+                        try db.run("UPDATE entries SET discussion_url = ?2 WHERE id = ?1 AND discussion_url IS NOT ?2", .{ id, address });
+                    }
+                    continue;
+                }
                 try db.run(
                     \\UPDATE entries
                     \\SET url = ?2, article_host=article_host(?2),article_path=article_path(?2),canonical_url = ?3,
                     \\title = ?4, author = ?5,
                     \\  published_at = ?6, updated_at = ?7, content_blocks_json = ?8, content_text = ?9,
                     \\  content_hash = ?10, revision = revision + 1, full_status = NULL,
-                    \\  full_attempts = 0, full_retry_at = NULL WHERE id = ?1
-                , .{ id, entry.url, entry.canonical_url, entry.title, entry.author, entry.published_at, entry.updated_at, entry.content_blocks_json, entry.content_text, entry.content_hash });
+                    \\  full_attempts = 0, full_retry_at = NULL, discussion_url = ?11 WHERE id = ?1
+                , .{ id, entry.url, entry.canonical_url, entry.title, entry.author, entry.published_at, entry.updated_at, entry.content_blocks_json, entry.content_text, entry.content_hash, entry.discussion_url });
                 try db.run("INSERT INTO events (at, type, subject_id) VALUES (?1, 'entry.updated', ?2)", .{ now, id });
                 result.updated += 1;
                 continue;
@@ -1094,9 +1105,9 @@ pub const Db = struct {
             try db.run(
                 \\INSERT INTO entries (feed_id, identity, url, canonical_url, title, author, published_at,
                 \\updated_at, first_seen_at, sort_at, content_blocks_json, content_text,
-                \\content_hash,article_host,article_path)
-                \\VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,article_host(?3),article_path(?3))
-            , .{ feed_id, entry.identity, entry.url, entry.canonical_url, entry.title, entry.author, entry.published_at, entry.updated_at, now, sort_at, entry.content_blocks_json, entry.content_text, entry.content_hash });
+                \\content_hash,article_host,article_path,discussion_url)
+                \\VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,article_host(?3),article_path(?3),?14)
+            , .{ feed_id, entry.identity, entry.url, entry.canonical_url, entry.title, entry.author, entry.published_at, entry.updated_at, now, sort_at, entry.content_blocks_json, entry.content_text, entry.content_hash, entry.discussion_url });
             const id = sqlite3_last_insert_rowid(db.handle);
             for (entry.enclosures) |enclosure| {
                 try db.run("INSERT OR IGNORE INTO enclosures (entry_id, url, mime_type, bytes) VALUES (?1, ?2, ?3, ?4)", .{ id, enclosure.url, enclosure.mime_type, enclosure.bytes });
@@ -1176,7 +1187,8 @@ pub const Db = struct {
         const stmt = try db.prepare(
             \\SELECT e.id, e.feed_id, COALESCE(f.title_override, f.title), e.title, e.url, e.author,
             \\  e.published_at, e.first_seen_at, e.sort_at, e.content_blocks_json, e.content_text,
-            \\  e.revision, s.read_at IS NOT NULL, s.starred_at IS NOT NULL, s.later_at IS NOT NULL
+            \\  e.revision, s.read_at IS NOT NULL, s.starred_at IS NOT NULL, s.later_at IS NOT NULL,
+            \\  e.discussion_url
             \\FROM entries e JOIN feeds f ON f.id = e.feed_id LEFT JOIN entry_state s ON s.entry_id = e.id
             \\WHERE e.id = ?1
         , .{id});
@@ -1198,6 +1210,7 @@ pub const Db = struct {
             .read = sqlite3_column_int64(stmt, 12) != 0,
             .starred = sqlite3_column_int64(stmt, 13) != 0,
             .later = sqlite3_column_int64(stmt, 14) != 0,
+            .discussion_url = try columnOptionalText(stmt, 15, arena),
         };
     }
 

@@ -26,16 +26,35 @@ def check(label, condition, detail=""):
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *args): pass
     def do_GET(self):
+        if self.path.startswith("/items/"): return self.thread(self.path[len("/items/"):])
+        if self.path == "/hn": return self.reply(b'<rss version="2.0"><channel><title>HN</title>'
+            b'<item><title>Kept</title><link>https://example.org/kept</link><comments>https://news.ycombinator.com/item?id=41</comments><description>x</description></item>'
+            b'<item><title>Body</title><link>https://example.org/body</link><description>&lt;a href="https://news.ycombinator.com/item?id=42"&gt;Comments&lt;/a&gt;</description></item>'
+            b'<item><title>Gone</title><link>https://example.org/gone</link><comments>https://news.ycombinator.com/item?id=43</comments><description>x</description></item>'
+            b'<item><title>Elsewhere</title><link>https://example.org/else</link><comments>https://forum.example.org/t/1</comments><description>x</description></item>'
+            b'</channel></rss>')
         paths = ["https://example.com/blog/a", "https://sub.example.com/blog/b", "https://example.com/blog/jobs/c", None]
         if self.path == "/many": paths = [f"https://example.com/many/{i}" for i in range(70)]
         if self.path == "/long": paths = [f"https://example.com/long/{i}" for i in range(3)]
         description = "storage "*10000 if self.path=="/long" else "Storage engine compiler news."
         items = "".join(f'<item><title>Storage engine {i}</title><guid>{i}</guid>' + (f'<link>{url}</link>' if url else '') + f'<description>{description}</description></item>' for i, url in enumerate(paths))
         body = f'<rss version="2.0"><channel><title>Engineering</title>{items}</channel></rss>'.encode()
-        self.send_response(200)
+        self.reply(body)
+
+    def reply(self, body, status=200):
+        self.send_response(status)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    # A stand-in for the Algolia items API: thread 43 is missing.
+    def thread(self, item):
+        if item == "43": return self.reply(b'{"status":404}', 404)
+        reply = lambda id, author, text, children=(): {"id":id,"type":"comment","author":author,"created_at_i":1700000000,"text":text,"children":list(children)}
+        story = {"id":int(item),"type":"story","children":[
+            reply(1,"ann","<p>First <a href=\"https://example.org/x\">link</a>",[reply(2,None,None,[reply(3,"bo","<i>Deep</i>")])]),
+            reply(4,"cy","Second")]}
+        self.reply(json.dumps(story).encode())
 
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
@@ -181,7 +200,7 @@ ids=[999999] if mode=="invalid" else [sources[0]["id"]]
 print(json.dumps({"title":"Morning brief","sections":[{"heading":"News","claims":[{"text":"Storage news.","sources":ids}]}]}))
 ''')
     command = subprocess.list2cmdline([sys.executable,writer,mode]) if os.name=="nt" else shlex.join([sys.executable,writer,mode])
-    env = dict(os.environ,FYKE_HOME=home,FYKE_WRITER_CMD=command)
+    env = dict(os.environ,FYKE_HOME=home,FYKE_WRITER_CMD=command,FYKE_HN_ITEMS_URL=f"http://127.0.0.1:{server.server_address[1]}/items/")
     # Stand-in adapters log each call, so probe counts and the profile they ran with are
     # observable without installed agents. Codex is always signed in; Claude Code is
     # signed in only when its profile folder holds a `signed-in` file.
@@ -373,6 +392,17 @@ print(json.dumps({"title":"Morning brief","sections":[{"heading":"News","claims"
         check("detach disables routine",call("routines.get",id=rid)["enabled"]==0)
         call("routines.remove",id=rid)
         check("removed definitions",not call("routines.list")["items"] and not call("views.list")["items"])
+        hn = call("feeds.add",url=f"http://127.0.0.1:{server.server_address[1]}/hn",allow_private_network=True)["id"]
+        stories = {e["title"]:e["id"] for e in call("entries.list",feed_id=hn)["items"]}
+        check("discussion from comments",call("entries.get",id=stories["Kept"])["discussion_url"]=="https://news.ycombinator.com/item?id=41")
+        check("discussion from body",call("entries.get",id=stories["Body"])["discussion_url"]=="https://news.ycombinator.com/item?id=42")
+        check("other discussion kept",call("entries.get",id=stories["Elsewhere"])["discussion_url"]=="https://forum.example.org/t/1")
+        thread = call("entries.discussion",id=stories["Kept"])
+        check("thread in reading order",[(c["id"],c["depth"]) for c in thread["comments"]]==[(1,0),(2,1),(3,2),(4,0)] and not thread["truncated"],thread)
+        check("thread as blocks",thread["comments"][0]["blocks"][0]["t"]=="p" and thread["comments"][1]["author"] is None and thread["comments"][1]["blocks"]==[])
+        check("thread address",thread["url"]=="https://news.ycombinator.com/item?id=41" and thread["trust"]=="untrusted-feed-content")
+        check("thread unavailable",expect_error(lambda:call("entries.discussion",id=stories["Gone"])))
+        check("no thread",expect_error(lambda:call("entries.discussion",id=stories["Elsewhere"])))
     finally:
         if client: client.close()
         cli("daemon","stop")

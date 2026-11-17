@@ -409,6 +409,10 @@ pub fn prepareEntries(arena: std.mem.Allocator, parsed: feed.Feed, feed_url: []c
 
         const title = cleanLine(arena, entry.title);
         const link = if (entry.url) |value| (if (url.isSafeLink(value)) cleanLine(arena, value) else null) else null;
+        const comments = if (entry.comments) |value| comments: {
+            const target = try url.resolve(arena, base, value);
+            break :comments if (url.isHttp(target)) cleanLine(arena, target) else null;
+        } else null;
 
         var hash: std.crypto.hash.sha2.Sha256 = .init(.{});
         hash.update(title orelse "");
@@ -431,6 +435,7 @@ pub fn prepareEntries(arena: std.mem.Allocator, parsed: feed.Feed, feed_url: []c
             .identity = identity,
             .url = link,
             .canonical_url = if (link) |value| try url.canonical(arena, value) else null,
+            .discussion_url = comments,
             .title = title,
             .author = cleanLine(arena, entry.author),
             .published_at = entry.published_at,

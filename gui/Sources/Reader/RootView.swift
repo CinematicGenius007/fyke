@@ -113,6 +113,7 @@ struct RootView: View {
         case "u": model.toggleUnreadOnly()
         case "o": model.openPage()
         case "O": model.openInBrowser()
+        case "c": model.openDiscussion()
         case "f": model.fetchFull()
         case "r": model.refresh()
         case "a": model.showingAddFeed = true
