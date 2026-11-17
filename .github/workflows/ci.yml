@@ -146,27 +146,16 @@ jobs:
       - name: Build the app
         if: ${{ steps.gate.outputs.run == 'true' && matrix.os == 'windows-latest' && !cancelled() }}
         run: dotnet build gui-windows/src/Fyke.App -c Release -p:Platform=x64
-      # The XAML compiler exits 1 with no message, so compile pieces of the window one at a time.
-      - name: XAML bisect
-        if: ${{ failure() && matrix.os == 'windows-latest' }}
+      # The XAML compiler exits 1 with no message: show its output file and try a bare App.xaml.
+      - name: XAML diagnostics
+        if: ${{ steps.gate.outputs.run == 'true' && matrix.os == 'windows-latest' && failure() }}
         shell: pwsh
         run: |
-          $src = 'gui-windows/src'
-          $head = '<Window x:Class="Fyke.App.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">'
-          $variants = [ordered]@{
-            V0 = '<Grid x:Name="Root" />'
-            V1 = '<Grid x:Name="Root"><Grid x:Name="Inner" /></Grid>'
-            V2 = '<Grid x:Name="Root"><TextBlock Text="x" /></Grid>'
-            V3 = '<TextBlock x:Name="Root" Text="x" />'
-          }
-          foreach ($name in $variants.Keys) {
-            $dir = "$src/$name"
-            if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
-            Copy-Item "$src/Fyke.App" $dir -Recurse -Exclude obj,bin
-            Rename-Item "$dir/Fyke.App.csproj" "$name.csproj"
-            Set-Content "$dir/MainWindow.xaml" ($head + $variants[$name] + '</Window>')
-            "== $name"
-            $out = dotnet build "$dir/$name.csproj" -c Release -p:Platform=x64 -v:q 2>&1 | Out-String
-            if ($out -match 'MSB3073') { "XAML COMPILER FAILED" } else { "xaml ok" }
-            ($out -split "`n" | Select-String 'error' | Select-Object -First 2 | ForEach-Object { $_.Line.Trim().Substring(0, [Math]::Min(160, $_.Line.Trim().Length)) })
-          }
+          $app = "gui-windows/src/Fyke.App"
+          Get-ChildItem "$app/obj" -Recurse -Filter output.json | ForEach-Object { "== $($_.FullName)"; Get-Content $_.FullName -Raw }
+          Get-ChildItem "$app/obj" -Recurse -Filter input.json | ForEach-Object { "== $($_.FullName)"; (Get-Content $_.FullName -Raw).Substring(0, 3000) }
+          Set-Content "$app/App.xaml" '<Application x:Class="Fyke.App.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"><Application.Resources><ResourceDictionary /></Application.Resources></Application>'
+          "== bare App.xaml"
+          $out = dotnet build "$app" -c Release -p:Platform=x64 -v:q 2>&1 | Out-String
+          if ($out -match 'MSB3073') { "XAML COMPILER STILL FAILS" } else { "XAML OK with bare App.xaml" }
+          ($out -split "`n" | Select-String 'error' | Select-Object -First 3)
