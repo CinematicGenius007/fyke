@@ -188,7 +188,8 @@ for client_type in (SocketClient, McpClient):
     with open(writer,"w") as f:
         f.write('''import json, sys, time, os
 mode=open(sys.argv[1]).read().strip()
-with open(sys.argv[1]+".pid","w") as f: f.write(str(os.getpid()))
+with open(sys.argv[1]+".pid.tmp","w") as f: f.write(str(os.getpid()))
+os.replace(sys.argv[1]+".pid.tmp",sys.argv[1]+".pid")
 prompt=sys.stdin.read()
 sources=json.loads(prompt.split("UNTRUSTED SOURCES JSON:\\n")[1].split("\\nEND SOURCES")[0])
 assert len(sources)<=60 and sum(len(s["text"]) for s in sources)<=120000
@@ -353,6 +354,7 @@ print(json.dumps({"title":"Morning brief","sections":[{"heading":"News","claims"
         long_artifact=call("briefs.get",id=long_job["artifact_id"])
         check("text selection cap",long_artifact["input_count"]==2 and long_artifact["omitted_count"]==1)
         set_mode("slow")
+        if os.path.exists(mode+".pid"): os.remove(mode+".pid")
         recovering=call("briefs.run",view_id=vid)
         deadline=time.monotonic()+5
         while time.monotonic()<deadline:
