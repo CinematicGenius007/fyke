@@ -152,19 +152,16 @@ jobs:
         shell: pwsh
         run: |
           $src = "gui-windows/src"
-          foreach ($name in 'S3','S4') {
+          foreach ($name in 'T1','T2','T3') {
             $d = "$src/$name"
             if (Test-Path $d) { Remove-Item $d -Recurse -Force }
             Copy-Item "$src/Fyke.App" $d -Recurse -Exclude obj,bin
             Rename-Item "$d/Fyke.App.csproj" "$name.csproj"
-            Remove-Item "$d/Themes/Tokens.xaml"
-            Set-Content "$d/App.xaml" '<Application x:Class="Fyke.App.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"><Application.Resources><ResourceDictionary /></Application.Resources></Application>'
-            if ($name -eq 'S3') {
-              Set-Content "$d/MainWindow.xaml" '<Window x:Class="Fyke.App.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"><Grid /></Window>'
-              Set-Content "$d/MainWindow.xaml.cs" 'namespace Fyke.App; public sealed partial class MainWindow : Microsoft.UI.Xaml.Window { public MainWindow() => InitializeComponent(); }'
-            } else {
-              Set-Content "$d/App.xaml.cs" 'namespace Fyke.App; public partial class App : Microsoft.UI.Xaml.Application { public App() => InitializeComponent(); }'
-            }
+            $cs = Get-Content "$d/MainWindow.xaml.cs" -Raw
+            if ($name -eq 'T1') { $cs = $cs.Replace('public ConnectionViewModel ViewModel { get; }', 'internal ConnectionViewModel ViewModel { get; }') }
+            if ($name -eq 'T2') { $cs = $cs.Replace('public ConnectionViewModel ViewModel { get; }', 'private ConnectionViewModel ViewModel { get; }') }
+            if ($name -eq 'T3') { $cs = $cs.Replace('public ConnectionViewModel ViewModel { get; }', 'private ConnectionViewModel ViewModel { get; }').Replace('private readonly IDaemonClient client = new DaemonClient(new DaemonClientOptions());', 'private readonly object client = new();').Replace('await client.DisposeAsync();','').Replace('new ConnectionViewModel(client,', 'new ConnectionViewModel(null!,') }
+            Set-Content "$d/MainWindow.xaml.cs" $cs
             "== $name"
             $out = dotnet build "$d/$name.csproj" -c Release -p:Platform=x64 -v:q 2>&1 | Out-String
             if ($out -match 'MSB3073') { "XAML COMPILER FAILED" } elseif ($out -match 'Build succeeded') { "BUILD OK" } else { "other" }
