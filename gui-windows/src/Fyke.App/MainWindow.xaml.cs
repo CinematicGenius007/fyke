@@ -26,6 +26,8 @@ public sealed partial class MainWindow : Window
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
+        // The XAML compiler rejects a font family resource used from markup, so it is set here.
+        InlineState.FontFamily = (FontFamily)Application.Current.Resources["FontUi"];
         Root.DataContext = ViewModel;
         ViewModel.PropertyChanged += (_, _) => ShowState();
         ShowState();

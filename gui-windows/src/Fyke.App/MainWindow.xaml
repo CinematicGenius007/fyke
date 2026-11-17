@@ -5,7 +5,7 @@
         <Grid.RowDefinitions><RowDefinition Height="32" /><RowDefinition Height="*" /></Grid.RowDefinitions>
         <Grid x:Name="TitleBar" />
         <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"
-                    Spacing="12" MaxWidth="400" FontFamily="{StaticResource FontUi}"
+                    Spacing="12" MaxWidth="400"
                     x:Name="InlineState">
             <TextBlock Text="{Binding Message}" FontSize="20" TextWrapping="Wrap"
                        Foreground="{ThemeResource InkBrush}" />
