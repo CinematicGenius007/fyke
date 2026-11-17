@@ -19,6 +19,35 @@ const win = struct {
     extern "kernel32" fn SetStdHandle(handle_id: windows.DWORD, handle: windows.HANDLE) callconv(.winapi) windows.BOOL;
     /// The documented value is (DWORD)-12.
     const std_error_handle: windows.DWORD = @bitCast(@as(i32, -12));
+
+    extern "kernel32" fn CreateJobObjectW(attributes: ?*anyopaque, name: ?[*:0]const u16) callconv(.winapi) ?windows.HANDLE;
+    extern "kernel32" fn SetInformationJobObject(job: windows.HANDLE, class: c_int, info: *anyopaque, length: windows.DWORD) callconv(.winapi) windows.BOOL;
+    extern "kernel32" fn AssignProcessToJobObject(job: windows.HANDLE, process: windows.HANDLE) callconv(.winapi) windows.BOOL;
+    extern "kernel32" fn TerminateJobObject(job: windows.HANDLE, exit_code: windows.UINT) callconv(.winapi) windows.BOOL;
+    extern "kernel32" fn ResumeThread(thread: windows.HANDLE) callconv(.winapi) windows.DWORD;
+    /// JobObjectExtendedLimitInformation.
+    const extended_limit_information: c_int = 9;
+    /// JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE.
+    const kill_on_job_close: windows.DWORD = 0x2000;
+    /// JOBOBJECT_EXTENDED_LIMIT_INFORMATION, field for field.
+    const ExtendedLimits = extern struct {
+        basic: extern struct {
+            per_process_user_time_limit: i64,
+            per_job_user_time_limit: i64,
+            flags: windows.DWORD,
+            minimum_working_set_size: usize,
+            maximum_working_set_size: usize,
+            active_process_limit: windows.DWORD,
+            affinity: usize,
+            priority_class: windows.DWORD,
+            scheduling_class: windows.DWORD,
+        },
+        io: [6]u64,
+        process_memory_limit: usize,
+        job_memory_limit: usize,
+        peak_process_memory_used: usize,
+        peak_job_memory_used: usize,
+    };
 };
 
 /// Makes a file or folder private to its owner. POSIX systems get the given mode. On
@@ -53,6 +82,45 @@ pub fn keepStdHandlesFromChildren() void {
         _ = win.SetHandleInformation(h, win.handle_flag_inherit, 0);
     }
 }
+/// A child and every process it starts, ended together. A writer is often a wrapper
+/// (`cmd /c`, an npm `.cmd` shim) around the program that does the work, and that
+/// program holds the output pipes. Ending only the wrapper would leave it running
+/// with the pipes open. On Windows the tree is a job object that ends every member
+/// when it is closed; the child must be spawned with `start_suspended = is_windows`
+/// so it cannot start a process before it joins. POSIX writers are run with `exec`
+/// and killed directly, so nothing is needed there.
+pub const ProcessTree = struct {
+    job: if (is_windows) ?windows.HANDLE else void,
+
+    /// Puts a suspended child into a new tree and lets it run. If the system refuses a
+    /// job object the child still runs, and ending the tree ends only the child.
+    pub fn adopt(child: *std.process.Child) ProcessTree {
+        if (comptime !is_windows) return .{ .job = {} };
+        const job = win.CreateJobObjectW(null, null);
+        if (job) |handle| {
+            var limits = std.mem.zeroes(win.ExtendedLimits);
+            limits.basic.flags = win.kill_on_job_close;
+            const joined = win.SetInformationJobObject(handle, win.extended_limit_information, &limits, @sizeOf(win.ExtendedLimits)) != .FALSE and
+                win.AssignProcessToJobObject(handle, child.id.?) != .FALSE;
+            _ = win.ResumeThread(child.thread_handle);
+            if (joined) return .{ .job = handle };
+            windows.CloseHandle(handle);
+            return .{ .job = null };
+        }
+        _ = win.ResumeThread(child.thread_handle);
+        return .{ .job = null };
+    }
+
+    /// Ends every process still in the tree. Safe to call after the child has exited.
+    pub fn end(tree: *ProcessTree) void {
+        if (comptime !is_windows) return;
+        const handle = tree.job orelse return;
+        _ = win.TerminateJobObject(handle, 1);
+        windows.CloseHandle(handle);
+        tree.job = null;
+    }
+};
+
 // The C runtime owns timezone rules. Windows struct tm has only the nine ISO C
 // fields; POSIX adds the UTC offset and zone pointer. Keep the ABI here so callers
 // cannot accidentally pass the POSIX layout to a Windows runtime function.

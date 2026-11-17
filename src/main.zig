@@ -96,6 +96,7 @@ const App = struct {
     io: Io,
     client: *Client,
     out: *Io.Writer,
+    home_path: []const u8,
 
     fn raw(app: App, comptime Op: type, params: Op.Params) !void {
         try app.out.print("{s}\n", .{try app.client.callRaw(Op, params)});
@@ -211,7 +212,7 @@ pub fn main(init: std.process.Init) !u8 {
             std.debug.print("fyke: cannot reach the daemon: {s}\n", .{@errorName(err)});
             return 1;
         };
-        const app: App = .{ .arena = arena, .io = io, .client = &client, .out = out };
+        const app: App = .{ .arena = arena, .io = io, .client = &client, .out = out, .home_path = home_path };
         entry[1](app, args) catch |err| switch (err) {
             error.Usage => {
                 try out.writeAll(usage);
@@ -433,6 +434,27 @@ fn daemonCommand(app: App, args: Args) !void {
     const action = args.positional() orelse return error.Usage;
     if (!std.mem.eql(u8, action, "stop")) return error.Usage;
     _ = try app.client.call(ops.DaemonStop, .{});
+    try waitForDaemonExit(app);
+}
+
+/// Returns once the daemon has exited, so that a command run next starts a new one
+/// instead of reaching the one that is shutting down. The daemon's lock is the proof:
+/// the kernel releases it only when the process ends.
+fn waitForDaemonExit(app: App) !void {
+    const path = try std.fmt.allocPrint(app.arena, "{s}/{s}", .{ app.home_path, daemon.lock_name });
+    const lock_file = Io.Dir.cwd().openFile(app.io, path, .{ .mode = .read_write }) catch |err| switch (err) {
+        error.FileNotFound => return,
+        else => return err,
+    };
+    defer lock_file.close(app.io);
+    for (0..1000) |_| {
+        if (try lock_file.tryLock(app.io, .exclusive)) {
+            lock_file.unlock(app.io);
+            return;
+        }
+        try app.io.sleep(.fromMilliseconds(10), .awake);
+    }
+    return error.DaemonStillRunning;
 }
 
 test {

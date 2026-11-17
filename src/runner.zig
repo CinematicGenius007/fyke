@@ -6,6 +6,8 @@ const Service = @import("service.zig").Service;
 const store = @import("store.zig");
 const contract = @import("writer.zig");
 const Io = std.Io;
+const builtin = @import("builtin");
+const platform = @import("platform.zig");
 
 /// Accepts only installed writer adapters known to the fixed command builder.
 pub fn validateName(name: []const u8) !void {
@@ -31,16 +33,81 @@ pub fn selected(s: *Service, a: std.mem.Allocator) ![]const u8 {
     return "codex";
 }
 
+/// The directories searched for a writer, in order: the daemon's own `PATH`, then the
+/// `PATH` the owner's login shell sets up, then the usual install folders. A daemon
+/// started by the app or by launchd inherits only the system folders, so without the
+/// login shell's `PATH` a writer installed with Homebrew, npm or a per-user installer
+/// would not be found, and a Node-based writer could not find `node` either.
+fn searchPath(s: *Service, a: std.mem.Allocator) ![]const u8 {
+    const separator = if (builtin.os.tag == .windows) ";" else ":";
+    var parts: std.ArrayList([]const u8) = .empty;
+    if (std.process.Environ.getAlloc(s.environ, a, "PATH") catch null) |own| try parts.append(a, own);
+    if (builtin.os.tag != .windows) {
+        if (loginShellPath(s, a)) |login| try parts.append(a, login);
+        if (std.process.Environ.getAlloc(s.environ, a, "HOME") catch null) |home| {
+            try parts.append(a, try std.fmt.allocPrint(a, "{s}/.local/bin", .{home}));
+        }
+        try parts.append(a, "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin");
+    }
+    var seen: std.StringHashMapUnmanaged(void) = .empty;
+    var joined: std.ArrayList(u8) = .empty;
+    for (parts.items) |part| {
+        var dirs = std.mem.tokenizeAny(u8, part, separator);
+        while (dirs.next()) |dir| {
+            if ((try seen.getOrPut(a, dir)).found_existing) continue;
+            if (joined.items.len != 0) try joined.appendSlice(a, separator);
+            try joined.appendSlice(a, dir);
+        }
+    }
+    return joined.items;
+}
+
+/// Asks the owner's login shell for its `PATH`. A marker separates it from anything
+/// the shell's startup files print. Returns null when the shell fails or takes longer
+/// than three seconds.
+fn loginShellPath(s: *Service, a: std.mem.Allocator) ?[]const u8 {
+    const shell = std.process.Environ.getAlloc(s.environ, a, "SHELL") catch null;
+    const marker = "__fyke_path__";
+    const result = std.process.run(a, s.io, .{
+        .argv = &.{ shell orelse "/bin/sh", "-l", "-c", "printf '" ++ marker ++ "%s' \"$PATH\"" },
+        .stdout_limit = .limited(64 * 1024),
+        .stderr_limit = .limited(64 * 1024),
+        .timeout = .{ .duration = .{ .raw = .fromSeconds(3), .clock = .awake } },
+    }) catch return null;
+    if (!result.term.success()) return null;
+    const start = std.mem.lastIndexOf(u8, result.stdout, marker) orelse return null;
+    return result.stdout[start + marker.len ..];
+}
+
+/// Finds `name` as an executable file in `path`, so the writer runs from where the
+/// owner installed it. Falls back to the bare name, which the system then looks up.
+fn locate(s: *Service, a: std.mem.Allocator, name: []const u8, path: []const u8) ![]const u8 {
+    const separator = if (builtin.os.tag == .windows) ";" else ":";
+    if (builtin.os.tag == .windows) return name;
+    var dirs = std.mem.tokenizeAny(u8, path, separator);
+    while (dirs.next()) |dir| {
+        const candidate = try std.fs.path.join(a, &.{ dir, name });
+        Io.Dir.cwd().access(s.io, candidate, .{ .execute = true }) catch continue;
+        return candidate;
+    }
+    return name;
+}
+
 fn probe(s: *Service, a: std.mem.Allocator, name: []const u8) !std.json.Value {
     try validateName(name);
+    const path = try searchPath(s, a);
+    var env = try std.process.Environ.createMap(s.environ, a);
+    defer env.deinit();
+    try env.put("PATH", path);
     const result = std.process.run(
         a,
         s.io,
         .{
             .argv = &.{
-                name,
+                try locate(s, a, name, path),
                 "--version",
             },
+            .environ_map = &env,
             .stdout_limit = .limited(4096),
             .stderr_limit = .limited(4096),
             .timeout = .{ .duration = .{
@@ -117,25 +184,23 @@ pub fn execute(
     defer env.deinit();
     _ = env.swapRemove("FYKE_HOME");
     _ = env.swapRemove("FYKE_WRITER_CMD");
+    const path = try searchPath(s, a);
+    try env.put("PATH", path);
     var argv: []const []const u8 = undefined;
     if (std.process.Environ.getAlloc(s.environ, a, "FYKE_WRITER_CMD") catch null) |override| {
         // The override is an owner-supplied executable command, never feed data.
-        argv = if (@import("builtin").os.tag == .windows) &.{
+        argv = if (builtin.os.tag == .windows) try a.dupe([]const u8, &.{
             "cmd",
             "/c",
             override,
-        } else &.{
+        }) else try a.dupe([]const u8, &.{
             "/bin/sh",
             "-c",
-            try std.fmt.allocPrint(
-                a,
-                "exec {s}",
-                .{override},
-            ),
-        };
+            try std.fmt.allocPrint(a, "exec {s}", .{override}),
+        });
     } else if (std.mem.eql(u8, name, "codex")) {
-        argv = &.{
-            "codex",
+        argv = try a.dupe([]const u8, &.{
+            try locate(s, a, "codex", path),
             "exec",
             "--skip-git-repo-check",
             "--ephemeral",
@@ -147,10 +212,10 @@ pub fn execute(
             "--output-last-message",
             "result.json",
             "-",
-        };
+        });
     } else {
-        argv = &.{
-            "claude",
+        argv = try a.dupe([]const u8, &.{
+            try locate(s, a, "claude", path),
             "-p",
             "--output-format",
             "json",
@@ -159,7 +224,7 @@ pub fn execute(
             "--strict-mcp-config",
             "--mcp-config",
             "{\"mcpServers\":{}}",
-        };
+        });
     }
     var child = try std.process.spawn(
         s.io,
@@ -170,13 +235,18 @@ pub fn execute(
             .stdin = .{ .file = input },
             .stdout = .pipe,
             .stderr = .pipe,
+            .start_suspended = platform.is_windows,
         },
     );
     defer child.kill(s.io);
+    var tree = platform.ProcessTree.adopt(&child);
     var buffer: Io.File.MultiReader.Buffer(2) = undefined;
     var multi: Io.File.MultiReader = undefined;
     multi.init(a, s.io, buffer.toStreams(), &.{ child.stdout.?, child.stderr.? });
     defer multi.deinit();
+    // Declared after the reader so that it runs first: once the whole tree has ended,
+    // its pipes close and the pending reads finish.
+    defer tree.end();
     const deadline = s.now() + seconds * 1000;
     while (true) {
         {

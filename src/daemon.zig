@@ -18,6 +18,8 @@ const max_request = 1 << 20;
 const subscribe_poll_ms = 5000;
 
 pub const socket_name = "fyked.sock";
+/// Held by the running daemon for its whole life; the kernel releases it at exit.
+pub const lock_name = "fyked.lock";
 
 pub const Options = struct {
     /// Log to `fyked.log` in place of stderr, for a daemon started in the background.
@@ -52,7 +54,7 @@ pub fn run(gpa: std.mem.Allocator, io: Io, home_path: []const u8, arena: std.mem
 
     // The lock is what proves that no other daemon owns this database. The kernel
     // drops it if this process dies, so a stale lock is impossible.
-    var lock_file = try home.createFile(io, "fyked.lock", .{ .truncate = false });
+    var lock_file = try home.createFile(io, lock_name, .{ .truncate = false });
     defer lock_file.close(io);
     if (!try lock_file.tryLock(io, .exclusive)) return error.AlreadyRunning;
     if (options.log_to_file) try redirectLog(io, home);

@@ -92,7 +92,9 @@ A writer is an installed agent command line. Fyke ships adapters for Codex (`cod
 - in a new empty directory under the data folder, removed afterwards;
 - with the task on standard input: the fixed template, the recipe text, and the selected articles as numbered sources with their entry ids;
 - with a time limit (default 180 s) and a 1 MiB output limit;
-- without inheriting Fyke's own MCP server, so the writer cannot change Fyke while writing.
+- without inheriting Fyke's own MCP server, so the writer cannot change Fyke while writing;
+- found on a search path made of the daemon's own `PATH`, the `PATH` of the owner's login shell, `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin`, because a daemon started by the app or at login inherits only the system folders;
+- as one process tree: on Windows a job object ends the writer and everything it started when the time limit passes or the job is cancelled.
 
 The writer must return JSON: `{"title": "...", "sections": [{"heading": "...", "claims": [{"text": "...", "sources": [12, 40]}]}]}`. Fyke checks that every claim cites at least one id that was in the input, converts the result to blocks, and stores the artifact, its sources and the event in one transaction. Output that fails the check is retried once and then fails the job with the reason. Citations prove traceability, not truth; the GUI keeps every source one hover away.
 
