@@ -2,12 +2,13 @@ import AppKit
 import SwiftUI
 
 /// Settings, as a destination of the main window: it fills the list and reader panes
-/// while the sidebar stays, so the reader is one Esc away. The header names it and holds
-/// the tabs; each tab's rows sit in the reading column below. Tokens has no tab of its
-/// own; it opens from Reading, which stays selected while it shows.
+/// while the sidebar stays, so the reader is one Esc away. Icon tabs, as drawn in
+/// Paper, sit centered over the reading column with the close button at the pane's
+/// corner, and each tab's rows follow below. Tokens has no tab of its own; it opens
+/// from Reading, which stays selected while it shows.
 struct SettingsView: View {
     enum Tab: String, CaseIterable { case General, Reading, Tokens, Agents, Data }
-    /// The tabs in the header, in order.
+    /// The tabs, in order.
     static let bar: [Tab] = [.General, .Reading, .Agents, .Data]
 
     @Environment(AppModel.self) private var model
@@ -16,8 +17,7 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Rule()
+            tabs
             Group {
                 switch tab {
                 case .General: GeneralPane()
@@ -30,22 +30,63 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .background(p.ground)
+        .overlay(alignment: .topTrailing) {
+            SymbolButton(symbol: "xmark", label: "Close Settings (Esc)") { model.showingSettings = false }
+                .padding(.top, Metrics.barControlTop).padding(.trailing, Metrics.barEdge)
+        }
         .overlay { if let move = model.dataMove { MoveDialog(move: move) } }
     }
 
-    /// The title and the tabs, on the reading column's edges, at the height of the list
-    /// pane's header so the two line up across a switch.
-    private var header: some View {
-        HStack(alignment: .center, spacing: 16) {
-            Text(tab == .Tokens ? "Theme tokens" : "Settings").font(.ui(20, .semibold)).tracking(-0.2).lineLimit(1)
-                .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: 16)
-            Tabs(selection: Binding(get: { tab == .Tokens ? .Reading : tab }, set: { model.settingsTab = $0 }),
-                 items: Self.bar.map { ($0, $0.rawValue) })
-            SymbolButton(symbol: "xmark", label: "Close Settings (Esc)") { model.showingSettings = false }
+    private var tabs: some View {
+        HStack(spacing: 4) {
+            ForEach(Self.bar, id: \.self) { item in
+                SettingsTabButton(tab: item, selected: tab == item || (tab == .Tokens && item == .Reading)) {
+                    model.settingsTab = item
+                }
+            }
         }
-        .settingsColumn()
-        .padding(.top, Metrics.barHeight).padding(.bottom, 16)
+        .frame(maxWidth: .infinity)
+        .padding(.top, Metrics.barHeight)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Settings")
+    }
+}
+
+/// One tab: 72 by 48, an 18 point icon over an 11 point label, as in the Paper board.
+private struct SettingsTabButton: View {
+    let tab: SettingsView.Tab
+    let selected: Bool
+    let action: () -> Void
+    @Environment(\.palette) private var p
+    @Environment(\.readingFamily) private var reading
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                icon.frame(minWidth: 18, minHeight: 18)
+                Text(tab.rawValue).font(.ui(11, selected ? .medium : .regular))
+            }
+            .foregroundStyle(selected ? p.unread : p.muted)
+            .frame(width: 72, height: 48)
+            .background(selected ? p.selectedStrong : hovering ? p.selected : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
+            .contentShape(RoundedRectangle(cornerRadius: Radii.control))
+        }
+        .buttonStyle(.bare)
+        .onHover { hovering = $0 }
+        .motion(hovering, Motion.quick)
+        .accessibilityLabel(tab.rawValue)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    @ViewBuilder private var icon: some View {
+        let ink = selected ? p.unread : p.muted
+        switch tab {
+        case .General: Icon(glyph: .gear, size: 18, color: ink)
+        case .Reading, .Tokens: Text("Aa").font(.custom(reading, fixedSize: 17)).foregroundStyle(ink).fixedSize().frame(height: 18)
+        case .Agents: Icon(glyph: .sparkle, size: 18, color: ink)
+        case .Data: Icon(glyph: .database, size: 18, color: ink)
+        }
     }
 }
 
