@@ -146,22 +146,28 @@ jobs:
       - name: Build the app
         if: ${{ steps.gate.outputs.run == 'true' && matrix.os == 'windows-latest' && !cancelled() }}
         run: dotnet build gui-windows/src/Fyke.App -c Release -p:Platform=x64
-      # The XAML compiler exits 1 with no message, so build trimmed copies to find which file it dislikes.
+      # The XAML compiler exits 1 with no message, so compile pieces of the window one at a time.
       - name: XAML bisect
         if: ${{ failure() && matrix.os == 'windows-latest' }}
         shell: pwsh
         run: |
           $src = 'gui-windows/src'
-          function Try-Variant($name, $prepare) {
-            $dir = "$src/$name"
+          $head = '<Window x:Class="Fyke.App.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">'
+          $variants = [ordered]@{
+            A = '<Grid x:Name="Root"><Grid.RowDefinitions><RowDefinition Height="32" /><RowDefinition Height="*" /></Grid.RowDefinitions><Grid x:Name="TitleBar" /></Grid>'
+            B = '<Grid x:Name="Root"><StackPanel Spacing="12" MaxWidth="400"><TextBlock Text="x" FontSize="20" TextWrapping="Wrap" /></StackPanel></Grid>'
+            C = '<Grid x:Name="Root"><StackPanel FontFamily="{StaticResource FontUi}"><TextBlock Text="x" /></StackPanel></Grid>'
+            D = '<Grid x:Name="Root"><TextBlock Text="x" Foreground="{ThemeResource InkBrush}" /></Grid>'
+            E = '<Grid x:Name="Root"><Button Content="x" Height="32" CornerRadius="{StaticResource RadiusControl}" /></Grid>'
+            F = '<Grid x:Name="Root"><TextBlock x:Name="T" Text="{Binding Message}" /><Button x:Name="R" Content="x" Command="{Binding RetryCommand}" /></Grid>'
+          }
+          foreach ($name in $variants.Keys) {
+            $dir = "$src/V$name"
             if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
             Copy-Item "$src/Fyke.App" $dir -Recurse -Exclude obj,bin
-            Rename-Item "$dir/Fyke.App.csproj" "$name.csproj"
-            & $prepare $dir
+            Rename-Item "$dir/Fyke.App.csproj" "V$name.csproj"
+            Set-Content "$dir/MainWindow.xaml" ($head + $variants[$name] + '</Window>')
             "== $name"
-            dotnet build "$dir/$name.csproj" -c Release -p:Platform=x64 -v:q 2>&1 | Select-String 'error' | ForEach-Object { $_.Line.Trim().Substring(0, [Math]::Min(220, $_.Line.Trim().Length)) } | Select-Object -First 3
+            $out = dotnet build "$dir/V$name.csproj" -c Release -p:Platform=x64 -v:q 2>&1 | Out-String
+            if ($out -match 'MSB3073') { "XAML COMPILER FAILED" } else { "xaml ok" }
           }
-          $emptyWindow = '<Window x:Class="Fyke.App.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"><Grid x:Name="Root" /></Window>'
-          Try-Variant 'V1' { param($d) Set-Content "$d/MainWindow.xaml" $emptyWindow }
-          Try-Variant 'V2' { param($d) Set-Content "$d/MainWindow.xaml" $emptyWindow; Remove-Item "$d/Themes/Tokens.xaml"; Set-Content "$d/App.xaml" '<Application x:Class="Fyke.App.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"></Application>' }
-          Try-Variant 'V3' { param($d) Set-Content "$d/App.xaml" '<Application x:Class="Fyke.App.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"></Application>'; Remove-Item "$d/Themes/Tokens.xaml" }
