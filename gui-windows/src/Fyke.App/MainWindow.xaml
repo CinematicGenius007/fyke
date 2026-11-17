@@ -7,11 +7,16 @@
         <Grid.RowDefinitions><RowDefinition Height="32" /><RowDefinition Height="*" /></Grid.RowDefinitions>
         <Grid x:Name="TitleBar" />
         <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"
-                    Spacing="12" MaxWidth="400" FontFamily="{StaticResource FontUi}">
-            <TextBlock Text="{Binding State}" FontSize="20" Foreground="{ThemeResource InkBrush}" />
-            <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Foreground="{ThemeResource InkSoftBrush}" />
-            <Button Content="Retry" Command="{Binding RetryCommand}" Height="32"
-                    CornerRadius="{StaticResource RadiusControl}" />
+                    Spacing="12" MaxWidth="400" FontFamily="{StaticResource FontUi}"
+                    Visibility="{x:Bind ViewModel.ShowsInlineState, Mode=OneWay}">
+            <TextBlock Text="{x:Bind ViewModel.Message, Mode=OneWay}" FontSize="20" TextWrapping="Wrap"
+                       Foreground="{ThemeResource InkBrush}" />
+            <TextBlock Text="{x:Bind ViewModel.Detail, Mode=OneWay}" TextWrapping="Wrap"
+                       Foreground="{ThemeResource InkSoftBrush}"
+                       Visibility="{x:Bind ViewModel.CanRetry, Mode=OneWay}" />
+            <Button Content="Try again" Command="{x:Bind ViewModel.RetryCommand}" Height="32"
+                    CornerRadius="{StaticResource RadiusControl}"
+                    Visibility="{x:Bind ViewModel.CanRetry, Mode=OneWay}" />
         </StackPanel>
     </Grid>
 </Window>

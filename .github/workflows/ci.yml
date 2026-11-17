@@ -142,3 +142,7 @@ jobs:
       - name: View-model tests
         if: ${{ steps.gate.outputs.run == 'true' && !cancelled() }}
         run: dotnet test gui-windows/tests/Fyke.ViewModels.Tests -c Release
+      # The WinUI app only builds on Windows, so this is where it is first compiled.
+      - name: Build the app
+        if: ${{ steps.gate.outputs.run == 'true' && matrix.os == 'windows-latest' && !cancelled() }}
+        run: dotnet build gui-windows/src/Fyke.App -c Release -p:Platform=x64

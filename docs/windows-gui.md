@@ -40,13 +40,14 @@ Only `Fyke.App` depends on Windows. Everything a test can reach without a window
 
 `Fyke.Client` speaks the same newline-delimited JSON-RPC as `gui/Sources/Reader/Daemon.swift`:
 
-- **Discovery.** The data folder is `%LOCALAPPDATA%\Fyke`, or the folder named in its `location` pointer file, or `FYKE_HOME`; the socket is `fyke.sock` inside it, exactly as `src/main.zig` resolves it.
+- **Discovery.** The data folder is `%LOCALAPPDATA%\Fyke`, or the folder named in its `location` pointer file, or `FYKE_HOME`; the socket is `fyked.sock` inside it, exactly as `src/main.zig` resolves it.
 - **Transport.** `System.Net.Sockets.Socket` with `AddressFamily.Unix` and `UnixDomainSocketEndPoint`, which Windows 10 1803 and later support. No named pipe or TCP port is added.
 - **Connections.** One for requests, one for the event stream, so a long call never delays events.
 - **Limits.** Lines over 16 MiB are refused; every call takes a `CancellationToken` and a timeout.
 - **Starting the daemon.** If the socket does not answer, the app starts `fyke.exe daemon` from its own folder (or `PATH`) without a console window and retries with backoff. The daemon's lock keeps a second copy from starting.
-- **Versions.** The app reads `api_version` from `ops.list` and shows an inline state if it is older than the app needs.
-- **Reconnects.** Events resume from the last `seq`; if the daemon reports a gap, the app reloads its lists.
+- **Versions.** The app reads `api_version` from `stats.get` and shows an inline state if it is older than the app needs.
+- **Reconnects.** Events resume from the last `seq`. The daemon sends no gap marker, so the client detects one itself (event numbers run consecutively; the daemon also prunes events older than 7 days) and yields a `DaemonEvent` of type `events.gap`, on which the app reloads its lists.
+- **Folder agreement.** The app starts `fyke daemon --home <folder>`, so the app and daemon always use the same folder, including after a data move.
 
 ## Design tokens
 

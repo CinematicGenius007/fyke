@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using Fyke.Client;
 using Fyke.ViewModels;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
 namespace Fyke.App;
@@ -11,20 +12,25 @@ public sealed partial class MainWindow : Window
     private readonly IDaemonClient client = new DaemonClient(new DaemonClientOptions());
     private readonly CancellationTokenSource lifetime = new();
 
+    public ConnectionViewModel ViewModel { get; }
+
     public MainWindow()
     {
+        // The client raises its events on any thread; the view model hands them to this one.
+        var queue = DispatcherQueue.GetForCurrentThread();
+        ViewModel = new ConnectionViewModel(client, action => queue.TryEnqueue(() => action()));
         InitializeComponent();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
-        var viewModel = new ConnectionViewModel(client);
-        ((FrameworkElement)Content).DataContext = viewModel;
         Closed += OnClosed;
-        _ = client.StartAsync(lifetime.Token);
+        // The view model shows a failure where the window can say it; nothing is thrown here.
+        _ = ViewModel.StartAsync(lifetime.Token);
     }
 
     private async void OnClosed(object sender, WindowEventArgs args)
     {
-        lifetime.Cancel();
+        await lifetime.CancelAsync();
+        ViewModel.Dispose();
         await client.DisposeAsync();
         lifetime.Dispose();
     }

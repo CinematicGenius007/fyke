@@ -7,6 +7,9 @@
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <Platforms>x64</Platforms>
+    <!-- Generated XAML code and the Windows App SDK targets raise warnings of their own, which the
+         shared warnings-as-errors setting would turn into failures. Fyke's own code stays clean. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260209005" />
