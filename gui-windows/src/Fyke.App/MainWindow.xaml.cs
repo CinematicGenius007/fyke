@@ -22,9 +22,22 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
+        Root.DataContext = ViewModel;
+        ViewModel.PropertyChanged += (_, _) => ShowState();
+        ShowState();
         Closed += OnClosed;
         // The view model shows a failure where the window can say it; nothing is thrown here.
         _ = ViewModel.StartAsync(lifetime.Token);
+    }
+
+    /// Quiet until it matters: the state shows only while connecting or failed, and the
+    /// explanation and Try again only after a failure.
+    private void ShowState()
+    {
+        InlineState.Visibility = ViewModel.ShowsInlineState ? Visibility.Visible : Visibility.Collapsed;
+        var failed = ViewModel.CanRetry ? Visibility.Visible : Visibility.Collapsed;
+        DetailText.Visibility = failed;
+        RetryButton.Visibility = failed;
     }
 
     private async void OnClosed(object sender, WindowEventArgs args)
