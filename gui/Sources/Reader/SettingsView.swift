@@ -1,102 +1,174 @@
 import AppKit
 import SwiftUI
 
+/// Settings, as a destination of the main window: it fills the list and reader panes
+/// while the sidebar stays, so the reader is one Esc away. Icon tabs, as drawn in
+/// Paper, sit centered over the reading column with the close button at the pane's
+/// corner, and each tab's rows follow below. Tokens has no tab of its own; it opens
+/// from Reading, which stays selected while it shows.
 struct SettingsView: View {
-    enum Tab: String, CaseIterable { case General, Appearance, Tokens, Shortcuts, Storage, Agents }
+    enum Tab: String, CaseIterable { case General, Reading, Tokens, Agents, Data }
+    /// The tabs, in order.
+    static let bar: [Tab] = [.General, .Reading, .Agents, .Data]
 
     @Environment(AppModel.self) private var model
     @Environment(\.palette) private var p
     private var tab: Tab { model.settingsTab }
 
     var body: some View {
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(Tab.allCases, id: \.self) { item in
-                    Button { model.settingsTab = item } label: {
-                        Text(item.rawValue)
-                            .font(.ui(14, tab == item ? .semibold : .medium))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 10).padding(.vertical, 7)
-                            .background(tab == item ? p.selectedStrong : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 12).padding(.top, 48)
-            .frame(width: 187)
-            .background(p.surface)
-            Rule(vertical: true)
+        VStack(spacing: 0) {
+            tabs
             Group {
                 switch tab {
                 case .General: GeneralPane()
-                case .Appearance: AppearancePane()
+                case .Reading: ReadingPane()
                 case .Tokens: TokensPane()
-                case .Shortcuts: ShortcutsPane()
-                case .Storage: StoragePane()
                 case .Agents: AgentsPane()
+                case .Data: StoragePane()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .ignoresSafeArea()
-        .background(WindowButtons())
+        .background(p.ground)
+        .overlay(alignment: .topTrailing) {
+            SymbolButton(symbol: "xmark", label: "Close Settings (Esc)") { model.showingSettings = false }
+                .padding(.top, Metrics.barControlTop).padding(.trailing, Metrics.barEdge)
+        }
         .overlay { if let move = model.dataMove { MoveDialog(move: move) } }
+    }
+
+    private var tabs: some View {
+        HStack(spacing: 4) {
+            ForEach(Self.bar, id: \.self) { item in
+                SettingsTabButton(tab: item, selected: tab == item || (tab == .Tokens && item == .Reading)) {
+                    model.settingsTab = item
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, Metrics.barHeight)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Settings")
     }
 }
 
-/// Holds a pane's content at the margins every pane shares, and scrolls it when it
-/// is taller than the window.
+/// One tab: 72 by 48, an 18 point icon over an 11 point label, as in the Paper board.
+private struct SettingsTabButton: View {
+    let tab: SettingsView.Tab
+    let selected: Bool
+    let action: () -> Void
+    @Environment(\.palette) private var p
+    @Environment(\.readingFamily) private var reading
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                icon.frame(minWidth: 18, minHeight: 18)
+                Text(tab.rawValue).font(.ui(11, selected ? .medium : .regular))
+            }
+            .foregroundStyle(selected ? p.unread : p.muted)
+            .frame(width: 72, height: 48)
+            .background(selected ? p.selectedStrong : hovering ? p.selected : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
+            .contentShape(RoundedRectangle(cornerRadius: Radii.control))
+        }
+        .buttonStyle(.bare)
+        .onHover { hovering = $0 }
+        .motion(hovering, Motion.quick)
+        .accessibilityLabel(tab.rawValue)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    @ViewBuilder private var icon: some View {
+        let ink = selected ? p.unread : p.muted
+        switch tab {
+        case .General: Icon(glyph: .gear, size: 18, color: ink)
+        case .Reading, .Tokens: Text("Aa").font(.custom(reading, fixedSize: 17)).foregroundStyle(ink).fixedSize().frame(height: 18)
+        case .Agents: Icon(glyph: .sparkle, size: 18, color: ink)
+        case .Data: Icon(glyph: .database, size: 18, color: ink)
+        }
+    }
+}
+
+extension View {
+    /// Sets Settings content in the reading column, centered in the space it has, with
+    /// the page gutter on both sides when that space is narrow.
+    func settingsColumn() -> some View {
+        frame(maxWidth: Metrics.readingColumn, alignment: .leading)
+            .padding(.horizontal, Metrics.pageGutter)
+            .frame(maxWidth: .infinity)
+    }
+}
+
+/// Holds a pane's sections in the reading column, and scrolls them when they are taller
+/// than the window.
 struct PaneScroll<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
         ScrollView {
-            content
-                .padding(.horizontal, 40).padding(.top, 44).padding(.bottom, 24)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+            VStack(alignment: .leading, spacing: 40) { content }
+                .settingsColumn()
+                .padding(.top, 32).padding(.bottom, Metrics.pageGutter)
         }
         .themedScrollbar()
     }
 }
 
-struct PaneTitle: View {
-    let text: String
-    @Environment(\.titleFamily) private var family
-    var body: some View {
-        Text(text).font(.custom(family, fixedSize: 32).weight(.semibold)).tracking(-0.32).padding(.bottom, 20)
-    }
-}
-
-struct Label2: View {
-    let text: String
+/// A group of settings: a caps label, a muted line saying what the group is for when it
+/// needs one, then its rows on the ground color with a hairline between each. There is
+/// no box around a group; the label and the rules are enough to hold it together.
+struct SettingsSection<Content: View>: View {
+    let title: String
+    var detail: String?
+    var trailing: AnyView?
+    @ViewBuilder var content: Content
     @Environment(\.palette) private var p
+
     var body: some View {
-        Text(text).font(.ui(11, .semibold)).tracking(0.66).foregroundStyle(p.muted)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center) {
+                SectionLabel(text: title)
+                Spacer(minLength: 16)
+                if let trailing { trailing }
+            }
+            .frame(minHeight: 20)
+            if let detail {
+                Text(detail).font(.ui(13)).foregroundStyle(p.muted).fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
+            }
+            Rule().padding(.top, 8)
+            VStack(alignment: .leading, spacing: 0) { content }
+        }
     }
 }
 
+/// A row in a section: the title on the left and its control on the right, 48 high,
+/// with a muted line under the title only when the title alone would not say enough.
+/// Every row but the last draws the hairline under itself.
 struct SettingRow<Control: View>: View {
     let title: String
-    let detail: String
+    var detail: String?
     var last = false
     @ViewBuilder var control: Control
     @Environment(\.palette) private var p
 
     var body: some View {
         VStack(spacing: 0) {
-            Rule()
-            HStack {
+            HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.ui(14))
-                    Text(detail).font(.ui(13)).foregroundStyle(p.muted)
+                    Text(title).font(.ui(14)).foregroundStyle(p.ink)
+                    if let detail {
+                        Text(detail).font(.ui(12)).foregroundStyle(p.muted).lineLimit(2).truncationMode(.middle)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 Spacer(minLength: 16)
                 control
             }
-            .padding(.vertical, 14)
-            if last { Rule() }
+            .padding(.vertical, 8)
+            .frame(minHeight: 48)
+            if !last { Rule() }
         }
     }
 }
@@ -104,16 +176,28 @@ struct SettingRow<Control: View>: View {
 struct Switch: View {
     @Binding var on: Bool
     @Environment(\.palette) private var p
+    @Environment(\.isEnabled) private var enabled
+    @State private var hovering = false
+
+    private var track: Color {
+        if on { return hovering && enabled ? p.unread.mix(with: .black, by: 0.08) : p.unread }
+        return hovering && enabled ? p.muted : p.control
+    }
 
     var body: some View {
         Button { on.toggle() } label: {
-            Capsule().fill(on ? p.unread : p.control)
-                .frame(width: 36, height: 22)
+            Capsule().fill(track)
+                .frame(width: 28, height: 16)
                 .overlay(alignment: on ? .trailing : .leading) {
-                    Circle().fill(p.onAccent).frame(width: 18, height: 18).padding(2)
+                    Circle().fill(p.onAccent).frame(width: 12, height: 12).padding(2)
                 }
+                .opacity(enabled ? 1 : 0.6)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
+        .onHover { hovering = $0 }
+        .motion(hovering, Motion.quick)
+        .motion(on, Motion.quick)
+        .accessibilityValue(on ? "On" : "Off")
     }
 }
 
@@ -124,56 +208,45 @@ private struct GeneralPane: View {
     @Environment(\.palette) private var p
     @State private var background = LoginAgent.isInstalled
 
-    private var settingsFile: URL { Daemon.shared.home.appending(path: "config.json") }
-    private func tilde(_ url: URL) -> String { url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~") }
-
     var body: some View {
         @Bindable var prefs = Prefs.shared
         PaneScroll {
-            VStack(alignment: .leading, spacing: 0) {
-                PaneTitle(text: "General")
+            SettingsSection(title: "Updates") {
                 SettingRow(title: "Check for new articles", detail: "Automatic follows how often each feed posts") {
-                    Text("Automatic").font(.ui(14)).foregroundStyle(p.muted)
+                    Text("Automatic").font(.ui(13)).foregroundStyle(p.muted)
                 }
                 SettingRow(title: "Fetch full articles", detail: "Replaces short summaries, and respects each site's robots.txt") {
                     Switch(on: $prefs.fullText)
                 }
+                SettingRow(title: "Keep updating in the background", detail: "Starts when you log in, even with this window closed", last: true) {
+                    Switch(on: $background)
+                }
+            }
+            SettingsSection(title: "Privacy", detail: "What publishers can learn from your reading.") {
                 SettingRow(title: "Load images automatically", detail: "Off means publishers cannot see when you read") {
                     Switch(on: $prefs.ui.loadImages)
                 }
-                SettingRow(title: "Keep updating in the background", detail: "Starts when you log in, even with this window closed") {
-                    Switch(on: $background)
-                }
-                SettingRow(title: "Your subscriptions", detail: "Import or export as OPML") {
-                    HStack(spacing: 8) {
-                        Button("Import OPML") { OPML.importFile(model) }.buttonStyle(Plain())
-                        Button("Export") { OPML.export(model) }.buttonStyle(Plain())
-                    }
-                }
-                SettingRow(title: "Open links", detail: "⌘-click always uses your browser") {
+                SettingRow(title: "Open links", detail: "⌘-click always uses your browser", last: true) {
                     SelectBox(selection: $prefs.ui.openLinks, options: [
                         SelectOption(value: "app", label: "In the app"),
                         SelectOption(value: "browser", label: "In your browser"),
-                    ])
+                    ], width: 160, height: Metrics.control)
                 }
-                SettingRow(title: "Settings file", detail: tilde(settingsFile)) {
-                    Button("Open") { NSWorkspace.shared.open(settingsFile) }.buttonStyle(Plain())
-                }
-                SettingRow(title: "Data folder", detail: tilde(Daemon.shared.home.resolvingSymlinksInPath()), last: true) {
-                    Button { model.chooseDataFolder() } label: {
-                        HStack(spacing: 6) {
-                            Icon(glyph: .folder)
-                            Text("Change…")
-                        }
+            }
+            SettingsSection(title: "Subscriptions and keys") {
+                SettingRow(title: "Your subscriptions", detail: "Import or export as OPML") {
+                    HStack(spacing: 8) {
+                        Button("Import OPML") { OPML.importFile(model) }.buttonStyle(ActionStyle(kind: .secondary))
+                        Button("Export") { OPML.export(model) }.buttonStyle(ActionStyle(kind: .secondary))
                     }
-                    .buttonStyle(Plain())
-                    // FYKE_HOME names the folder for this run, so there is no default to repoint.
-                    .disabled(ProcessInfo.processInfo.environment["FYKE_HOME"] != nil)
                 }
-                if let problem = prefs.fileProblem {
-                    Text("config.json has a mistake, so the last good settings stay in use: \(problem)")
-                        .font(.ui(13)).foregroundStyle(p.inkSoft).padding(.top, 12)
+                SettingRow(title: "Keyboard shortcuts", detail: "Press ? anywhere in the reader to see them", last: true) {
+                    Button("Show") { model.showingShortcuts = true }.buttonStyle(ActionStyle(kind: .secondary))
                 }
+            }
+            if let problem = prefs.fileProblem {
+                Text("config.json has a mistake, so the last good settings stay in use: \(problem)")
+                    .font(.ui(12)).foregroundStyle(p.inkSoft).fixedSize(horizontal: false, vertical: true)
             }
         }
         .onChange(of: prefs.fullText) { _, on in
@@ -216,42 +289,51 @@ enum LoginAgent {
     }
 }
 
-private struct Slider2: View {
+/// A slider row: the title, a track, and the value in code type.
+private struct SliderRow: View {
     let title: String
     @Binding var value: Double
     let range: ClosedRange<Double>
     let step: Double
     let format: String
+    var last = false
     @Environment(\.palette) private var p
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Text(title).font(.ui(14))
-                Spacer()
-                Text(String(format: format, value)).font(.ui(14)).foregroundStyle(p.muted)
-            }
-            GeometryReader { geometry in
-                let fraction = (value - range.lowerBound) / (range.upperBound - range.lowerBound)
-                let x = fraction * (geometry.size.width - 16)
-                ZStack(alignment: .leading) {
-                    Capsule().fill(p.hairline).frame(height: 4)
-                    Capsule().fill(p.ink).frame(width: x + 8, height: 4)
-                    Circle().fill(p.ground).overlay(Circle().stroke(p.muted)).frame(width: 16, height: 16).offset(x: x)
+        SettingRow(title: title, last: last) {
+            HStack(spacing: 12) {
+                GeometryReader { geometry in
+                    let fraction = (value - range.lowerBound) / (range.upperBound - range.lowerBound)
+                    let x = fraction * (geometry.size.width - 16)
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(p.hairline).frame(height: 4)
+                        Capsule().fill(p.ink).frame(width: x + 8, height: 4)
+                        Circle().fill(p.ground).overlay(Circle().stroke(p.muted)).frame(width: 16, height: 16).offset(x: x)
+                    }
+                    .frame(height: 16)
+                    .contentShape(Rectangle())
+                    .interactiveCursor()
+                    .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
+                        let raw = range.lowerBound + (drag.location.x - 8) / (geometry.size.width - 16) * (range.upperBound - range.lowerBound)
+                        value = min(max((raw / step).rounded() * step, range.lowerBound), range.upperBound)
+                    })
                 }
-                .frame(height: 16)
-                .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
-                    let raw = range.lowerBound + (drag.location.x - 8) / (geometry.size.width - 16) * (range.upperBound - range.lowerBound)
-                    value = min(max((raw / step).rounded() * step, range.lowerBound), range.upperBound)
-                })
+                .frame(width: 200, height: 16)
+                Text(String(format: format, value)).font(.code(12)).foregroundStyle(p.muted).frame(width: 32, alignment: .trailing)
             }
-            .frame(height: 16)
+            .accessibilityElement()
+            .accessibilityLabel(title)
+            .accessibilityValue(String(format: format, value))
+            .accessibilityAdjustableAction { direction in
+                let next = direction == .increment ? value + step : value - step
+                value = min(max(next, range.lowerBound), range.upperBound)
+            }
         }
     }
 }
 
-private struct AppearancePane: View {
+/// Themes, fonts and the shape of the reading column.
+private struct ReadingPane: View {
     @Environment(AppModel.self) private var model
     @Environment(FloatLayer.self) private var layer
     @Environment(\.palette) private var p
@@ -261,73 +343,54 @@ private struct AppearancePane: View {
         Prefs.shared.allThemes.map { SelectOption(value: $0, label: Prefs.shared.themeName($0)) }
     }
 
-    private let columns = [GridItem(.adaptive(minimum: 88), spacing: 10)]
+    private let columns = [GridItem(.adaptive(minimum: 88), spacing: 12)]
 
     var body: some View {
         @Bindable var prefs = Prefs.shared
         PaneScroll {
-            VStack(alignment: .leading, spacing: 0) {
-                PaneTitle(text: "Appearance").padding(.bottom, -4)
-                Label2(text: "THEME").padding(.bottom, 10)
+            SettingsSection(title: "Theme", detail: "Colors for the whole app. Blue marks unread, purple marks read.") {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
                     ForEach(prefs.allThemes, id: \.self) { tile($0) }
                     newTile
                 }
-                .padding(.bottom, 20)
-                SettingRow(title: "Follow system appearance", detail: "Uses your day theme by day, your night theme at night") {
+                .padding(.top, 16)
+            }
+            SettingsSection(title: "Day and night") {
+                SettingRow(title: "Follow system appearance", detail: "Uses your day theme by day, your night theme at night", last: !prefs.ui.followSystem) {
                     Switch(on: $prefs.ui.followSystem)
                 }
                 if prefs.ui.followSystem {
-                    HStack(spacing: 24) {
-                        pick("Day", $prefs.ui.dayTheme)
-                        pick("Night", $prefs.ui.nightTheme)
-                    }
-                    .padding(.bottom, 14)
+                    SettingRow(title: "Day") { SelectBox(selection: $prefs.ui.dayTheme, options: themeOptions, width: 180, height: Metrics.control) }
+                    SettingRow(title: "Night", last: true) { SelectBox(selection: $prefs.ui.nightTheme, options: themeOptions, width: 180, height: Metrics.control) }
                 }
-                Rule()
-                HStack(alignment: .top, spacing: 32) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Label2(text: "FONTS").padding(.bottom, 4)
-                        fontRow("Reading", \.reading)
-                        fontRow("Titles", \.title)
-                        fontRow("App", \.ui)
-                        fontRow("Code", \.code)
-                        FontChangeStrip(short: false).padding(.top, 2)
-                    }
-                    .frame(width: 290)
-                    VStack(alignment: .leading, spacing: 14) {
-                        Label2(text: "TEXT")
-                        Slider2(title: "Size", value: $prefs.ui.textSize, range: 14...28, step: 1, format: "%.0f")
-                        Slider2(title: "Line spacing", value: $prefs.ui.lineSpacing, range: 1.2...2, step: 0.1, format: "%.1f")
-                        Slider2(title: "Column width", value: $prefs.ui.columnWidth, range: 480...800, step: 20, format: "%.0f")
-                    }
+            }
+            SettingsSection(title: "Fonts", detail: "Each theme keeps its own. A change here applies to the theme in use.") {
+                fontRow("Reading", \.reading)
+                fontRow("Titles", \.title)
+                fontRow("App", \.ui)
+                fontRow("Code", \.code)
+                SettingRow(title: "Colors, fonts and corners", detail: "Every token of every theme", last: true) {
+                    Button("Edit Tokens…") { model.settingsTab = .Tokens }.buttonStyle(ActionStyle(kind: .secondary))
                 }
-                .padding(.vertical, 16)
+            }
+            FontChangeStrip(short: false)
+            SettingsSection(title: "Text") {
+                SliderRow(title: "Size", value: $prefs.ui.textSize, range: 14...28, step: 1, format: "%.0f")
+                SliderRow(title: "Line spacing", value: $prefs.ui.lineSpacing, range: 1.2...2, step: 0.1, format: "%.1f")
+                SliderRow(title: "Column width", value: $prefs.ui.columnWidth, range: 480...800, step: 20, format: "%.0f")
                 SettingRow(title: "Show scrollbars", detail: "Web pages keep their own", last: true) {
                     SelectBox(selection: $prefs.ui.scrollbars, options: [
                         SelectOption(value: "scrolling", label: "While scrolling"),
                         SelectOption(value: "always", label: "Always"),
                         SelectOption(value: "never", label: "Never"),
-                    ])
+                    ], width: 160, height: Metrics.control)
                 }
             }
         }
     }
 
-    private func pick(_ label: String, _ selection: Binding<String>) -> some View {
-        HStack {
-            Text(label).font(.ui(14))
-            Spacer()
-            SelectBox(selection: selection, options: themeOptions, width: 190)
-        }
-    }
-
     private func fontRow(_ label: String, _ slot: WritableKeyPath<FontTokens, String?>) -> some View {
-        HStack {
-            Text(label).font(.ui(14))
-            Spacer()
-            FontField(slot: slot)
-        }
+        SettingRow(title: label) { FontField(slot: slot) }
     }
 
     private func tile(_ id: String) -> some View {
@@ -345,13 +408,14 @@ private struct AppearancePane: View {
                 }
                 .font(.custom(family, fixedSize: id == "terminal" ? 13 : 15).weight(.medium))
                 .padding(.horizontal, 10)
-                .frame(maxWidth: .infinity, alignment: .leading).frame(height: 62)
+                .frame(maxWidth: .infinity, alignment: .leading).frame(height: 60)
                 .background(tile.ground, in: RoundedRectangle(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? p.unread : p.hairline, lineWidth: selected ? 2 : 1))
-                Text(Prefs.shared.themeName(id)).font(.ui(13, selected ? .semibold : .regular)).lineLimit(1)
+                Text(Prefs.shared.themeName(id)).font(.ui(12, selected ? .semibold : .regular)).foregroundStyle(selected ? p.ink : p.inkSoft).lineLimit(1)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private var newTile: some View {
@@ -365,109 +429,201 @@ private struct AppearancePane: View {
         } label: {
             VStack(alignment: .leading, spacing: 6) {
                 Icon(glyph: .plus)
-                    .frame(maxWidth: .infinity).frame(height: 62)
+                    .frame(maxWidth: .infinity).frame(height: 60)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(p.control, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
-                Text("New theme").font(.ui(13)).foregroundStyle(p.inkSoft).lineLimit(1)
+                Text("New theme").font(.ui(12)).foregroundStyle(p.inkSoft).lineLimit(1)
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
         .floatFrame($newFrame)
     }
 }
 
-/// Keys are fixed, so this list only shows them.
-private struct ShortcutsPane: View {
-    @Environment(\.palette) private var p
-
+/// The way back from Tokens to the tab it opened from.
+struct BackToReading: View {
+    @Environment(AppModel.self) private var model
     var body: some View {
-        PaneScroll {
-            VStack(alignment: .leading, spacing: 0) {
-                PaneTitle(text: "Shortcuts")
-                HStack(alignment: .top, spacing: 40) {
-                    column("MOVE", ShortcutList.move)
-                    column("ACT", ShortcutList.act)
-                }
-                Text("Press ? anywhere to see this list. Keys shared with the terminal app work the same.")
-                    .font(.ui(13)).foregroundStyle(p.muted).padding(.top, 20)
+        Button { model.settingsTab = .Reading } label: {
+            HStack(spacing: 4) {
+                Icon(glyph: .left, size: 14)
+                Text("Reading")
             }
         }
-    }
-
-    private func column(_ title: String, _ rows: [(String, String)]) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Label2(text: title).padding(.bottom, 8)
-            ForEach(rows, id: \.0) { row in
-                Rule()
-                HStack {
-                    Text(row.0).font(.ui(14))
-                    Spacer()
-                    Text(row.1).font(.code(13)).foregroundStyle(p.inkSoft)
-                }
-                .padding(.vertical, 7)
-            }
-        }
-        .frame(maxWidth: .infinity)
+        .buttonStyle(ActionStyle(kind: .quiet))
+        .padding(.leading, -10)
     }
 }
 
+/// Who writes briefs, and what agents connected over MCP may do.
 private struct AgentsPane: View {
+    @Environment(AppModel.self) private var model
     @Environment(\.palette) private var p
+    @State private var checking: String?
+    @State private var problem: String?
+    @State private var copied = false
     private var tier: String { Prefs.shared.ui.agentTier }
 
     private var snippet: String {
         let binary = Bundle.main.executableURL!.deletingLastPathComponent().appending(path: "fyke").path
         let args = tier == "read" ? "[\"mcp\"]" : "[\"mcp\", \"--tier\", \"\(tier)\"]"
-        return "{ \"mcpServers\": { \"rss\": {\n    \"command\": \"\(binary)\",\n    \"args\": \(args) } } }"
+        return "{ \"mcpServers\": { \"fyke\": {\n    \"command\": \"\(binary)\",\n    \"args\": \(args) } } }"
     }
 
     var body: some View {
         PaneScroll { content }
+            .task { await model.library.loadWriters() }
     }
 
-    private var content: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            PaneTitle(text: "Agents")
-            SettingRow(title: "What agents can do", detail: "Article text can try to mislead an agent, so start low") {
-                HStack(spacing: 0) {
-                    ForEach(["read", "annotate", "manage"], id: \.self) { item in
-                        Button { Prefs.shared.ui.agentTier = item } label: {
-                            Text(item.capitalized).font(.ui(14))
-                                .foregroundStyle(tier == item ? p.ground : p.ink)
-                                .padding(.horizontal, 12).padding(.vertical, 5)
-                                .background(tier == item ? p.ink : .clear)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
+    @ViewBuilder private var content: some View {
+        SettingsSection(title: "Who writes your briefs",
+                        detail: "Fyke hands the selected articles and your recipe to an agent already on this Mac. Fyke itself sends nothing anywhere else.") {
+            if model.library.writers.isEmpty {
+                Text(model.library.available ? "Looking for Codex and Claude Code…" : "Writers need a newer Fyke service. Quit and open Fyke again.")
+                    .font(.ui(13)).foregroundStyle(p.muted).padding(.vertical, 12).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            ForEach(Array(model.library.writers.enumerated()), id: \.element.id) { index, writer in
+                if index > 0 { Rule() }
+                writerRow(writer)
+                if writer.id == "claude" && writer.installed { profileRow(writer) }
+            }
+        }
+        if let problem { Text(problem).font(.ui(12)).foregroundStyle(p.ink).padding(.top, -32) }
+        VStack(alignment: .leading, spacing: 8) {
+            SettingsSection(title: "Let agents use Fyke",
+                            detail: "Agents connected over MCP can search and read your articles. Article text can try to mislead an agent, so changes start off.") {
+                SettingRow(title: "Read articles, views and briefs") {
+                    Text("Always on").font(.ui(13)).foregroundStyle(p.muted)
                 }
-                .clipShape(RoundedRectangle(cornerRadius: Radii.control))
-                .overlay(RoundedRectangle(cornerRadius: Radii.control).stroke(p.control))
-            }
-            VStack(alignment: .leading, spacing: 10) {
-                Rule()
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Connect an agent").font(.ui(14))
-                        Text("Add this to Claude Code, Codex or any MCP client").font(.ui(13)).foregroundStyle(p.muted)
-                    }
-                    Spacer()
-                    Button("Copy") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(snippet, forType: .string)
-                    }
-                    .buttonStyle(Plain())
+                SettingRow(title: "Make changes", detail: "Mark read and star; or also edit views, recipes and routines", last: true) {
+                    SelectBox(selection: Binding(get: { tier }, set: { Prefs.shared.ui.agentTier = $0 }), options: [
+                        SelectOption(value: "read", label: "Never"),
+                        SelectOption(value: "annotate", label: "Reading state only"),
+                        SelectOption(value: "manage", label: "Everything"),
+                    ], width: 180, height: Metrics.control)
+                    .accessibilityLabel("What agents may change")
                 }
-                .padding(.top, 4)
-                Text(snippet).font(.code(13)).lineSpacing(3).textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 12).padding(.horizontal, 14)
-                    .background(p.surface, in: RoundedRectangle(cornerRadius: 8))
-                    .padding(.bottom, 4)
             }
-            SettingRow(title: "Briefing is written by", detail: "Arrives with the aggregator", last: true) {
-                Text("Not set up").font(.ui(14)).foregroundStyle(p.muted)
+            HStack {
+                Text("Add Fyke to another agent with this configuration.").font(.ui(12)).foregroundStyle(p.muted)
+                Spacer()
+                Button(copied ? "Copied" : "Copy MCP config") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(snippet, forType: .string)
+                    copied = true
+                    Task { try? await Task.sleep(for: .seconds(2)); copied = false }
+                }
+                .buttonStyle(ActionStyle(kind: .secondary))
             }
+            .padding(.top, 4)
+            Text(snippet).font(.code(12)).lineSpacing(3).textSelection(.enabled)
+                .foregroundStyle(p.inkSoft)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 12).padding(.horizontal, 16)
+                .background(p.surface, in: RoundedRectangle(cornerRadius: Radii.control))
+        }
+    }
+
+    private func writerRow(_ writer: Writer) -> some View {
+        HStack(spacing: 12) {
+            Text(writer.id == "codex" ? "Cx" : String(writer.name.prefix(1)))
+                .font(.ui(12, .semibold)).foregroundStyle(p.ground)
+                .frame(width: Metrics.compactControl, height: Metrics.compactControl)
+                .background(writer.found ? (writer.selected ? p.ink : p.inkSoft) : p.control, in: RoundedRectangle(cornerRadius: 7))
+            VStack(alignment: .leading, spacing: 0) {
+                Text(writer.name).font(.ui(13, .medium))
+                Text(status(writer)).font(.ui(12)).foregroundStyle(writer.problem != nil ? p.ink : p.muted).lineLimit(2)
+            }
+            Spacer()
+            if checking == writer.id {
+                Spinner(size: 12)
+            } else {
+                Button("Check") { check(writer) }.buttonStyle(ActionStyle(kind: .quiet))
+                    .help("Run \(writer.name)'s version check again")
+            }
+            if writer.selected {
+                Text("Default").font(.ui(11)).foregroundStyle(p.muted).padding(.horizontal, 8).frame(height: 22)
+                    .background(p.selected, in: RoundedRectangle(cornerRadius: Radii.control))
+            } else {
+                Button("Make default") { choose(writer) }.buttonStyle(ActionStyle(kind: .secondary))
+                    .disabled(!writer.found)
+            }
+        }
+        .padding(.vertical, 8)
+        .frame(minHeight: 56)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// Claude Code keeps one sign-in per profile folder, so the folder decides whose
+    /// account writes the brief. Indented under the Claude Code row it belongs to.
+    private func profileRow(_ writer: Writer) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Profile folder").font(.ui(13))
+                Text(writer.profile.map(tilde) ?? "Claude Code's default (~/.claude)")
+                    .font(.ui(12)).foregroundStyle(p.muted).lineLimit(1).truncationMode(.middle)
+            }
+            Spacer()
+            if writer.profile != nil {
+                Button("Use default") { setProfile("") }.buttonStyle(ActionStyle(kind: .quiet))
+                    .disabled(checking != nil)
+            }
+            Button("Choose…") { pickProfile() }.buttonStyle(ActionStyle(kind: .secondary))
+                .disabled(checking != nil)
+                .help("Choose the folder Claude Code keeps its sign-in in, such as ~/.claude_personal")
+        }
+        .padding(.leading, Metrics.compactControl + 12)
+        .padding(.bottom, 8)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Claude Code profile folder")
+    }
+
+    private func tilde(_ path: String) -> String { path.replacingOccurrences(of: NSHomeDirectory(), with: "~") }
+
+    private func pickProfile() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.showsHiddenFiles = true
+        panel.directoryURL = URL(filePath: NSHomeDirectory())
+        panel.message = "Choose the folder Claude Code keeps its sign-in in, such as ~/.claude_personal."
+        panel.prompt = "Use this folder"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        setProfile(url.path)
+    }
+
+    private func setProfile(_ path: String) {
+        checking = "claude"
+        problem = nil
+        Task {
+            do { try await model.library.setClaudeProfile(path) } catch {
+                problem = "Could not use that folder: \(AppModel.words(for: error))"
+            }
+            checking = nil
+        }
+    }
+
+    private func status(_ writer: Writer) -> String {
+        if let problem = writer.problem { return problem }
+        guard writer.found else { return "Not found on this Mac" }
+        let path = writer.path.map { " · found at " + $0.replacingOccurrences(of: NSHomeDirectory(), with: "~") } ?? ""
+        return "Ready" + (writer.version.map { " · \($0)" } ?? "") + path
+    }
+
+    private func check(_ writer: Writer) {
+        checking = writer.id
+        problem = nil
+        Task {
+            do { try await model.library.check(writer.id) } catch { problem = AppModel.words(for: error) }
+            checking = nil
+        }
+    }
+
+    private func choose(_ writer: Writer) {
+        problem = nil
+        Task {
+            do { try await model.library.choose(writer.id) } catch { problem = "Could not make \(writer.name) the default: \(AppModel.words(for: error))" }
         }
     }
 }

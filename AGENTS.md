@@ -2,7 +2,7 @@
 
 Local-first RSS reader with AI aggregation, built from scratch. One daemon owns a SQLite database; the GUI, TUI, CLI and MCP server are thin clients of one API.
 
-Status: milestones 1 to 6 are implemented: parser, HTML to blocks, fetcher, SQLite store, daemon, operation registry, the `fyke` CLI as a socket client, `fyke mcp`, `fyke tui`, `fyke service` and the SwiftUI app in `gui/`. No aggregator yet. `spikes/` is throwaway. Language: Zig 0.17.1 core, SwiftUI macOS GUI.
+Status: milestones 1 to 6 are implemented: parser, HTML to blocks, fetcher, SQLite store, daemon, operation registry, the `fyke` CLI as a socket client, `fyke mcp`, `fyke tui`, `fyke service` and the SwiftUI app in `gui/`. Cited briefs, answers, saved views and routines are implemented; story clustering and ranking are planned. `spikes/` is throwaway. Language: Zig 0.17.1 core, SwiftUI macOS GUI.
 
 ## Read in this order
 
@@ -12,7 +12,8 @@ Status: milestones 1 to 6 are implemented: parser, HTML to blocks, fetcher, SQLi
 4. [docs/aggregator.md](docs/aggregator.md): AI pipeline
 5. [docs/rss-primer.md](docs/rss-primer.md): feed formats and HTTP behavior
 6. [docs/roadmap.md](docs/roadmap.md): milestones
-7. [CONTRIBUTING.md](CONTRIBUTING.md): how changes are made
+7. [docs/design-rules.md](docs/design-rules.md): interface rules, the source of truth for every GUI
+8. [CONTRIBUTING.md](CONTRIBUTING.md): how changes are made
 
 ## Rules that must hold
 
@@ -38,6 +39,8 @@ These hold for every commit, with no exceptions:
 ## Commands
 
 ```bash
+python3 tools/check.py                      # the checks the files changed since main call for; --dry-run shows the plan
+python3 tools/check.py --all                # every suite, once, at the end of a change
 zig build test                              # unit tests, fuzz targets on seeds
 zig build test --fuzz=10M                   # coverage-guided fuzzing
 zig build -Drelease                         # builds zig-out/bin/feedcheck
@@ -52,6 +55,7 @@ python3 tools/oracle_html.py html.jsonl     # compares with Python's HTML parser
 python3 tools/e2e.py ./zig-out/bin/fyke      # full behavior against a recording server
 python3 tools/e2e_daemon.py ./zig-out/bin/fyke  # socket, tiers, events, OPML, crash recovery
 python3 tools/e2e_mcp.py ./zig-out/bin/fyke     # MCP protocol, both eras
+python3 tools/e2e_features.py ./zig-out/bin/fyke  # views, writers, routines and undo over socket and MCP
 python3 tools/e2e_service.py ./zig-out/bin/fyke  # service install, status, uninstall, with a stand-in service manager
 python3 tools/e2e_service_windows.py ./zig-out/bin/fyke.exe  # Windows: service install, status, uninstall, in the real Run key
 python3 tools/release.py                    # builds dist/ for every target; --notes prints the changelog section
@@ -65,13 +69,16 @@ node tools/sdk_mcp.mjs ./zig-out/bin/fyke modern  # official client; see the fil
 python3 tools/eval_extract.py ./zig-out/bin/feedcheck html.jsonl dump.jsonl  # sends real requests
 python3 tools/load_corpus.py ./zig-out/bin/fyke corpus dump.jsonl
 python3 tools/scale.py ./zig-out/bin/fyke local corpus 1000
-python3 tools/e2e_gui.py                    # key presses and clicks in the app, after bundle_app.py
+python3 tools/e2e_gui.py                    # key presses and clicks in the app, after bundle_app.py; headless
+python3 tools/e2e_gui.py --only view,settings  # named checks and screens, with what they need; --list names them
 python3 tools/bundle_app.py                 # builds zig-out/Fyke.app; --install copies it to /Applications
 python3 tools/gen_tokens.py                 # gui/tokens.css to Tokens.swift
 cd site && pnpm install && pnpm build        # the website, which renders docs/ ; pnpm dev to preview
 ```
 
-Colors, fonts and radii are designed in the Paper file. Export them to `gui/tokens.css`, regenerate, and never edit `Tokens.swift`. The reading default must be a font in `gui/Fonts`, which `gen_tokens.py` checks. Anything else is chosen in Settings, on the machine that has it, and is stored in `config.json` under `ui`. `FYKE_KEYS` plays key presses and clicks and quits, as `tools/e2e_gui.py` shows. `FYKE_SNAPSHOT=out.png` makes the app save its window and quit, with `FYKE_SCREEN` choosing a screen and `-theme dark -followSystem NO` a theme. Use `FYKE_HOME` so that checks never touch real data.
+While a change is in progress, run `tools/check.py`: it maps each changed path to the suites and GUI screens that cover it and prints that plan before running. Run the full suite with `--all` once, when the change is finished. GUI checks are headless by default, so they never take focus or show a window; `--visible` shows them.
+
+Interface work follows [docs/design-rules.md](docs/design-rules.md): the principles, measurements and interaction rules every screen must meet. Colors, fonts and radii are designed in the Paper file. Export them to `gui/tokens.css`, regenerate, and never edit `Tokens.swift`. The reading default must be a font in `gui/Fonts`, which `gen_tokens.py` checks. Anything else is chosen in Settings, on the machine that has it, and is stored in `config.json` under `ui`. `FYKE_KEYS` plays key presses and clicks and quits, as `tools/e2e_gui.py` shows. `FYKE_HEADLESS=1` keeps the app from activating or showing a window, as `gui/Sources/Reader/TestMode.swift` explains. `FYKE_SNAPSHOT=out.png` makes the app save its window and quit, with `FYKE_SCREEN` choosing a screen and `-theme dark -followSystem NO` a theme. Use `FYKE_HOME` so that checks never touch real data.
 
 A new capability is a struct in `src/ops.zig`. Add it to `all`, and the socket and MCP serve it. Give it `docs` for its parameters, or `agent_visible = false`.
 

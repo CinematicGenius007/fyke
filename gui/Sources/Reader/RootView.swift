@@ -1,10 +1,10 @@
+import ReaderLogic
 import SwiftUI
 
 struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.palette) private var p
     @Environment(FloatLayer.self) private var layer
-    @Environment(\.openSettings) private var openSettings
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -22,38 +22,52 @@ struct RootView: View {
         .onKeyPress(phases: .down) { press in handle(press) }
         .onAppear { focused = true }
         .task { await model.start() }
-        .task {
-            if ProcessInfo.processInfo.environment["FYKE_SCREEN"] == "settings" { openSettings() }
-        }
         .onChange(of: model.showingShortcuts) { _, showing in if !showing { focused = true } }
         .onChange(of: model.renaming) { _, renaming in if renaming == nil { focused = true } }
         .onChange(of: model.web == nil) { _, closed in if closed { focused = true } }
         .onChange(of: model.confirmation == nil) { _, closed in if closed { focused = true } }
         .onChange(of: model.search.isShowing) { _, showing in if !showing { focused = true } }
         .onChange(of: model.showingAddFeed) { _, showing in if !showing { focused = true } }
+        .onChange(of: model.commands.isShowing) { _, showing in if !showing { focused = true } }
+        .onChange(of: model.catchUp == nil) { _, closed in if closed { focused = true } }
+        .onChange(of: model.detail) { _, detail in
+            if detail == nil { focused = true } else { model.showingSettings = false }
+        }
+        .onChange(of: model.showingSettings) { focused = true }
         .sheet(isPresented: $model.showingAddFeed) { AddFeedSheet() }
+        .overlay { if let catchUp = model.catchUp { CatchUpView(catchUp: catchUp).transition(.opacity) } }
         .overlay { if model.search.isShowing { SearchPanel() } }
+        .overlay { if model.commands.isShowing { CommandPalette() } }
         .overlay { if model.showingShortcuts { ShortcutsPopup() } }
         .overlay {
             if let confirmation = model.confirmation { ConfirmationDialog(confirmation: confirmation).id(confirmation.id) }
         }
         .overlay(alignment: .bottom) {
-            if let problem = model.problem ?? Prefs.shared.fileProblem.map({ "config.json has a mistake, so the last good settings stay in use: \($0)" }) {
-                Text(problem)
-                    .font(.ui(13))
-                    .foregroundStyle(p.onAccent)
+            VStack(spacing: 8) {
+                if let problem = model.problem ?? Prefs.shared.fileProblem.map({ "config.json has a mistake, so the last good settings stay in use: \($0)" }) {
+                    HStack(spacing: 8) {
+                        Text(problem).font(.ui(13)).foregroundStyle(p.ground)
+                        Button { model.problem = nil } label: { Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).foregroundStyle(p.ground) }
+                            .buttonStyle(.bare).accessibilityLabel("Dismiss")
+                    }
                     .padding(.horizontal, 12).padding(.vertical, 7)
                     .background(p.ink, in: RoundedRectangle(cornerRadius: Radii.control))
-                    .padding(.bottom, 20)
+                }
+                if let toast = model.undo.toast {
+                    UndoToast(item: toast, center: model.undo).transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
+            .padding(.bottom, 20)
+            .motion(model.undo.toast?.id)
         }
+        .motion(model.catchUp == nil)
     }
 
     @ViewBuilder private var content: some View {
-        if model.isEmpty {
+        if model.showingSettings {
+            SettingsView()
+        } else if model.isEmpty {
             FirstRunView()
-        } else if model.place == .briefing && model.web == nil {
-            BriefingView()
         } else if model.usesPanes {
             Panes()
         } else if model.article != nil || model.web != nil {
@@ -68,8 +82,17 @@ struct RootView: View {
         if press.modifiers.contains(.command) { return .ignored }
         // A dialog is modal: its own buttons act, and keys must not reach the app behind.
         if model.confirmation != nil { return .handled }
+        // These hold their own focus and keys.
+        if model.catchUp != nil || model.commands.isShowing || model.search.isShowing { return .ignored }
         if model.showingShortcuts {
             if press.key == .escape || press.characters == "?" { model.showingShortcuts = false }
+            return .handled
+        }
+        // Settings takes typing into its own fields; Esc closes it and returns to the
+        // place it covered.
+        if model.showingSettings {
+            guard press.key == .escape else { return .ignored }
+            if layer.item != nil { layer.close() } else { model.showingSettings = false }
             return .handled
         }
         switch press.key {
@@ -90,6 +113,7 @@ struct RootView: View {
         case "u": model.toggleUnreadOnly()
         case "o": model.openPage()
         case "O": model.openInBrowser()
+        case "c": model.openDiscussion()
         case "f": model.fetchFull()
         case "r": model.refresh()
         case "a": model.showingAddFeed = true
@@ -119,18 +143,45 @@ struct Panes: View {
             let widest = max(Self.smallest, min(640, proxy.size.width - Self.readerMinimum))
             let width = min(max(live ?? Prefs.shared.ui.listWidth, Self.smallest), widest)
             HStack(spacing: 0) {
-                EntryList().frame(width: width)
+                list.frame(width: width)
                 divider(current: width, widest: widest)
-                ReaderPane()
+                reader
             }
         }
     }
 
+    @Environment(AppModel.self) private var model
+
+    @ViewBuilder private var list: some View {
+        switch model.place {
+        case .today: BriefList()
+        case .routines: RoutineList()
+        default: EntryList()
+        }
+    }
+
+    /// A recipe or an answer opens over whatever the reader showed, and Back returns.
+    @ViewBuilder private var reader: some View {
+        switch model.detail {
+        case .recipe(let id, let brief): RecipeView(recipeId: id, briefId: brief).id(id)
+        case .ask: AskView()
+        case nil:
+            switch model.place {
+            case .today: TodayReader()
+            case .routines: RoutineEditor()
+            default: ReaderPane()
+            }
+        }
+    }
+
+    /// A 1 point line centered in a grab area as wide as `Metrics.dividerGrab`. The grab
+    /// area takes layout width rather than lying over the panes, because the panes'
+    /// scroll views are AppKit views and would take the pointer first.
     private func divider(current: Double, widest: Double) -> some View {
         ZStack {
             Rectangle().fill(hovering || dragStart != nil ? p.control : p.hairline).frame(width: 1)
         }
-        .frame(width: 9)
+        .frame(width: Metrics.dividerGrab)
         .contentShape(Rectangle())
         .pointerStyle(.columnResize)
         .onHover { hovering = $0 }
@@ -194,6 +245,12 @@ struct EntryList: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 2) {
+                        if model.entries.isEmpty, let view = model.library.view(model.place.viewId) {
+                            InlineState(tone: .empty, label: "View · \(view.name)", title: "Nothing matches yet",
+                                        detail: "No article fits this rule right now. New articles that fit appear here as they arrive; tap a word above to widen it.",
+                                        primary: view.rule.state == .unread ? ("Include read articles", { var rule = view.rule; rule.setState(.any); model.setRule(rule, of: view.id) }) : nil)
+                                .padding(.horizontal, 12).padding(.top, 20)
+                        }
                         ForEach(model.entries) { row in
                             rowView(row).id(row.id)
                                 .onAppear {
@@ -201,7 +258,7 @@ struct EntryList: View {
                                 }
                         }
                     }
-                    .padding(.horizontal, 12).padding(.bottom, 12)
+                    .padding(.horizontal, Metrics.listEdge).padding(.top, Metrics.listTop).padding(.bottom, Metrics.listEdge)
                 }
                 .themedScrollbar()
                 .onChange(of: model.selectedId) { _, id in
@@ -212,13 +269,29 @@ struct EntryList: View {
         .background(p.ground)
     }
 
+    @Environment(FloatLayer.self) private var layer
+    @State private var menuFrame = CGRect.zero
+
     private var header: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(model.placeTitle).font(.ui(20, .semibold)).tracking(-0.2).lineLimit(1)
-            Spacer()
-            Text("\(model.placeUnread) unread").font(.ui(13)).foregroundStyle(p.muted)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(model.placeTitle).font(.ui(20, .semibold)).tracking(-0.2).lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer()
+                Text("\(model.placeUnread) unread").font(.ui(13)).foregroundStyle(p.muted)
+                if let view = model.library.view(model.place.viewId) {
+                    SymbolButton(symbol: "ellipsis", label: "View actions", size: 24) {
+                        layer.show(at: menuFrame) { ViewMenu(view: view) }
+                    }
+                    .floatFrame($menuFrame)
+                }
+            }
+            if let view = model.library.view(model.place.viewId) {
+                ViewSentence(view: view)
+            }
         }
         .padding(.horizontal, 24).padding(.top, 48).padding(.bottom, 16)
+        .overlay(alignment: .bottom) { if model.place.viewId != nil { Rule().meetsDivider() } }
     }
 
     private func rowView(_ row: EntrySummary) -> some View {
@@ -239,7 +312,7 @@ struct EntryList: View {
             .background(selected ? p.selected : .clear, in: RoundedRectangle(cornerRadius: 8))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
         .overlay(alignment: .bottomTrailing) {
             StarToggle(row: row, showing: selected || hovered == row.id).padding(6)
         }
@@ -262,7 +335,7 @@ struct StarToggle: View {
                     .frame(width: 26, height: 26)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bare)
             .help(row.starred ? "Remove star" : "Star")
         }
     }
@@ -292,7 +365,7 @@ struct TimelineView: View {
                         Button { model.toggleUnreadOnly() } label: {
                             Text(model.unreadOnly ? "Unread · \(model.totalUnread)" : "All · \(model.totalUnread) unread")
                                 .font(.ui(14, .medium)).foregroundStyle(p.inkSoft)
-                        }.buttonStyle(.plain)
+                        }.buttonStyle(.bare)
                     }
                     .padding(.bottom, 36)
                     LazyVStack(alignment: .leading, spacing: 0) {
@@ -360,25 +433,7 @@ struct TimelineView: View {
             .contentShape(Rectangle())
         }
         .onHover { hovered = $0 ? row.id : (hovered == row.id ? nil : hovered) }
-        .buttonStyle(.plain)
-    }
-}
-
-/// Shown until the aggregator produces a digest.
-struct BriefingView: View {
-    @Environment(\.palette) private var p
-    @Environment(\.readingFamily) private var family
-    @Environment(\.titleFamily) private var titleFamily
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(Date.now.formatted(.dateTime.weekday(.wide)) + ",\n" + Date.now.formatted(.dateTime.day().month(.wide)))
-                .font(.custom(titleFamily, fixedSize: 64).weight(.semibold)).tracking(-1)
-            Text("No briefing yet. It arrives with the aggregator.")
-                .font(.custom(family, fixedSize: 21)).foregroundStyle(p.inkSoft)
-        }
-        .padding(.leading, 96).padding(.top, 72)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .buttonStyle(.bare)
     }
 }
 
@@ -406,7 +461,7 @@ struct FirstRunView: View {
             }
             HStack(spacing: 4) {
                 Text("Moving from another reader?").foregroundStyle(p.muted)
-                Button("Import OPML") { OPML.importFile(model) }.buttonStyle(.plain).foregroundStyle(p.unread)
+                Button("Import OPML") { OPML.importFile(model) }.buttonStyle(.bare).foregroundStyle(p.unread)
             }
             .font(.ui(14)).padding(.top, 16)
         }
@@ -429,6 +484,7 @@ struct Primary: ButtonStyle {
             .padding(.horizontal, 14).padding(.vertical, 6)
             .background(p.unread, in: RoundedRectangle(cornerRadius: Radii.control))
             .opacity(configuration.isPressed ? 0.8 : 1)
+            .interactiveCursor()
     }
 }
 
@@ -441,5 +497,6 @@ struct Plain: ButtonStyle {
             .overlay(RoundedRectangle(cornerRadius: Radii.control).stroke(p.control))
             .contentShape(Rectangle())
             .opacity(configuration.isPressed ? 0.7 : 1)
+            .interactiveCursor()
     }
 }

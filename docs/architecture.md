@@ -1,6 +1,6 @@
 # Architecture
 
-Status: parser, fetcher, store, daemon, CLI, MCP server, TUI and GUI are built. The aggregator is design, so `aggregate` and `runners` below are planned modules. See the [roadmap](roadmap.md). The language choice is in [decisions/0001-language.md](decisions/0001-language.md).
+Status: parser, fetcher, store, daemon, CLI, MCP server, TUI and GUI are built. Saved views, cited briefs and answers, and routines are built through the operation registry. Story clustering and ranking remain planned. See the [roadmap](roadmap.md). The language choice is in [decisions/0001-language.md](decisions/0001-language.md).
 
 ## Goals
 
@@ -37,7 +37,7 @@ Polling must run while no UI is open, and several clients (GUI plus an agent) ne
 
 Everything lives under `$FYKE_HOME`, default `~/.fyke`. Backing up is copying this folder.
 
-`fyke data move <folder>` moves the data to another folder, and Settings > General runs it. It stops the daemon, takes the daemon's own lock so that no client can start one on a folder that is being moved, moves the folder, and starts the daemon again, reinstalling the background service if it was on. On the same volume it is one rename. Across volumes it copies, checks that file counts and sizes match, and only then deletes the old folder, so a failure before the daemon restarts leaves the data where it was, and the steps that change something are undone if a later one fails. Links inside the data folder are copied and counted too. `~/.fyke` stays the one address clients use: after a move it is a link to the chosen folder. That also keeps socket paths short, because a Unix socket path holds about 104 bytes and a long folder name would not fit. Moving the data back to `~/.fyke` replaces the link with the folder. The command refuses while `FYKE_HOME` is set, since that names the folder directly. On Windows nothing is renamed or linked: a folder cannot be renamed while the daemon's lock file is open in it, and a link needs a privilege most accounts lack. The data is copied and checked, and `%LOCALAPPDATA%\Fyke\location` is written last to name the new folder. Every client reads that file first.
+`fyke data move <folder>` moves the data to another folder, and Settings > Data runs it. It stops the daemon, takes the daemon's own lock so that no client can start one on a folder that is being moved, moves the folder, and starts the daemon again, reinstalling the background service if it was on. On the same volume it is one rename. Across volumes it copies, checks that file counts and sizes match, and only then deletes the old folder, so a failure before the daemon restarts leaves the data where it was, and the steps that change something are undone if a later one fails. Links inside the data folder are copied and counted too. `~/.fyke` stays the one address clients use: after a move it is a link to the chosen folder. That also keeps socket paths short, because a Unix socket path holds about 104 bytes and a long folder name would not fit. Moving the data back to `~/.fyke` replaces the link with the folder. The command refuses while `FYKE_HOME` is set, since that names the folder directly. On Windows nothing is renamed or linked: a folder cannot be renamed while the daemon's lock file is open in it, and a link needs a privilege most accounts lack. The data is copied and checked, and `%LOCALAPPDATA%\Fyke\location` is written last to name the new folder. Every client reads that file first.
 
 Data at `~/.rss_`, the folder that builds made before the project was named, moves to `~/.fyke` the first time any `fyke` command runs without `FYKE_HOME`. One rename moves it, and a link stays at the old path for older binaries and launch agents. If both locations hold data, `~/.fyke` is used and the old folder is left alone. If they are on different volumes, the data stays and `~/.fyke` becomes a link to it. If `~/.rss_` is already a link, which `data move` leaves, the link itself is renamed, so the data stays where the person put it. Those builds also named the database and daemon files for the working name (`rss.db`, `rssd.sock`, `rssd.lock`, `rssd.log`). The database files are renamed to `fyke.db` and the leftovers of the old daemon are deleted, but only when the old daemon's lock is free. While an earlier daemon still runs, the command stops with `EarlierDaemonRunning` and changes nothing.
 
@@ -108,11 +108,13 @@ Dependencies only point downward. The bottom layer does no I/O, which keeps it t
 | | `daemon` | JSON-RPC over the socket, event streaming |
 | Engine | `service` | Shared state, scheduler, workers, housekeeping |
 | | `pipeline` | Runs ingest from bytes to committed rows |
-| | `aggregate` | Lenses, stages, job queue (planned) |
+| | `features`, `runner` | Durable reader jobs, installed writers and routines |
+| | `aggregate` | Story clustering and ranking (planned) |
 | | `runners` | `http`, `exec`, `acp` backends (planned) |
 | I/O | `fetch` | HTTP, redirects, validators, SSRF guard |
 | | `store` | The only module containing SQL |
-| Pure | `xml` | Lenient streaming pull parser |
+| Pure | `selector`, `writer`, `schedule` | Rule validation, cited output contracts and injected-clock scheduling |
+| | `xml` | Lenient streaming pull parser |
 | | `html` | Tokenizer, then HTML to blocks |
 | | `extract`, `robots` | Article extraction, robots.txt rules |
 | | `feed`, `opml` | RSS, Atom and JSON Feed to `Entry`, and subscription lists |
@@ -175,6 +177,7 @@ Renderers: native text views in the GUI, ANSI in the TUI, Markdown for agents. M
 | Content | `entries`, `enclosures` |
 | Your state | `entry_state`, `tags`, `entry_tags`, `notes` |
 | Search | `entries_fts`, `embeddings` |
+| Reader definitions | `views`, `recipes`, `recipe_revisions`, `routines`, `routine_runs` |
 | Aggregation | `runners`, `lenses`, `stories`, `story_entries`, `jobs`, `artifacts`, `artifact_sources` |
 | Change feed | `events` |
 

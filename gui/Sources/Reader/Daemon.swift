@@ -4,7 +4,25 @@ import Foundation
 
 struct RPCFailure: LocalizedError {
     let message: String
+    /// The daemon's name for the refusal, such as `RevisionConflict` or `in_use`.
+    var kind: String?
+    /// Anything else the refusal carries, such as the routines that use a view.
+    var data: JSON?
+
     var errorDescription: String? { message }
+
+    /// Compares names whatever their spelling: `in_use`, `InUse` and `inUse` are one.
+    func `is`(_ name: String) -> Bool {
+        func flat(_ text: String) -> String { text.lowercased().filter { $0.isLetter } }
+        return [kind, message].compactMap { $0 }.contains { flat($0) == flat(name) }
+    }
+
+    /// A daemon older than the operation answers that it does not know it.
+    var isUnknownMethod: Bool { self.is("UnknownMethod") }
+}
+
+extension Error {
+    var rpc: RPCFailure? { self as? RPCFailure }
 }
 
 /// One blocking connection. Each is used by one thread at a time.
@@ -70,7 +88,10 @@ private struct Request<P: Encodable>: Encodable {
 }
 
 private struct Response<R: Decodable>: Decodable {
-    struct Failure: Decodable { let message: String }
+    struct Failure: Decodable {
+        let message: String
+        let data: JSON?
+    }
     let result: R?
     let error: Failure?
 }
@@ -80,6 +101,23 @@ struct NoParams: Encodable, Sendable {}
 struct Event: Decodable, Sendable {
     let seq: Int64
     let type: String
+}
+
+extension Daemon {
+    /// For operations whose replies are read field by field. See `JSON`.
+    func json<P: Encodable & Sendable>(_ method: String, _ params: P) async throws -> JSON {
+        try await call(method, params)
+    }
+
+    func json(_ method: String) async throws -> JSON {
+        try await call(method, NoParams())
+    }
+
+    /// The `items` of a list reply, made into models. Rows that do not fit are dropped.
+    func items<P: Encodable & Sendable, T>(_ method: String, _ params: P, _ make: (JSON) -> T?) async throws -> [T] {
+        let reply = try await json(method, params)
+        return (reply["items"]?.array ?? reply.array).compactMap(make)
+    }
 }
 
 /// All calls to the daemon. Quick calls share one connection on a serial queue.
@@ -168,7 +206,7 @@ final class Daemon: @unchecked Sendable {
         data.append(10)
         try connection.send(data)
         let response = try decoder().decode(Response<R>.self, from: connection.readLine())
-        if let failure = response.error { throw RPCFailure(message: failure.message) }
+        if let failure = response.error { throw RPCFailure(message: failure.message, kind: failure.data?["kind"]?.string, data: failure.data) }
         guard let result = response.result else { throw RPCFailure(message: "The daemon sent an empty reply") }
         return result
     }

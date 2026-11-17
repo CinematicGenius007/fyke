@@ -205,7 +205,7 @@ struct SearchPanel: View {
             .background(selected ? p.selected : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
     }
 
     /// Marks each searched word in the snippet.
@@ -228,7 +228,7 @@ struct SearchPanel: View {
                 Text(search.unreadOnly ? "Unread only" : "All articles")
                     .font(.ui(13, .medium)).foregroundStyle(p.inkSoft)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bare)
             Spacer()
             HStack(spacing: 16) {
                 Text("↑↓ Move")
@@ -236,6 +236,13 @@ struct SearchPanel: View {
                 Text("Esc Close")
             }
             .font(.ui(13)).foregroundStyle(p.muted)
+            // A search worth keeping becomes a view, named for its words.
+            Button { model.saveSearchAsView() } label: {
+                HStack(spacing: 8) { Text("Save as view"); KeyHint(text: "⌘S") }
+            }
+            .buttonStyle(ActionStyle(kind: .secondary, height: Metrics.compactControl))
+            .disabled(search.isBlank || !model.library.available)
+            .padding(.leading, 8)
         }
         .padding(.horizontal, 20).padding(.vertical, 12)
     }

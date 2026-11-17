@@ -10,6 +10,7 @@ import SwiftUI
 enum Glyph {
     case search, briefing, inbox, star, circle, globe, reload, left, right, down, up
     case check, lock, folder, arrowLeft, arrowRight, close, plus, warning
+    case gear, sparkle, database
 
     func path() -> Path {
         var p = Path()
@@ -55,6 +56,21 @@ enum Glyph {
         case .arrowRight: line((3, 8), (12.5, 8)); line((9, 4.5), (12.5, 8), (9, 11.5))
         case .close: line((4, 4), (12, 12)); line((12, 4), (4, 12))
         case .plus: line((8, 3), (8, 13)); line((3, 8), (13, 8))
+        case .gear:
+            p.addEllipse(in: CGRect(x: 6, y: 6, width: 4, height: 4))
+            line((8, 1.75), (8, 3.5)); line((8, 12.5), (8, 14.25)); line((1.75, 8), (3.5, 8)); line((12.5, 8), (14.25, 8))
+            line((3.6, 3.6), (4.8, 4.8)); line((11.2, 11.2), (12.4, 12.4)); line((3.6, 12.4), (4.8, 11.2)); line((11.2, 4.8), (12.4, 3.6))
+        case .sparkle:
+            line((8, 2), (9.4, 6.6), (14, 8), (9.4, 9.4), (8, 14), (6.6, 9.4), (2, 8), (6.6, 6.6))
+            p.closeSubpath()
+        case .database:
+            p.addEllipse(in: CGRect(x: 3, y: 2, width: 10, height: 4))
+            p.move(to: CGPoint(x: 3, y: 4))
+            p.addLine(to: CGPoint(x: 3, y: 12))
+            p.addCurve(to: CGPoint(x: 13, y: 12), control1: CGPoint(x: 3, y: 14.7), control2: CGPoint(x: 13, y: 14.7))
+            p.addLine(to: CGPoint(x: 13, y: 4))
+            p.move(to: CGPoint(x: 3, y: 8))
+            p.addCurve(to: CGPoint(x: 13, y: 8), control1: CGPoint(x: 3, y: 10.7), control2: CGPoint(x: 13, y: 10.7))
         case .warning:
             line((8, 2.5), (14, 13), (2, 13)); p.closeSubpath()
             line((8, 6.5), (8, 9.5)); line((8, 11.25), (8, 11.26))
@@ -104,7 +120,7 @@ struct IconButton: View {
                 .frame(width: 30, height: 30)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
         .disabled(!enabled)
         .help(help)
     }
@@ -203,11 +219,13 @@ private struct FloatPanelStyle: ViewModifier {
     @Environment(\.palette) private var p
 
     func body(content: Content) -> some View {
+        // The popover look from the design rules: radius 10, a hairline, two shadows.
         content
             .padding(padding)
             .background {
-                RoundedRectangle(cornerRadius: Radii.panel).fill(p.ground)
-                    .shadow(color: .black.opacity(p.isDark ? 0.5 : 0.12), radius: 15, y: 10)
+                RoundedRectangle(cornerRadius: Radii.panel).fill(p.isDark ? p.surface : p.ground)
+                    .shadow(color: .black.opacity(p.isDark ? 0.45 : 0x1F / 255), radius: 16, y: 12)
+                    .shadow(color: .black.opacity(p.isDark ? 0.3 : 0x14 / 255), radius: 3, y: 2)
             }
             .overlay(RoundedRectangle(cornerRadius: Radii.panel).stroke(p.hairline))
     }
@@ -237,11 +255,27 @@ struct MenuRow: View {
             }
             .padding(.leading, 8 + indent).padding(.trailing, 8)
             .frame(minHeight: 30)
-            .background(hovering ? p.selected : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MenuRowStyle(hovering: hovering))
         .onHover { hovering = $0 }
+    }
+}
+
+/// A menu row's fill: the hover color, a step darker while pressed.
+private struct MenuRowStyle: ButtonStyle {
+    let hovering: Bool
+    func makeBody(configuration: Configuration) -> some View { MenuRowBody(configuration: configuration, hovering: hovering) }
+}
+
+private struct MenuRowBody: View {
+    let configuration: ButtonStyle.Configuration
+    let hovering: Bool
+    @Environment(\.palette) private var p
+    var body: some View {
+        configuration.label
+            .background(configuration.isPressed ? p.selectedStrong : hovering ? p.selected : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
+            .interactiveCursor()
     }
 }
 
@@ -295,7 +329,7 @@ struct SelectBox<Value: Hashable>: View {
             .overlay(RoundedRectangle(cornerRadius: Radii.control).stroke(p.control))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
         .floatFrame($frame)
     }
 
@@ -340,7 +374,7 @@ struct DetailsToggle: View {
             .frame(height: 22)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
     }
 }
 
@@ -349,17 +383,20 @@ struct DetailsToggle: View {
 struct Checkbox: View {
     @Binding var on: Bool
     @Environment(\.palette) private var p
+    @State private var hovering = false
 
     var body: some View {
         Button { on.toggle() } label: {
             ZStack {
                 RoundedRectangle(cornerRadius: 4).fill(on ? p.unread : p.ground)
-                RoundedRectangle(cornerRadius: 4).stroke(on ? p.unread : p.control)
+                RoundedRectangle(cornerRadius: 4).stroke(on ? p.unread : hovering ? p.muted : p.control)
                 if on { Icon(glyph: .check, size: 13, color: p.onAccent) }
             }
             .frame(width: 18, height: 18)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
+        .onHover { hovering = $0 }
+        .motion(hovering, Motion.quick)
     }
 }
 

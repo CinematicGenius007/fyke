@@ -19,44 +19,74 @@ struct ReaderApp: App {
         .defaultSize(width: 1440, height: 900)
         .windowStyle(.hiddenTitleBar)
         .commands {
+            // Settings is a destination of the main window, not a window of its own.
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") { model.openSettings() }.keyboardShortcut(",")
+            }
             CommandGroup(replacing: .newItem) {
                 Button("Add Feed…") { model.showingAddFeed = true }.keyboardShortcut("n")
+                Button("New Folder") { model.newFolder(in: nil) }
+                Button("New Routine") { model.newRoutine() }.disabled(model.library.views.isEmpty)
+            }
+            CommandGroup(replacing: .saveItem) {
+                // Saves what is in front: the search as a view, or an open recipe or routine.
+                Button(model.search.isShowing ? "Save Search as View" : "Save") { model.saveCommand() }.keyboardShortcut("s")
+            }
+            CommandGroup(replacing: .undoRedo) {
+                Button(model.undo.canUndo ? "Undo \(model.undo.stack.last?.message ?? "")" : "Undo") { Self.undo(model) }.keyboardShortcut("z")
+                Button("Redo") { NSApp.sendAction(Selector(("redo:")), to: nil, from: nil) }.keyboardShortcut("z", modifiers: [.command, .shift])
             }
             CommandMenu("Go") {
+                Button("Everything…") { model.commands.show() }.keyboardShortcut("k")
                 Button("Search…") { model.search.show() }.keyboardShortcut("f")
                 Divider()
-                Button("Briefing") { model.go(to: .briefing) }.keyboardShortcut("1")
+                Button("Today") { model.go(to: .today) }.keyboardShortcut("1")
                 Button("All") { model.go(to: .all) }.keyboardShortcut("2")
                 Button("Starred") { model.go(to: .starred) }.keyboardShortcut("3")
+                Button("Routines") { model.go(to: .routines) }.keyboardShortcut("4")
+                Divider()
+                Button("Catch Up") { model.startCatchUp() }.keyboardShortcut("j")
+                Button("Activity") { model.showingActivity.toggle() }.keyboardShortcut("0")
+            }
+            CommandMenu("Write") {
+                Button("Write a Brief") { model.runBrief() }.keyboardShortcut("r").disabled(model.briefJob != nil)
+                Button("Ask Your Feeds…") { model.ask.start(question: "", view: model.place.viewId, model: model) }.keyboardShortcut("a", modifiers: [.command, .shift])
+                Button("Edit Recipe") {
+                    if model.place != .today { model.go(to: .today) }
+                    model.openRecipe(model.library.briefs.first { $0.id == model.selectedBrief }?.recipeId)
+                }
+                .disabled(model.library.recipes.isEmpty)
+                Divider()
+                Button("Mark All Read") { Self.markAll(model) }.keyboardShortcut("k", modifiers: [.command, .shift])
             }
             CommandGroup(replacing: .help) {
                 Button("Keyboard Shortcuts") { model.showingShortcuts = true }
             }
         }
-
-        Settings {
-            Themed { SettingsView() }
-                .environment(model)
-                .frame(width: 880, height: 600)
-                .background(BorderlessTitle())
-        }
     }
 }
 
-/// SwiftUI's hidden title bar style does not reach the Settings window.
-struct BorderlessTitle: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            guard let window = view.window else { return }
-            window.titleVisibility = .hidden
-            window.titlebarAppearsTransparent = true
-            window.styleMask.insert(.fullSizeContentView)
+extension ReaderApp {
+    /// Text being edited takes ⌘Z first, while it has typing to take back. Then
+    /// catch-up's own stack, then the app's.
+    @MainActor static func undo(_ model: AppModel) {
+        if let text = NSApp.keyWindow?.firstResponder as? NSTextView, text.undoManager?.canUndo == true {
+            NSApp.sendAction(Selector(("undo:")), to: nil, from: nil)
+        } else if let catchUp = model.catchUp {
+            catchUp.undo()
+        } else {
+            model.undo.undoLast()
         }
-        return view
     }
 
-    func updateNSView(_ view: NSView, context: Context) {}
+    @MainActor static func markAll(_ model: AppModel) {
+        switch model.place {
+        case .feed(let id): model.markAllRead(feed: id)
+        case .folder(let id): model.markAllRead(folder: id)
+        case .view(let id): model.markAllRead(view: id)
+        default: model.markAllRead()
+        }
+    }
 }
 
 /// Applies the active theme to everything inside.
@@ -88,109 +118,13 @@ struct Themed<Content: View>: View {
     }
 }
 
-/// `FYKE_SNAPSHOT=file.png` draws the window once it settles, saves it, and quits.
-/// It gives checks a real rendering with no screen recording permission.
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        MainActor.assumeIsolated { TestMode.prepare() }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        KeyReplay.startIfRequested()
-        guard let path = ProcessInfo.processInfo.environment["FYKE_SNAPSHOT"] else { return }
-        let delay = Double(ProcessInfo.processInfo.environment["FYKE_SNAPSHOT_DELAY"] ?? "") ?? 2.5
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            // Settings is the smaller window, and it may not have become key.
-            let wanted = ProcessInfo.processInfo.environment["FYKE_SCREEN"] == "settings" ? NSApp.windows.first { $0.isVisible && $0.frame.width < 1000 } : nil
-            // FYKE_SNAPSHOT_CHROME takes the frame around the content too, which holds the window buttons.
-            let chrome = ProcessInfo.processInfo.environment["FYKE_SNAPSHOT_CHROME"] != nil
-            guard let window = wanted ?? NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }),
-                let view = chrome ? window.contentView?.superview : window.contentView,
-                let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)
-            else { exit(1) }
-            view.cacheDisplay(in: view.bounds, to: bitmap)
-            try? bitmap.representation(using: .png, properties: [:])?.write(to: URL(filePath: path))
-            exit(0)
-        }
-    }
-}
-
-/// `FYKE_KEYS` plays key presses into the window once it settles, then quits, for
-/// tools/e2e_gui.py. Steps are separated by spaces: `cmd+f`, `up`, `down`, `return`,
-/// `esc`, `wait`, `click:X,Y`, `rclick:X,Y`, `drag:X1,Y1,X2,Y2`, or text to type. Coordinates count from the
-/// window's top left. The events take the same path as real ones from there on.
-@MainActor private enum KeyReplay {
-    private static let settleSeconds = 2.5
-    private static let stepSeconds = 0.5
-
-    static func startIfRequested() {
-        guard let script = ProcessInfo.processInfo.environment["FYKE_KEYS"] else { return }
-        let steps = script.split(separator: " ").map(String.init)
-        DispatchQueue.main.asyncAfter(deadline: .now() + settleSeconds) {
-            NSApp.activate(ignoringOtherApps: true)
-            NSApp.windows.first { $0.isVisible }?.makeKeyAndOrderFront(nil)
-            play(steps[...])
-        }
-    }
-
-    private static func play(_ steps: ArraySlice<String>) {
-        // With a snapshot requested, that is what ends the run.
-        guard let step = steps.first else {
-            if ProcessInfo.processInfo.environment["FYKE_SNAPSHOT"] == nil { exit(0) }
-            return
-        }
-        send(step)
-        DispatchQueue.main.asyncAfter(deadline: .now() + stepSeconds) { play(steps.dropFirst()) }
-    }
-
-    private static func send(_ step: String) {
-        switch step {
-        case "cmd+f": press("f", code: 3, flags: .command)
-        case "up": press(String(UnicodeScalar(NSUpArrowFunctionKey)!), code: 126)
-        case "down": press(String(UnicodeScalar(NSDownArrowFunctionKey)!), code: 125)
-        case "return": press("\r", code: 36)
-        case "esc": press("\u{1B}", code: 53)
-        case "wait": break
-        case _ where step.hasPrefix("click:"): mouse(step.dropFirst(6), down: .leftMouseDown, up: .leftMouseUp)
-        case _ where step.hasPrefix("drag:"): drag(step.dropFirst(5))
-        case _ where step.hasPrefix("rclick:"): mouse(step.dropFirst(7), down: .rightMouseDown, up: .rightMouseUp)
-        default: step.forEach { press(String($0), code: 0) }
-        }
-    }
-
-    /// Posted, not sent, so that they pass through the event queue and become
-    /// `NSApp.currentEvent`, as real clicks do.
-    private static func mouse(_ point: Substring, down: NSEvent.EventType, up: NSEvent.EventType) {
-        let parts = point.split(separator: ",").compactMap { Double($0) }
-        guard parts.count == 2, let window = NSApp.keyWindow, let height = window.contentView?.bounds.height else { return }
-        for type in [down, up] {
-            let event = NSEvent.mouseEvent(
-                with: type, location: NSPoint(x: parts[0], y: height - parts[1]), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
-            if let event { NSApp.postEvent(event, atStart: false) }
-        }
-    }
-
-    /// `drag:x1,y1,x2,y2` presses at the first point and releases at the second.
-    private static func drag(_ spec: Substring) {
-        let p = spec.split(separator: ",").compactMap { Double($0) }
-        guard p.count == 4, let window = NSApp.keyWindow, let height = window.contentView?.bounds.height else { return }
-        let steps = 8
-        let moves: [(NSEvent.EventType, Double, Double)] =
-            [(.leftMouseDown, p[0], p[1])]
-            + (1...steps).map { n in (.leftMouseDragged, p[0] + (p[2] - p[0]) * Double(n) / Double(steps), p[1] + (p[3] - p[1]) * Double(n) / Double(steps)) }
-            + [(.leftMouseUp, p[2], p[3])]
-        for (type, x, y) in moves {
-            let event = NSEvent.mouseEvent(
-                with: type, location: NSPoint(x: x, y: height - y), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1)
-            if let event { NSApp.postEvent(event, atStart: false) }
-        }
-    }
-
-    private static func press(_ text: String, code: UInt16, flags: NSEvent.ModifierFlags = []) {
-        for type in [NSEvent.EventType.keyDown, .keyUp] {
-            let event = NSEvent.keyEvent(
-                with: type, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
-                windowNumber: NSApp.keyWindow?.windowNumber ?? 0, context: nil, characters: text,
-                charactersIgnoringModifiers: text, isARepeat: false, keyCode: code)
-            if let event { NSApp.sendEvent(event) }
-        }
+        MainActor.assumeIsolated { TestMode.start() }
     }
 }

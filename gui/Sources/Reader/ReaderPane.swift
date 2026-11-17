@@ -7,6 +7,7 @@ struct ReaderPane: View {
     @Environment(\.titleFamily) private var titleFamily
     @Environment(FloatLayer.self) private var layer
     @State private var typeFrame = CGRect.zero
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var columnWidth: Double { Prefs.shared.ui.columnWidth }
     private var textSize: Double { Prefs.shared.ui.textSize }
@@ -17,11 +18,16 @@ struct ReaderPane: View {
             if let web = model.web {
                 WebPane(state: web).id(ObjectIdentifier(web))
             } else if let article = model.article {
-                ScrollView {
-                    column(article)
-                        .frame(maxWidth: columnWidth, alignment: .leading)
-                        .padding(.horizontal, 48).padding(.top, 72).padding(.bottom, 96)
-                        .frame(maxWidth: .infinity)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        column(article)
+                            .frame(maxWidth: columnWidth, alignment: .leading)
+                            .padding(.horizontal, Metrics.pageGutter).padding(.top, 72).padding(.bottom, 96)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .onChange(of: model.discussionRequest) {
+                        withAnimation(Motion.ease(reduce: reduceMotion)) { proxy.scrollTo(DiscussionSection.anchor, anchor: .top) }
+                    }
                 }
                 .themedScrollbar()
                 .id(article.entry.id)
@@ -68,6 +74,7 @@ struct ReaderPane: View {
                 }
             }
             BlocksView(blocks: article.blocks, size: textSize, spacing: spacing)
+            DiscussionSection(entry: entry, size: textSize, spacing: spacing)
         }
     }
 
@@ -77,7 +84,7 @@ struct ReaderPane: View {
                 Text("Aa").font(.ui(13, .medium)).foregroundStyle(p.inkSoft)
                     .frame(width: 30, height: 30).contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bare)
             .help("Text and theme")
             .floatFrame($typeFrame)
             IconButton(glyph: .star, help: entry.starred ? "Remove star" : "Star", color: entry.starred ? p.unread : nil, filled: entry.starred) {
@@ -95,10 +102,10 @@ struct ReaderPane: View {
                 .overlay(RoundedRectangle(cornerRadius: Radii.control).stroke(p.hairline))
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bare)
             .help("Open the page here. Command-click a link for your browser.")
         }
-        .padding(.top, 11).padding(.trailing, 16)
+        .padding(.top, Metrics.barControlTop).padding(.trailing, Metrics.barEdge)
     }
 }
 
@@ -224,7 +231,7 @@ struct BlocksView: View {
         case "img":
             ArticleImage(block: block).padding(.bottom, 20)
         case "embed":
-            if let text = block.href { Link(text, destination: URL(string: text) ?? URL(string: "about:blank")!).font(.ui(14)).padding(.bottom, 20) }
+            if let text = block.href { Link(text, destination: URL(string: text) ?? URL(string: "about:blank")!).font(.ui(14)).interactiveCursor().padding(.bottom, 20) }
         default:
             EmptyView()
         }
@@ -280,7 +287,7 @@ struct ArticleImage: View {
                 .padding(.horizontal, 14).padding(.vertical, 10)
                 .background(p.surface, in: RoundedRectangle(cornerRadius: 8))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bare)
         }
     }
 }
@@ -288,7 +295,8 @@ struct ArticleImage: View {
 /// The quick controls behind Aa: theme, reading font and size.
 struct TypeMenu: View {
     @Environment(\.palette) private var p
-    @Environment(\.openSettings) private var openSettings
+    @Environment(AppModel.self) private var model
+    @Environment(FloatLayer.self) private var layer
 
     private let columns = [GridItem(.adaptive(minimum: 58, maximum: 66), spacing: 8)]
 
@@ -309,7 +317,7 @@ struct TypeMenu: View {
                             .background(tile.ground, in: RoundedRectangle(cornerRadius: 7))
                             .overlay(RoundedRectangle(cornerRadius: 7).stroke(p.id == id ? p.unread : p.hairline, lineWidth: p.id == id ? 2 : 1))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.bare)
                     .help(prefs.themeName(id))
                 }
             }
@@ -327,8 +335,11 @@ struct TypeMenu: View {
                 Text("\(Int(prefs.ui.textSize))").font(.ui(13)).foregroundStyle(p.muted).frame(width: 24)
                 Button { prefs.ui.textSize = min(28, prefs.ui.textSize + 1) } label: { Text("A").font(.ui(16)).frame(width: 12) }.buttonStyle(Plain())
             }
-            Button("More in Settings") { openSettings() }
-                .buttonStyle(.plain).font(.ui(13)).foregroundStyle(p.muted)
+            Button("More in Settings") {
+                layer.close()
+                model.openSettings(.Reading)
+            }
+                .buttonStyle(.bare).font(.ui(13)).foregroundStyle(p.muted)
         }
         .frame(width: 280)
     }

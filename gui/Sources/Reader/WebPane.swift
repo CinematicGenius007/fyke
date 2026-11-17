@@ -241,17 +241,35 @@ struct WebPane: View {
                 .padding(.leading, 6).padding(.trailing, 10).frame(height: 30)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bare)
             .keyboardShortcut(.cancelAction)
             IconButton(glyph: .arrowLeft, help: "Previous page", enabled: state.canGoBack) { state.back() }
             IconButton(glyph: .arrowRight, help: "Next page", enabled: state.canGoForward) { state.forward() }
             address
             IconButton(glyph: .reload, help: "Reload") { state.reload() }
-            IconButton(glyph: .globe, help: "Open in browser") { NSWorkspace.shared.open(state.browserAddress) }
+            browserButton
         }
         .padding(.leading, 12).padding(.trailing, 16)
         .frame(height: 52)
         .background(p.ground)
+    }
+
+    /// Names the browser that will open, so the button says where the page goes.
+    private var browserButton: some View {
+        let browser = DefaultBrowser.current
+        return Button { NSWorkspace.shared.open(state.browserAddress) } label: {
+            HStack(spacing: 6) {
+                if let icon = browser?.icon {
+                    Image(nsImage: icon).resizable().frame(width: 16, height: 16)
+                } else {
+                    Icon(glyph: .globe)
+                }
+                Text(browser.map { "Open in \($0.name)" } ?? "Open in browser")
+            }
+        }
+        .buttonStyle(ActionStyle(kind: .secondary, height: Metrics.compactControl))
+        .help("Open this page in your default browser (⇧O)")
+        .accessibilityIdentifier("web-open-browser")
     }
 
     private var address: some View {

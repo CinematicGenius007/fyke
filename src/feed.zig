@@ -33,6 +33,9 @@ pub const Entry = struct {
     /// The publisher's identifier for this entry, if any. See `identity`.
     guid: ?[]const u8 = null,
     url: ?[]const u8 = null,
+    /// The page where readers discuss the entry, from RSS <comments> or an Atom
+    /// link with rel="replies".
+    comments: ?[]const u8 = null,
     title: ?[]const u8 = null,
     author: ?[]const u8 = null,
     published_at: ?i64 = null,
@@ -400,6 +403,8 @@ fn parseRssItem(arena: std.mem.Allocator, p: *xml.Parser, d: Dates) Error!Entry 
                 setFirst(&entry.title, try readText(arena, p));
             } else if (is(name, "link")) {
                 setFirst(&entry.url, try readText(arena, p));
+            } else if (is(name, "comments")) {
+                setFirst(&entry.comments, try readText(arena, p));
             } else if (is(name, "guid")) {
                 const is_permalink = start.attribute("isPermaLink") orelse "true";
                 permalink_guid = !std.ascii.eqlIgnoreCase(is_permalink, "false");
@@ -565,6 +570,8 @@ fn parseAtomEntry(arena: std.mem.Allocator, p: *xml.Parser, entry_start: xml.Sta
             if (try attr(arena, start, "href")) |href| {
                 if (std.mem.eql(u8, rel, "alternate")) {
                     setFirst(&entry.url, href);
+                } else if (std.mem.eql(u8, rel, "replies") and std.mem.indexOf(u8, start.attribute("type") orelse "text/html", "html") != null) {
+                    setFirst(&entry.comments, href);
                 } else if (std.mem.eql(u8, rel, "enclosure")) {
                     try lists.enclosures.append(arena, .{
                         .url = href,
@@ -757,6 +764,7 @@ test "RSS 2.0" {
         \\      <title>Hello</title>
         \\      <link>https://example.com/hello</link>
         \\      <guid isPermaLink="false">post-1</guid>
+        \\      <comments>https://news.example/item?id=1</comments>
         \\      <pubDate>Fri, 06 Nov 2026 09:30:00 GMT</pubDate>
         \\      <dc:creator>Sam</dc:creator>
         \\      <description>Short</description>
@@ -777,6 +785,7 @@ test "RSS 2.0" {
     try testing.expectEqualStrings("Hello", entry.title.?);
     try testing.expectEqualStrings("post-1", entry.guid.?);
     try testing.expectEqualStrings("https://example.com/hello", entry.url.?);
+    try testing.expectEqualStrings("https://news.example/item?id=1", entry.comments.?);
     try testing.expectEqualStrings("Sam", entry.author.?);
     try testing.expectEqual(1793957400000, entry.published_at.?);
     try testing.expectEqualStrings("Short", entry.summary.?.value);
@@ -864,6 +873,8 @@ test "Atom 1.0" {
         \\    <title type="html">A &amp;amp; B</title>
         \\    <link rel="alternate" href="https://example.com/1"/>
         \\    <link rel="enclosure" href="https://example.com/a.mp3" length="9"/>
+        \\    <link rel="replies" type="application/atom+xml" href="https://example.com/1/comments.xml"/>
+        \\    <link rel="replies" type="text/html" href="https://example.com/1#comments"/>
         \\    <published>2026-11-06T09:30:00Z</published>
         \\    <updated>2026-11-06T10:30:00Z</updated>
         \\    <summary>Short</summary>
@@ -882,6 +893,7 @@ test "Atom 1.0" {
     try testing.expectEqualStrings("urn:1", entry.guid.?);
     try testing.expectEqualStrings("A & B", entry.title.?);
     try testing.expectEqualStrings("https://example.com/1", entry.url.?);
+    try testing.expectEqualStrings("https://example.com/1#comments", entry.comments.?);
     try testing.expectEqualStrings("Sam", entry.author.?);
     try testing.expectEqual(1793957400000, entry.published_at.?);
     try testing.expectEqual(1793957400000 + 3600000, entry.updated_at.?);

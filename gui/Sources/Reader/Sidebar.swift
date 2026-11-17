@@ -1,3 +1,4 @@
+import ReaderLogic
 import SwiftUI
 
 private enum TreeRow: Identifiable {
@@ -12,16 +13,16 @@ private enum TreeRow: Identifiable {
     }
 }
 
-/// Everything in the sidebar sits on two columns: icons, chevrons and the FEEDS label
-/// start at `edge`, and names start where the names of Briefing, All and Starred do.
-/// Counts and the plus end at the same right edge.
+/// The sidebar's measurements, from the design rules: rows 32 high, padding 10, icons
+/// 14, gap 8, radius 6. Indent comes from `SidebarIndent`, one value per depth.
 enum SidebarGrid {
-    static let edge: CGFloat = 10
-    static let trailing: CGFloat = 6
-    static let icon: CGFloat = 14
-    static let gap: CGFloat = 8
-    static let indent: CGFloat = 16
+    static let row: CGFloat = 32
+    static let edge = CGFloat(SidebarIndent.edge)
+    static let trailing: CGFloat = 8
+    static let icon = CGFloat(SidebarIndent.icon)
+    static let gap = CGFloat(SidebarIndent.gap)
     static var label: CGFloat { edge + icon + gap }
+    static func leading(_ depth: Int) -> CGFloat { CGFloat(SidebarIndent.leading(depth: depth)) }
 }
 
 struct Sidebar: View {
@@ -29,46 +30,57 @@ struct Sidebar: View {
     @Environment(FloatLayer.self) private var layer
     @Environment(\.palette) private var p
     @State private var addFrame = CGRect.zero
+    @State private var statusFrame = CGRect.zero
     @State private var dropTarget = false
 
     /// Folders first, then feeds, at each level. A closed folder hides what it holds.
+    /// A feed sits one level below its folder, so its name lines up with the folder's.
     private func rows(parent: Int64? = nil, depth: Int = 0) -> [TreeRow] {
         var rows: [TreeRow] = []
         for folder in model.childFolders(of: parent) {
             rows.append(.folder(folder, depth: depth))
             if !Prefs.shared.ui.collapsedFolders.contains(folder.id) { rows += self.rows(parent: folder.id, depth: depth + 1) }
         }
-        rows += model.feeds.filter { $0.folderId == parent }.map { .feed($0, depth: depth) }
+        let feedDepth = SidebarIndent.feedDepth(folderDepth: parent == nil ? nil : depth - 1)
+        rows += model.feeds.filter { $0.folderId == parent }.map { .feed($0, depth: feedDepth) }
         return rows
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            searchRow
-            item("Briefing", glyph: .briefing, place: .briefing, count: nil)
-            item("All", glyph: .inbox, place: .all, count: model.feeds.isEmpty ? nil : model.totalUnread)
-            item("Starred", glyph: .star, place: .starred, count: model.totalStarred == 0 ? nil : model.totalStarred, quietCount: true)
-
-            HStack {
-                Text("FEEDS")
-                    .font(.ui(11, .semibold)).tracking(0.66)
-                    .foregroundStyle(p.muted)
-                Spacer()
-                Button(action: showAddMenu) {
-                    Icon(glyph: .plus, size: 14).frame(width: 14, height: 18).contentShape(Rectangle().inset(by: -5))
-                }
-                .buttonStyle(.plain)
-                .help("Add a feed or a folder")
-                .floatFrame($addFrame)
+            SidebarRow(title: "Search", symbol: "magnifyingglass", selected: false, action: { model.commands.show() }) {
+                Text("⌘K").font(.ui(12)).foregroundStyle(p.muted)
             }
-            .padding(.leading, SidebarGrid.edge).padding(.trailing, SidebarGrid.trailing).padding(.top, 22).padding(.bottom, 6)
-            .background(dropTarget ? p.selected : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
-            .dropDestination(for: String.self) { items, _ in
-                drop(items, on: nil)
-            } isTargeted: { dropTarget = $0 }
+            SidebarRow(title: "Today", symbol: "calendar", selected: model.isShowing(.today), action: { model.go(to: .today) }) {
+                if model.briefJob != nil { Spinner(size: 10) }
+                else if hasNewBrief { Circle().fill(p.unread).frame(width: Metrics.dot, height: Metrics.dot).accessibilityLabel("New brief") }
+            }
+            SidebarRow(title: "All", symbol: "tray", selected: model.isShowing(.all), action: { model.go(to: .all) }) {
+                if !model.feeds.isEmpty { Count(value: model.totalUnread) }
+            }
+            SidebarRow(title: "Starred", symbol: "star", selected: model.isShowing(.starred), action: { model.go(to: .starred) }) {
+                if model.totalStarred > 0 { Count(value: model.totalStarred, quiet: true) }
+            }
+            SidebarRow(title: "Catch up", symbol: "rectangle.stack", selected: model.catchUp != nil, action: { model.startCatchUp() }) {
+                Text("⌘J").font(.ui(12)).foregroundStyle(p.muted)
+            }
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
+                    sectionHeader("Views", help: "Save a search as a view (⌘F, then ⌘S)") { model.search.show() }
+                    if model.library.views.isEmpty {
+                        Text(model.library.available ? "Search, then ⌘S to keep it here" : "Views need a newer Fyke service")
+                            .font(.ui(12)).foregroundStyle(p.muted)
+                            .padding(.leading, SidebarGrid.label).frame(height: 24)
+                    }
+                    ForEach(model.library.views) { view in ViewRow(view: view) }
+
+                    sectionHeader("Feeds", help: "Add a feed or a folder", action: showAddMenu)
+                        .floatFrame($addFrame)
+                        .background(dropTarget ? p.selected : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
+                        .dropDestination(for: String.self) { items, _ in
+                            Drag.apply(items, to: nil, model: model)
+                        } isTargeted: { dropTarget = $0 }
                     ForEach(rows()) { row in
                         switch row {
                         case .folder(let folder, let depth): FolderRow(folder: folder, depth: depth)
@@ -76,20 +88,88 @@ struct Sidebar: View {
                         }
                     }
                 }
+                .padding(.bottom, 12)
             }
             .themedScrollbar()
 
-            Text(status).font(.ui(12)).foregroundStyle(p.muted)
-                .padding(.leading, SidebarGrid.edge).padding(.trailing, SidebarGrid.trailing).padding(.vertical, 14)
+            SidebarRow(title: "Routines", symbol: "clock.arrow.circlepath", selected: model.isShowing(.routines), action: { model.go(to: .routines) }) {
+                if let next = model.library.nextRoutine?.nextRunAt {
+                    Text("Next \(next.formatted(.dateTime.hour().minute()))").font(.ui(12)).foregroundStyle(p.muted)
+                }
+            }
+            statusLine
         }
-        .padding(.horizontal, 12).padding(.top, 48)
+        .padding(.horizontal, 12).padding(.top, 48).padding(.bottom, 8)
         .frame(width: 231)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(p.surface)
+        .onChange(of: model.showingActivity) { _, showing in
+            if showing { layer.show(at: statusFrame) { ActivityPanel() } }
+        }
+        .onChange(of: layer.item == nil) { _, closed in
+            if closed {
+                model.showingActivity = false
+                model.healthFeed = nil
+            }
+        }
+        .onChange(of: model.healthFeed) { _, id in
+            // A failing feed inside a closed folder: open the folders above it.
+            guard let id, let feed = model.feeds.first(where: { $0.id == id }), var folder = feed.folderId else { return }
+            while true {
+                Prefs.shared.ui.collapsedFolders.removeAll { $0 == folder }
+                guard let parent = model.folders.first(where: { $0.id == folder })?.parentId else { break }
+                folder = parent
+            }
+        }
     }
 
-    private func drop(_ items: [String], on folder: Int64?) -> Bool {
-        Drag.apply(items, to: folder, model: model)
+    private var hasNewBrief: Bool {
+        guard let newest = model.library.briefs.first?.id else { return false }
+        return model.place != .today && newest != model.selectedBrief
+    }
+
+    private func sectionHeader(_ title: String, help: String, action: @escaping () -> Void) -> some View {
+        HStack {
+            SectionLabel(text: title)
+            Spacer()
+            Button(action: action) {
+                Image(systemName: "plus").font(.system(size: 12, weight: .medium)).frame(width: 20, height: 20)
+            }
+            .buttonStyle(SymbolStyle())
+            .help(help)
+            .accessibilityLabel(help)
+        }
+        .padding(.leading, SidebarGrid.edge).padding(.trailing, 4).padding(.top, 20).padding(.bottom, 4)
+    }
+
+    /// The one line of background work. It opens Activity.
+    private var statusLine: some View {
+        HStack(spacing: SidebarGrid.gap) {
+            Button { model.showingActivity.toggle() } label: {
+                HStack(spacing: SidebarGrid.gap) {
+                    Group {
+                        if model.statusIsBusy { Spinner(size: 10) }
+                        else { Circle().fill(model.statusNeedsYou ? p.unread : p.control).frame(width: Metrics.dot, height: Metrics.dot) }
+                    }
+                    .frame(width: SidebarGrid.icon)
+                    Text(model.statusWords).font(.ui(12)).foregroundStyle(model.statusNeedsYou ? p.ink : p.muted).lineLimit(1)
+                    Spacer(minLength: 4)
+                }
+                .padding(.leading, SidebarGrid.edge)
+                .frame(height: SidebarGrid.row)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(RowStyle(selected: model.showingActivity))
+            .floatFrame($statusFrame)
+            .accessibilityLabel("Activity: \(model.statusWords)")
+            .accessibilityHint("Shows background work")
+            SymbolButton(symbol: "gearshape", label: "Settings (⌘,)", selected: model.showingSettings) {
+                if model.showingSettings { model.showingSettings = false } else { model.openSettings() }
+            }
+            .accessibilityAddTraits(model.showingSettings ? .isSelected : [])
+        }
+        .padding(.top, 4)
+        .overlay(alignment: .top) { Rule() }
     }
 
     private func showAddMenu() {
@@ -108,46 +188,110 @@ struct Sidebar: View {
             .floatPanel()
         }
     }
+}
 
-    private var searchRow: some View {
-        Button { model.search.show() } label: {
-            HStack(spacing: 8) {
-                Icon(glyph: .search, size: 14)
-                Text("Search").font(.ui(14)).foregroundStyle(p.ink)
-                Spacer(minLength: 8)
-                Text("⌘F").font(.ui(13)).foregroundStyle(p.muted)
-            }
-            .padding(.leading, SidebarGrid.edge).padding(.trailing, SidebarGrid.trailing).padding(.vertical, 7)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var status: String {
-        guard let date = model.updatedAt else { return " " }
-        return "Updated " + date.formatted(.relative(presentation: .named))
-    }
-
-    private func item(_ title: String, glyph: Glyph, place: Place, count: Int64?, quietCount: Bool = false) -> some View {
-        let selected = model.place == place
-        return Button { model.go(to: place) } label: {
-            HStack(spacing: 8) {
-                Icon(glyph: glyph, size: 14)
-                Text(title).font(.ui(14, selected ? .semibold : .regular)).foregroundStyle(p.ink).lineLimit(1)
-                Spacer(minLength: 8)
-                if let count {
-                    Text(count, format: .number.grouping(.never))
-                        .font(.ui(13, quietCount ? .regular : .medium)).foregroundStyle(quietCount ? p.muted : p.unread)
-                }
-            }
-            .padding(.leading, SidebarGrid.edge).padding(.trailing, SidebarGrid.trailing).padding(.vertical, 7)
-            .background(selected ? p.selectedStrong : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+/// A count at the end of a row: blue for unread, muted for everything else.
+struct Count: View {
+    let value: Int64
+    var quiet = false
+    @Environment(\.palette) private var p
+    var body: some View {
+        Text(value, format: .number.grouping(.never))
+            .font(.ui(13, quiet ? .regular : .medium)).foregroundStyle(quiet || value == 0 ? p.muted : p.unread)
+            .accessibilityLabel(quiet ? "\(value)" : "\(value) unread")
     }
 }
 
+/// Rest, hover, pressed, selected and focused, for every sidebar row.
+struct RowStyle: ButtonStyle {
+    var selected = false
+    var target = false
+    func makeBody(configuration: Configuration) -> some View { RowBody(configuration: configuration, selected: selected, target: target) }
+}
+
+private struct RowBody: View {
+    let configuration: ButtonStyle.Configuration
+    let selected: Bool
+    let target: Bool
+    @Environment(\.palette) private var p
+    @Environment(\.isEnabled) private var enabled
+    @State private var hovering = false
+
+    var body: some View {
+        configuration.label
+            .opacity(enabled ? 1 : 0.5)
+            .background(fill, in: RoundedRectangle(cornerRadius: Radii.control))
+            .onHover { hovering = $0 }
+            .interactiveCursor()
+            .motion(hovering, Motion.quick)
+    }
+
+    private var fill: Color {
+        if selected || configuration.isPressed { return p.selectedStrong }
+        if target || hovering { return p.selected }
+        return .clear
+    }
+}
+
+/// One destination row: icon, name, and whatever trails it.
+struct SidebarRow<Trailing: View>: View {
+    let title: String
+    var symbol: String?
+    var depth = 0
+    let selected: Bool
+    var muted = false
+    let action: () -> Void
+    @ViewBuilder var trailing: Trailing
+    @Environment(\.palette) private var p
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: SidebarGrid.gap) {
+                if let symbol {
+                    Image(systemName: symbol).font(.system(size: 12.5)).foregroundStyle(p.inkSoft)
+                        .frame(width: SidebarGrid.icon, height: SidebarGrid.icon)
+                }
+                Text(title).font(.ui(14, selected ? .semibold : .regular)).foregroundStyle(muted ? p.muted : p.ink).lineLimit(1)
+                Spacer(minLength: 8)
+                trailing
+            }
+            .padding(.leading, SidebarGrid.leading(depth)).padding(.trailing, SidebarGrid.trailing)
+            .frame(height: SidebarGrid.row)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(RowStyle(selected: selected))
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+private struct ViewRow: View {
+    let view: SavedView
+    @Environment(AppModel.self) private var model
+    @Environment(\.palette) private var p
+
+    private var selected: Bool { model.isShowing(.view(view.id)) }
+
+    var body: some View {
+        Group {
+            if model.renaming == .view(view.id) {
+                HStack(spacing: SidebarGrid.gap) {
+                    Image(systemName: "line.3.horizontal.decrease").font(.system(size: 12.5)).foregroundStyle(p.inkSoft).frame(width: SidebarGrid.icon)
+                    RenameField(name: view.name) { model.renameView(view.id, to: $0) }
+                    Text("↵ to keep").font(.ui(11)).foregroundStyle(p.muted).fixedSize()
+                }
+                .padding(.leading, SidebarGrid.edge).padding(.trailing, SidebarGrid.trailing)
+                .frame(height: SidebarGrid.row)
+            } else {
+                SidebarRow(title: view.name, symbol: "line.3.horizontal.decrease", selected: selected, action: { model.go(to: .view(view.id)) }) {
+                    Count(value: view.unread, quiet: view.unread == 0)
+                }
+                .accessibilityHint(view.sentence ?? "")
+            }
+        }
+        .rightClickMenu { ViewMenu(view: view) }
+    }
+}
 /// What a sidebar row carries while dragged.
 enum Drag {
     static func feed(_ id: Int64) -> String { "feed:\(id)" }
@@ -206,40 +350,49 @@ private struct FolderRow: View {
 
     private var unread: Int64 { model.feedsInside(folder.id).reduce(0) { $0 + $1.unread } }
     private var closed: Bool { Prefs.shared.ui.collapsedFolders.contains(folder.id) }
-    private var selected: Bool { model.place == .folder(folder.id) }
+    private var selected: Bool { model.isShowing(.folder(folder.id)) }
 
     var body: some View {
-        HStack(spacing: SidebarGrid.gap) {
-            Button { model.toggleFolder(folder.id) } label: {
-                Icon(glyph: closed ? .right : .down, size: SidebarGrid.icon, color: p.muted)
-                    .frame(width: SidebarGrid.icon, height: 28).contentShape(Rectangle().inset(by: -4))
-            }
-            .buttonStyle(.plain)
-            .help(closed ? "Open folder" : "Close folder")
+        Group {
             if model.renaming == .folder(folder.id) {
-                RenameField(name: folder.name) { model.renameFolder(folder.id, to: $0) }
+                HStack(spacing: SidebarGrid.gap) {
+                    chevron
+                    RenameField(name: folder.name) { model.renameFolder(folder.id, to: $0) }
+                }
+                .padding(.leading, SidebarGrid.leading(depth)).padding(.trailing, SidebarGrid.trailing)
+                .frame(height: SidebarGrid.row)
             } else {
                 Button { model.go(to: .folder(folder.id)) } label: {
-                    HStack {
+                    HStack(spacing: SidebarGrid.gap) {
+                        Color.clear.frame(width: SidebarGrid.icon)
                         Text(folder.name).font(.ui(14, selected ? .semibold : .medium)).foregroundStyle(p.ink).lineLimit(1)
                         Spacer(minLength: 8)
-                        if unread > 0 {
-                            Text(unread, format: .number.grouping(.never)).font(.ui(13, .medium)).foregroundStyle(p.unread)
-                        }
+                        if unread > 0 { Count(value: unread) }
                     }
-                    .frame(height: 32)
+                    .padding(.leading, SidebarGrid.leading(depth)).padding(.trailing, SidebarGrid.trailing)
+                    .frame(height: SidebarGrid.row)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(RowStyle(selected: selected, target: target))
+                .overlay(alignment: .leading) { chevron.padding(.leading, SidebarGrid.leading(depth)) }
+                .accessibilityLabel("\(folder.name), folder")
             }
         }
-        .padding(.leading, SidebarGrid.edge + CGFloat(depth) * SidebarGrid.indent).padding(.trailing, SidebarGrid.trailing)
-        .background(selected ? p.selectedStrong : (target ? p.selected : .clear), in: RoundedRectangle(cornerRadius: Radii.control))
         .draggable(Drag.folder(folder.id))
         .dropDestination(for: String.self) { items, _ in
             Drag.apply(items, to: folder.id, model: model)
         } isTargeted: { target = $0 }
         .rightClickMenu { menu }
+    }
+
+    private var chevron: some View {
+        Button { model.toggleFolder(folder.id) } label: {
+            Image(systemName: closed ? "chevron.right" : "chevron.down").font(.system(size: 10, weight: .semibold)).foregroundStyle(p.muted)
+                .frame(width: SidebarGrid.icon, height: 24).contentShape(Rectangle().inset(by: -4))
+        }
+        .buttonStyle(.bare)
+        .help(closed ? "Open folder" : "Close folder")
+        .accessibilityLabel(closed ? "Open \(folder.name)" : "Close \(folder.name)")
     }
 
     private var menu: some View {
@@ -252,6 +405,10 @@ private struct FolderRow: View {
                     model.showingAddFeed = true
                 }
             }
+            MenuRow(title: "Catch up") { act {
+                model.go(to: .folder(folder.id))
+                model.startCatchUp()
+            } }
             MenuRow(title: "Mark all read") { act { model.markAllRead(folder: folder.id) } }
             Rule().padding(.vertical, 3)
             MenuRow(title: "Delete folder…") { act { model.confirmation = .deleteFolder(folder) } }
@@ -272,36 +429,42 @@ private struct FeedRow: View {
     @Environment(AppModel.self) private var model
     @Environment(FloatLayer.self) private var layer
     @Environment(\.palette) private var p
+    @State private var frame = CGRect.zero
 
-    private var selected: Bool { model.place == .feed(feed.id) }
+    private var selected: Bool { model.isShowing(.feed(feed.id)) }
 
     var body: some View {
         Group {
             if model.renaming == .feed(feed.id) {
                 RenameField(name: feed.name) { model.renameFeed(feed.id, to: $0) }
-                    .frame(height: 32)
+                    .padding(.leading, SidebarGrid.leading(depth) - 4).padding(.trailing, SidebarGrid.trailing)
+                    .frame(height: SidebarGrid.row)
             } else {
-                Button { model.go(to: .feed(feed.id)) } label: {
-                    HStack {
-                        Text(feed.name)
-                            .font(.ui(14, selected ? .semibold : .regular))
-                            .foregroundStyle(feed.unread == 0 ? p.muted : p.ink)
-                            .lineLimit(1)
-                        Spacer(minLength: 8)
-                        if feed.unread > 0 {
-                            Text(feed.unread, format: .number.grouping(.never)).font(.ui(13, .medium)).foregroundStyle(p.unread)
+                SidebarRow(title: feed.name, depth: depth, selected: selected, muted: feed.unread == 0 && !feed.isFailing, action: { model.go(to: .feed(feed.id)) }) {
+                    if feed.isFailing {
+                        Button { model.healthFeed = feed.id } label: {
+                            Image(systemName: "exclamationmark.triangle").font(.system(size: 11)).foregroundStyle(p.ink).frame(width: 20, height: 20)
                         }
+                        .buttonStyle(SymbolStyle(selected: model.healthFeed == feed.id))
+                        .help("\(feed.name) is not loading")
+                        .accessibilityLabel("\(feed.name) is not loading. Show why")
+                    } else if feed.unread > 0 {
+                        Count(value: feed.unread)
                     }
-                    .frame(height: 32)
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
             }
         }
-        .padding(.leading, SidebarGrid.label + CGFloat(depth) * SidebarGrid.indent).padding(.trailing, SidebarGrid.trailing)
-        .background(selected ? p.selectedStrong : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
+        .floatFrame($frame)
         .draggable(Drag.feed(feed.id))
         .rightClickMenu { FeedMenu(feed: feed) }
+        .onChange(of: model.healthFeed, initial: true) { _, id in
+            if id == feed.id {
+                DispatchQueue.main.async {
+                    let anchor = CGRect(x: frame.maxX + 8, y: frame.minY - 8, width: 0, height: 0)
+                    layer.show(at: anchor) { FeedHealthPanel(feed: feed) }
+                }
+            }
+        }
     }
 }
 
@@ -445,17 +608,19 @@ struct Solid: ButtonStyle {
             .padding(.horizontal, 12).padding(.vertical, 6)
             .background(p.ink, in: RoundedRectangle(cornerRadius: Radii.control))
             .opacity(configuration.isPressed ? 0.8 : 1)
+            .interactiveCursor()
     }
 }
 
 enum ShortcutList {
     static let move = [
         ("Next, previous", "j k"), ("Open", "Return"), ("Back", "Esc"), ("Next unread", "n"),
-        ("Search", "/"), ("Briefing, All, Starred", "⌘1 ⌘2 ⌘3"),
+        ("Search", "/"), ("Today, All, Starred, Routines", "⌘1–4"), ("Everything", "⌘K"),
     ]
     static let act = [
-        ("Star", "s"), ("Read or unread", "m"), ("Unread only", "u"), ("Open page here", "o"), ("Open in browser", "⇧O"),
+        ("Star", "s"), ("Read or unread", "m"), ("Unread only", "u"), ("Open page here", "o"), ("Open in browser", "⇧O"), ("Comments", "c"),
         ("Fetch full article", "f"), ("Refresh", "r"), ("Add feed", "a"), ("Text and theme", "t"),
+        ("Save search as view", "⌘S"), ("Settings", "⌘,"), ("Catch up", "⌘J"), ("Ask your feeds", "⇧⌘A"), ("Undo", "⌘Z"),
     ]
 }
 

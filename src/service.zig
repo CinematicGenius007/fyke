@@ -134,10 +134,18 @@ fn statusOutcome(status: u16, after_seconds: ?u32) Attempt {
     return .failed;
 }
 
+/// Bounded version output can expand sixfold when escaped as JSON.
+pub const WriterProbe = struct {
+    json: [32768]u8 = undefined,
+    len: usize = 0,
+};
+
 pub const Service = struct {
     gpa: std.mem.Allocator,
     io: Io,
     home: Io.Dir,
+    environ: std.process.Environ = .empty,
+    clock: ?*const fn (Io) i64 = null,
     config: Config,
     started_at: i64,
     client: std.http.Client,
@@ -152,6 +160,11 @@ pub const Service = struct {
     /// Signaled after events are written, for `events.subscribe`.
     events_lock: Io.Mutex = .init,
     events_changed: Io.Condition = .init,
+
+    /// Probe JSON is owned by the daemon, never by a request arena. The lock also
+    /// serializes the first lazy probe with explicit writers.check requests.
+    writer_probes_lock: Io.Mutex = .init,
+    writer_probes: [2]WriterProbe = .{ .{}, .{} },
 
     /// Held while `config.set` rewrites config.json.
     config_lock: Io.Mutex = .init,
@@ -178,12 +191,15 @@ pub const Service = struct {
     robots: std.StringHashMapUnmanaged(RobotsEntry) = .empty,
 
     wake: Io.Event = .unset,
+    jobs_wake: Io.Event = .unset,
+
     /// Set when entries may have arrived, since the full text loop sleeps when idle.
     full_text_wake: Io.Event = .unset,
     queue: Io.Queue(Job) = undefined,
     queue_buffer: []Job = &.{},
 
     pub fn now(s: *const Service) i64 {
+        if (s.clock) |read| return read(s.io);
         return Io.Clock.real.now(s.io).toMilliseconds();
     }
 
@@ -218,6 +234,7 @@ pub const Service = struct {
     }
 
     pub fn eventsChanged(s: *Service) void {
+        s.jobs_wake.set(s.io);
         s.full_text_wake.set(s.io);
         s.events_lock.lockUncancelable(s.io);
         defer s.events_lock.unlock(s.io);
@@ -672,4 +689,9 @@ test "the page's own title is dropped" {
     try std.testing.expectEqual(1, withoutTitle(&nodes, "hello").len);
     try std.testing.expectEqual(2, withoutTitle(&nodes, "Other").len);
     try std.testing.expectEqual(2, withoutTitle(&nodes, null).len);
+}
+
+/// Reader work has its own worker so installed agent commands never hold up polls.
+pub fn readerLoop(s: *Service) Io.Cancelable!void {
+    return @import("features.zig").loop(s);
 }

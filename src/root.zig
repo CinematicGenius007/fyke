@@ -2,6 +2,7 @@
 
 pub const blocks = @import("blocks.zig");
 pub const dates = @import("dates.zig");
+pub const discussion = @import("discussion.zig");
 pub const encoding = @import("encoding.zig");
 pub const extract = @import("extract.zig");
 pub const feed = @import("feed.zig");
@@ -11,11 +12,15 @@ pub const opml = @import("opml.zig");
 pub const robots = @import("robots.zig");
 pub const terminal = @import("terminal.zig");
 pub const url = @import("url.zig");
+
+/// Pure rule validation and rendering shared by all reading surfaces.
+pub const selector = @import("selector.zig");
 pub const xml = @import("xml.zig");
 
 test {
     _ = blocks;
     _ = dates;
+    _ = discussion;
     _ = encoding;
     _ = extract;
     _ = feed;
@@ -26,5 +31,6 @@ test {
     _ = terminal;
     _ = url;
     _ = xml;
+    _ = selector;
     _ = @import("fuzz.zig");
 }

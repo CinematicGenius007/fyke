@@ -58,7 +58,7 @@ struct FontPicker: View {
                     .background(family == selected ? p.selected : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bare)
             }
         }
     }
@@ -85,7 +85,7 @@ private struct FontButton: View {
             .overlay(RoundedRectangle(cornerRadius: Radii.control).stroke(changed ? p.unread : p.control))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
         .floatFrame($frame)
     }
 
@@ -155,7 +155,7 @@ struct FontChangeStrip: View {
     }
 
     private func link(_ title: String, run: @escaping () -> Void) -> some View {
-        Button(title, action: run).buttonStyle(.plain).font(.ui(13, .medium)).foregroundStyle(p.ink)
+        Button(title, action: run).buttonStyle(.bare).font(.ui(13, .medium)).foregroundStyle(p.ink)
     }
 
     private func askName() {
@@ -294,7 +294,7 @@ private struct ThemeChoice: View {
             .overlay(RoundedRectangle(cornerRadius: Radii.control).stroke(p.control))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
         .floatFrame($frame)
     }
 }
@@ -349,6 +349,7 @@ struct ColorPanel: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: Radii.control))
             .contentShape(Rectangle())
+            .interactiveCursor()
             .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
                 saturation = min(max(drag.location.x / proxy.size.width, 0), 1)
                 brightness = 1 - min(max(drag.location.y / proxy.size.height, 0), 1)
@@ -366,6 +367,7 @@ struct ColorPanel: View {
                 Circle().stroke(.white, lineWidth: 2).frame(width: 12, height: 12).offset(x: hue * proxy.size.width - 6)
             }
             .contentShape(Rectangle())
+            .interactiveCursor()
             .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
                 hue = min(max(drag.location.x / proxy.size.width, 0), 0.999)
                 publish()
@@ -415,7 +417,7 @@ struct TokensPane: View {
     var body: some View {
         PaneScroll {
             VStack(alignment: .leading, spacing: 0) {
-                PaneTitle(text: "Tokens").padding(.bottom, -6)
+                BackToReading().padding(.bottom, 12)
                 chooser.padding(.bottom, 14)
                 Rule()
                 header
@@ -450,7 +452,7 @@ struct TokensPane: View {
                         .background(id == item ? active.selectedStrong : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
                         .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.bare)
             }
             Button { newTheme(from: id, at: newFrame) } label: {
                 HStack(spacing: 5) {
@@ -460,7 +462,7 @@ struct TokensPane: View {
                 .padding(.horizontal, 8).padding(.vertical, 5)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bare)
             .floatFrame($newFrame)
         }
     }
@@ -481,7 +483,7 @@ struct TokensPane: View {
             if let theme {
                 if theme.changes > 0 {
                     Button("Reset all") { prefs.edit(id) { reset(&$0) } }
-                        .buttonStyle(.plain).font(.ui(13, .medium)).foregroundStyle(active.inkSoft).padding(.trailing, 6)
+                        .buttonStyle(.bare).font(.ui(13, .medium)).foregroundStyle(active.inkSoft).padding(.trailing, 6)
                 }
                 Button("Rename") {
                     layer.show(at: renameFrame) {
@@ -561,7 +563,7 @@ struct TokensPane: View {
                 .frame(height: 34)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bare)
             if open { content().padding(.bottom, 6) }
         }
     }
@@ -570,7 +572,7 @@ struct TokensPane: View {
         Button(action: run) {
             Icon(glyph: .reload, size: 14).frame(width: 18, height: 18).contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bare)
         .help("Back to the base theme")
         .opacity(visible ? 1 : 0)
         .disabled(!visible)
@@ -654,13 +656,13 @@ private struct ColorTokenRow: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bare)
             // Disabling would fade the swatch, and a swatch must show the true color.
             .allowsHitTesting(editable)
             Button(action: reset) {
                 Icon(glyph: .reload, size: 14).frame(width: 18, height: 18).contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.bare)
             .help("Back to the base theme")
             .opacity(changed ? 1 : 0)
             .disabled(!changed)
