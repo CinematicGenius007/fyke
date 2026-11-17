@@ -153,15 +153,18 @@ jobs:
         run: |
           $root = Join-Path $env:RUNNER_TEMP "xaml"
           $head = '<Window x:Class="T.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">'
+          $repo = (Get-Location).Path
           $tests = [ordered]@{
-            net10 = @('net10.0-windows10.0.22621.0', '1.8.260209005')
-            net8  = @('net8.0-windows10.0.22621.0', '1.8.260209005')
-            net10old = @('net10.0-windows10.0.22621.0', '1.7.250401001')
+            refs  = '<ItemGroup><ProjectReference Include="REPO/gui-windows/src/Fyke.Client/Fyke.Client.csproj" /><ProjectReference Include="REPO/gui-windows/src/Fyke.ViewModels/Fyke.ViewModels.csproj" /></ItemGroup>'
+            props = ''
+            fonts = '<ItemGroup><Content Include="REPO/gui-windows/src/Fyke.App/Fonts/**/*" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>'
           }
           foreach ($name in $tests.Keys) {
             $d = Join-Path $root $name
             New-Item -ItemType Directory -Force $d | Out-Null
-            Set-Content "$d/T.csproj" "<Project Sdk=`"Microsoft.NET.Sdk`"><PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>$($tests[$name][0])</TargetFramework><TargetPlatformMinVersion>10.0.22621.0</TargetPlatformMinVersion><UseWinUI>true</UseWinUI><WindowsPackageType>None</WindowsPackageType><WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained><Platforms>x64</Platforms></PropertyGroup><ItemGroup><PackageReference Include=`"Microsoft.WindowsAppSDK`" Version=`"$($tests[$name][1])`" /></ItemGroup></Project>"
+            if ($name -eq 'props') { Copy-Item "$repo/gui-windows/Directory.Build.props" $root/props/../Directory.Build.props -Force; Copy-Item "$repo/gui-windows/Directory.Build.props" "$d/../Directory.Build.props" -Force }
+            $extra = $tests[$name].Replace('REPO', $repo.Replace('\','/'))
+            Set-Content "$d/T.csproj" "<Project Sdk=`"Microsoft.NET.Sdk`"><PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net10.0-windows10.0.22621.0</TargetFramework><TargetPlatformMinVersion>10.0.22621.0</TargetPlatformMinVersion><UseWinUI>true</UseWinUI><WindowsPackageType>None</WindowsPackageType><WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained><Platforms>x64</Platforms></PropertyGroup><ItemGroup><PackageReference Include=`"Microsoft.WindowsAppSDK`" Version=`"1.8.260209005`" /></ItemGroup>$extra</Project>"
             Set-Content "$d/App.xaml" '<Application x:Class="T.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"><Application.Resources><ResourceDictionary /></Application.Resources></Application>'
             Set-Content "$d/App.xaml.cs" 'namespace T; public partial class App : Microsoft.UI.Xaml.Application { public App() => InitializeComponent(); }'
             Set-Content "$d/MainWindow.xaml" ($head + '<Grid /></Window>')
@@ -171,3 +174,7 @@ jobs:
             if ($out -match 'MSB3073') { "XAML COMPILER FAILED" } elseif ($out -match 'Build succeeded') { "BUILD OK" } else { "other" }
             ($out -split "`n" | Select-String 'error' | Select-Object -First 2 | ForEach-Object { $_.Line.Trim().Substring(0, [Math]::Min(200, $_.Line.Trim().Length)) })
           }
+          "== real app without the repo build props"
+          $out = dotnet build gui-windows/src/Fyke.App -c Release -p:Platform=x64 -p:ImportDirectoryBuildProps=false -v:q 2>&1 | Out-String
+          if ($out -match 'MSB3073') { "XAML COMPILER FAILED" } else { "no xaml failure" }
+          ($out -split "`n" | Select-String 'error' | Select-Object -First 3 | ForEach-Object { $_.Line.Trim().Substring(0, [Math]::Min(200, $_.Line.Trim().Length)) })
