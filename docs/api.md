@@ -284,7 +284,12 @@ one run. The worker checks schedules at startup, on relevant changes and at most
 `days`, with their bounds, counts and actions; it makes no changes.
 
 Writer selection is stored with `config.set` using
-`{ "ai": { "writer": "codex" } }`, and is returned by `config.get`.
+`{ "ai": { "writer": "codex" } }`, and is returned by `config.get`. The Claude Code
+profile folder is `{ "ai": { "claude_profile": "/Users/me/.claude_work" } }`: an absolute
+path to an existing folder, or `""` for Claude Code's default; anything else fails with
+`InvalidProfile`. `config.set` changes only the `ai` keys it is given. Each probe result
+has `installed`, `signed_in`, `available` (both), `version`, `path`, `profile` (Claude
+Code) and, when it cannot write, `problem` in words.
 Writer discovery is cached in memory for the daemon's lifetime. The first
 `writers.list` lazily probes each adapter once and returns `checked_at` (epoch
 milliseconds) with its availability and version. Later reads reuse those results;

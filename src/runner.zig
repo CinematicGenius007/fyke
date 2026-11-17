@@ -93,45 +93,122 @@ fn locate(s: *Service, a: std.mem.Allocator, name: []const u8, path: []const u8)
     return name;
 }
 
+/// The Claude Code profile folder the owner chose under `ai.claude_profile`, or null
+/// for Claude Code's own default. Claude Code keeps a sign-in per profile folder.
+fn claudeProfile(s: *Service, a: std.mem.Allocator) !?[]const u8 {
+    const text = try @import("service.zig").readConfigFile(s, a);
+    const root = std.json.parseFromSliceLeaky(std.json.Value, a, text, .{}) catch return null;
+    if (root != .object) return null;
+    const ai = root.object.get("ai") orelse return null;
+    if (ai != .object) return null;
+    const profile = ai.object.get("claude_profile") orelse return null;
+    if (profile != .string or profile.string.len == 0) return null;
+    return profile.string;
+}
+
+/// The environment a writer runs with: the daemon's own, without Fyke's private
+/// variables, with the writer search path, and with the chosen Claude Code profile.
+fn writerEnvironment(s: *Service, a: std.mem.Allocator, name: []const u8, path: []const u8) !std.process.Environ.Map {
+    var env = try std.process.Environ.createMap(s.environ, a);
+    _ = env.swapRemove("FYKE_HOME");
+    _ = env.swapRemove("FYKE_WRITER_CMD");
+    try env.put("PATH", path);
+    if (std.mem.eql(u8, name, "claude")) {
+        if (try claudeProfile(s, a)) |profile| try env.put("CLAUDE_CONFIG_DIR", profile);
+    }
+    return env;
+}
+
+/// Reads `loggedIn` from the JSON that `claude auth status` prints. Null when the
+/// output is not that JSON.
+pub fn claudeSignedIn(a: std.mem.Allocator, output: []const u8) ?bool {
+    const root = std.json.parseFromSliceLeaky(std.json.Value, a, output, .{}) catch return null;
+    if (root != .object) return null;
+    const value = root.object.get("loggedIn") orelse return null;
+    return if (value == .bool) value.bool else null;
+}
+
+test claudeSignedIn {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expectEqual(@as(?bool, true), claudeSignedIn(a, "{\"loggedIn\": true, \"authMethod\": \"claude.ai\"}"));
+    try std.testing.expectEqual(@as(?bool, false), claudeSignedIn(a, "{\"loggedIn\": false}"));
+    try std.testing.expectEqual(@as(?bool, null), claudeSignedIn(a, "Not a status"));
+    try std.testing.expectEqual(@as(?bool, null), claudeSignedIn(a, "{\"loggedIn\": \"yes\"}"));
+}
+
+fn runQuick(s: *Service, a: std.mem.Allocator, argv: []const []const u8, env: *const std.process.Environ.Map) !std.process.RunResult {
+    return std.process.run(a, s.io, .{
+        .argv = argv,
+        .environ_map = env,
+        .stdout_limit = .limited(16 * 1024),
+        .stderr_limit = .limited(16 * 1024),
+        .timeout = .{ .duration = .{ .raw = .fromSeconds(5), .clock = .awake } },
+    });
+}
+
+/// Finds a writer, reads its version, then asks it whether it is signed in, so that
+/// "available" means a brief can actually be written. `problem` says in words what
+/// stands in the way.
 fn probe(s: *Service, a: std.mem.Allocator, name: []const u8) !std.json.Value {
     try validateName(name);
     const path = try searchPath(s, a);
-    var env = try std.process.Environ.createMap(s.environ, a);
+    var env = try writerEnvironment(s, a, name, path);
     defer env.deinit();
-    try env.put("PATH", path);
-    const result = std.process.run(
-        a,
-        s.io,
-        .{
-            .argv = &.{
-                try locate(s, a, name, path),
-                "--version",
-            },
-            .environ_map = &env,
-            .stdout_limit = .limited(4096),
-            .stderr_limit = .limited(4096),
-            .timeout = .{ .duration = .{
-                .raw = .fromSeconds(5),
-                .clock = .awake,
-            } },
-        },
-    ) catch |err| return store.object(
-        a,
-        .{
-            .writer = name,
-            .available = false,
-            .error_name = @errorName(err),
-        },
-    );
-    return store.object(
-        a,
-        .{
-            .writer = name,
-            .available = result.term.success(),
-            .version = std.mem.trim(u8, result.stdout, " \r\n"),
-        },
-    );
+    const exe = try locate(s, a, name, path);
+    const profile = if (std.mem.eql(u8, name, "claude")) try claudeProfile(s, a) else null;
+    const version = runQuick(s, a, &.{ exe, "--version" }, &env) catch |err| return store.object(a, .{
+        .writer = name,
+        .available = false,
+        .installed = false,
+        .error_name = @errorName(err),
+        .problem = "Not found on this Mac",
+        .profile = profile,
+    });
+    if (!version.term.success()) return store.object(a, .{
+        .writer = name,
+        .available = false,
+        .installed = false,
+        .error_name = "WriterFailed",
+        .problem = "Found, but its version check failed",
+        .profile = profile,
+    });
+    const status_argv: []const []const u8 = if (std.mem.eql(u8, name, "claude"))
+        &.{ exe, "auth", "status" }
+    else
+        &.{ exe, "login", "status" };
+    const signed_in: bool = if (runQuick(s, a, status_argv, &env)) |status|
+        if (std.mem.eql(u8, name, "claude"))
+            claudeSignedIn(a, status.stdout) orelse status.term.success()
+        else
+            status.term.success()
+    else |_|
+        false;
+    const sign_in_hint = if (std.mem.eql(u8, name, "claude"))
+        (if (profile != null) "Not signed in with this profile. Run claude, then /login." else "Not signed in. Run claude, then /login, or choose the profile folder you use.")
+    else
+        "Not signed in. Run codex login.";
+    return store.object(a, .{
+        .writer = name,
+        .available = signed_in,
+        .installed = true,
+        .signed_in = signed_in,
+        .version = std.mem.trim(u8, version.stdout, " \r\n"),
+        .path = exe,
+        .problem = if (signed_in) null else sign_in_hint,
+        .profile = profile,
+    });
 }
+
+/// Drops a cached probe so the next list runs it again, after a setting it depends on
+/// changed.
+pub fn forget(s: *Service, name: []const u8) void {
+    s.writer_probes_lock.lockUncancelable(s.io);
+    defer s.writer_probes_lock.unlock(s.io);
+    s.writer_probes[if (std.mem.eql(u8, name, "codex")) @as(usize, 0) else 1].len = 0;
+}
+
 // Hold one lock through a probe: concurrent first reads must not spawn the same
 // command twice. Request arenas only receive parsed copies of daemon-owned JSON.
 fn cachedProbe(s: *Service, a: std.mem.Allocator, name: []const u8, refresh: bool) !std.json.Value {
@@ -180,12 +257,9 @@ pub fn execute(
     var input = try dir.openFile(s.io, "input", .{});
     defer input.close(s.io);
     try dir.writeFile(s.io, .{ .sub_path = "schema.json", .data = contract.schema });
-    var env = try std.process.Environ.createMap(s.environ, a);
-    defer env.deinit();
-    _ = env.swapRemove("FYKE_HOME");
-    _ = env.swapRemove("FYKE_WRITER_CMD");
     const path = try searchPath(s, a);
-    try env.put("PATH", path);
+    var env = try writerEnvironment(s, a, name, path);
+    defer env.deinit();
     var argv: []const []const u8 = undefined;
     if (std.process.Environ.getAlloc(s.environ, a, "FYKE_WRITER_CMD") catch null) |override| {
         // The override is an owner-supplied executable command, never feed data.

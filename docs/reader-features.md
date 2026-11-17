@@ -101,7 +101,9 @@ The writer must return JSON: `{"title": "...", "sections": [{"heading": "...", "
 `FYKE_WRITER_CMD` replaces the writer with any command that speaks the same contract. The tests use it with a stand-in written in Python.
 
 Codex uses `--output-schema` and `--output-last-message`; Claude runs with an empty explicit MCP configuration and no tools. `writers.list` probes lazily once per daemon start and caches availability, version and `checked_at` in memory.
+A probe reads the writer's version and then asks whether it is signed in (`codex login status`, `claude auth status`), so `available` means a brief can be written; otherwise `problem` says in words what stands in the way.
 `writers.check` refreshes one probe and saves its timestamped result under `ai.checks`. The owner selects a writer with `config.set` under `ai.writer`.
+Claude Code keeps one sign-in per profile folder. `ai.claude_profile` names the folder to use (an absolute path to an existing folder; `""` returns to Claude Code's default), and Fyke passes it to Claude Code as `CLAUDE_CONFIG_DIR`. Changing it checks Claude Code again. `config.set` changes only the `ai` keys it is given.
 
 Selection is bounded: at most 60 articles and 120 000 characters of text, newest first. A brief records how many matching articles were left out, and the GUI says so.
 
@@ -140,7 +142,7 @@ The GUI follows [design-rules.md](design-rules.md):
 - **Catch-up**: the triage mode above.
 - **⌘K**: a palette of every command and destination.
 - **Settings**: a destination of the main window, not a window of its own. ⌘,, the gear at the sidebar's foot, the palette and "More in Settings" open it over the list and reader panes with the sidebar still showing; Esc, or any other destination, returns to the place it covered with its article and selection intact. General, Reading, Agents and Data are tabs in its header, and each tab's settings are plain rows in the reading column.
-- **Settings · Agents**: writer choice and status, and a ready-to-paste MCP configuration. "Make changes" picks the `--tier` written into that configuration: Never (`read`), Reading state only (`annotate`) or Everything (`manage`). Fyke has no per-change approval prompt; an agent's MCP client decides whether to ask before calling a tool.
+- **Settings · Agents**: writer choice and status, the Claude Code profile folder, and a ready-to-paste MCP configuration. "Make changes" picks the `--tier` written into that configuration: Never (`read`), Reading state only (`annotate`) or Everything (`manage`). Fyke has no per-change approval prompt; an agent's MCP client decides whether to ask before calling a tool.
 - **States**: writing, failed and empty states are inline, say what is safe, and offer one next action. Bulk changes show an undo toast instead of a confirmation.
 
 ## Checks

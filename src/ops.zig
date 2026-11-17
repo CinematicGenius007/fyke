@@ -11,6 +11,7 @@ const service = @import("service.zig");
 const store = @import("store.zig");
 
 const Io = std.Io;
+const runner = @import("runner.zig");
 const Service = service.Service;
 const blocks = core.blocks;
 
@@ -160,7 +161,38 @@ pub const ConfigSet = struct {
             s.full_text_wake.set(s.io);
         }
         if (p.remove_read_after_days) |days| s.remove_read_after_days.store(days, .monotonic);
+        if (p.ai) |ai| if (ai == .object and ai.object.get("claude_profile") != null) runner.forget(s, "claude");
         return .{};
+    }
+
+    /// Changes only the `ai` keys given; saved checks and other keys stay. `writer` must
+    /// name a known adapter. `claude_profile` is an absolute path to an existing folder,
+    /// or "" to go back to Claude Code's default.
+    fn mergeAi(s: *Service, arena: std.mem.Allocator, root: *std.json.Value, changes: std.json.Value) !void {
+        if (changes != .object) return error.InvalidConfig;
+        var ai = root.object.get("ai") orelse std.json.Value{ .object = .empty };
+        if (ai != .object) return error.InvalidConfig;
+        var keys = changes.object.iterator();
+        while (keys.next()) |entry| {
+            const key = entry.key_ptr.*;
+            const value = entry.value_ptr.*;
+            if (std.mem.eql(u8, key, "writer")) {
+                if (value != .string) return error.InvalidConfig;
+                try runner.validateName(value.string);
+                try ai.object.put(arena, key, value);
+            } else if (std.mem.eql(u8, key, "claude_profile")) {
+                if (value != .string) return error.InvalidConfig;
+                if (value.string.len == 0) {
+                    _ = ai.object.orderedRemove(key);
+                    continue;
+                }
+                if (!std.fs.path.isAbsolute(value.string)) return error.InvalidProfile;
+                const stat = Io.Dir.cwd().statFile(s.io, value.string, .{}) catch return error.InvalidProfile;
+                if (stat.kind != .directory) return error.InvalidProfile;
+                try ai.object.put(arena, key, value);
+            } else return error.InvalidConfig;
+        }
+        try root.object.put(arena, "ai", ai);
     }
 
     /// Other keys in the file are the owner's, so they survive untouched. A file that
@@ -178,13 +210,7 @@ pub const ConfigSet = struct {
         if (p.full_text) |enabled| try root.object.put(arena, "full_text", .{ .bool = enabled });
         if (p.remove_read_after_days) |days| try root.object.put(arena, "remove_read_after_days", .{ .integer = days });
         if (p.ui) |ui| try root.object.put(arena, "ui", ui);
-        if (p.ai) |ai| {
-            if (ai != .object) return error.InvalidConfig;
-            const writer = ai.object.get("writer") orelse return error.InvalidConfig;
-            if (writer != .string) return error.InvalidConfig;
-            try @import("runner.zig").validateName(writer.string);
-            try root.object.put(arena, "ai", ai);
-        }
+        if (p.ai) |changes| try mergeAi(s, arena, &root, changes);
         const out = try std.fmt.allocPrint(arena, "{f}\n", .{std.json.fmt(root, .{ .whitespace = .indent_2 })});
         try s.home.writeFile(s.io, .{ .sub_path = "config.json.tmp", .data = out });
         try s.home.rename("config.json.tmp", s.home, "config.json", s.io);

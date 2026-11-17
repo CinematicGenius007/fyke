@@ -182,16 +182,26 @@ print(json.dumps({"title":"Morning brief","sections":[{"heading":"News","claims"
 ''')
     command = subprocess.list2cmdline([sys.executable,writer,mode]) if os.name=="nt" else shlex.join([sys.executable,writer,mode])
     env = dict(os.environ,FYKE_HOME=home,FYKE_WRITER_CMD=command)
-    # Version-only adapters make probe counts observable without installed agents.
+    # Stand-in adapters log each call, so probe counts and the profile they ran with are
+    # observable without installed agents. Codex is always signed in; Claude Code is
+    # signed in only when its profile folder holds a `signed-in` file.
     if os.name != "nt":
         os.mkdir(home+"/bin")
         for name in ("codex", "claude"):
             executable = home+"/bin/"+name
+            log = shlex.quote(home+"/"+name+".probes")
             with open(executable,"w") as f:
-                f.write("#!/bin/sh\nprintf 'probe\\n' >> " + shlex.quote(home+"/"+name+".probes") +
-                        "\nprintf 'fixture-version\\n'\n")
+                f.write("#!/bin/sh\n"
+                        f"printf '%s|%s\\n' \"$*\" \"$CLAUDE_CONFIG_DIR\" >> {log}\n"
+                        "case \"$*\" in\n"
+                        "  --version) printf 'fixture-version\\n' ;;\n"
+                        "  'auth status') if [ -f \"$CLAUDE_CONFIG_DIR/signed-in\" ]; then echo '{\"loggedIn\": true}';"
+                        " else echo '{\"loggedIn\": false}'; fi ;;\n"
+                        "esac\n")
             os.chmod(executable,0o700)
         env["PATH"] = home+"/bin"+os.pathsep+env.get("PATH","")
+    def probes(name, what="--version"):
+        return [line.rstrip("\n").split("|") for line in open(home+"/"+name+".probes") if line.startswith(what+"|")]
 
     with open(home+"/config.json","w") as f: json.dump({"auto_poll":False,"full_text":False},f)
     client = None
@@ -249,16 +259,37 @@ print(json.dumps({"title":"Morning brief","sections":[{"heading":"News","claims"
         check("writer probes timestamped",all(isinstance(w["checked_at"],int) for w in writers))
         check("writer list cached",call("writers.list")["items"]==writers)
         if os.name != "nt":
-            check("lazy probes run once",all(len(open(home+"/"+name+".probes").readlines())==1
-                                            for name in ("codex","claude")))
+            check("lazy probes run once",all(len(probes(name))==1 for name in ("codex","claude")))
         refreshed = call("writers.check",writer="codex")
         check("writer probe",refreshed["writer"]=="codex")
         cached = call("writers.list")["items"]
         check("explicit check updates cache",next(w for w in cached if w["writer"]=="codex")["checked_at"]
               ==refreshed["checked_at"])
         if os.name != "nt":
-            check("only checked adapter reprobed",len(open(home+"/codex.probes").readlines())==2 and
-                  len(open(home+"/claude.probes").readlines())==1)
+            check("only checked adapter reprobed",len(probes("codex"))==2 and len(probes("claude"))==1)
+            claude=next(w for w in cached if w["writer"]=="claude")
+            check("signed out is not available",claude["installed"] and claude["signed_in"] is False and
+                  not claude["available"] and "Not signed in" in claude["problem"])
+            check("codex sign-in checked",refreshed["signed_in"] and refreshed["available"] and probes("codex","login status"))
+            profile=os.path.join(home,"claude-profile"); os.mkdir(profile)
+            open(os.path.join(profile,"signed-in"),"w").close()
+            call("config.set",ai={"writer":"codex"})
+            call("config.set",ai={"claude_profile":profile})
+            ai=call("config.get")["ai"]
+            check("ai settings merge",ai["writer"]=="codex" and ai["claude_profile"]==profile and "codex" in ai["checks"])
+            claude=next(w for w in call("writers.list")["items"] if w["writer"]=="claude")
+            check("profile change rechecks",len(probes("claude"))==2 and claude["available"] and claude["profile"]==profile)
+            check("profile reaches claude",probes("claude","auth status")[-1][1]==profile)
+            try:
+                call("config.set",ai={"claude_profile":"relative/folder"}); refused=False
+            except RuntimeError: refused=True
+            check("relative profile refused",refused)
+            try:
+                call("config.set",ai={"claude_profile":os.path.join(home,"missing")}); refused=False
+            except RuntimeError: refused=True
+            check("missing profile refused",refused and call("config.get")["ai"]["claude_profile"]==profile)
+            call("config.set",ai={"claude_profile":""})
+            check("profile cleared","claude_profile" not in call("config.get")["ai"])
 
         call("config.set",ai={"writer":"claude"})
         check("writer setting",call("config.get")["ai"]["writer"]=="claude")

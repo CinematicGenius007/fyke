@@ -444,6 +444,7 @@ private struct AgentsPane: View {
             ForEach(Array(model.library.writers.enumerated()), id: \.element.id) { index, writer in
                 if index > 0 { Rule() }
                 writerRow(writer)
+                if writer.id == "claude" && writer.installed { profileRow(writer) }
             }
         }
         if let problem { Text(problem).font(.ui(12)).foregroundStyle(p.ink).padding(.top, -32) }
@@ -510,6 +511,56 @@ private struct AgentsPane: View {
         .padding(.vertical, 8)
         .frame(minHeight: 56)
         .accessibilityElement(children: .contain)
+    }
+
+    /// Claude Code keeps one sign-in per profile folder, so the folder decides whose
+    /// account writes the brief. Indented under the Claude Code row it belongs to.
+    private func profileRow(_ writer: Writer) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("Profile folder").font(.ui(13))
+                Text(writer.profile.map(tilde) ?? "Claude Code's default (~/.claude)")
+                    .font(.ui(12)).foregroundStyle(p.muted).lineLimit(1).truncationMode(.middle)
+            }
+            Spacer()
+            if writer.profile != nil {
+                Button("Use default") { setProfile("") }.buttonStyle(ActionStyle(kind: .quiet))
+                    .disabled(checking != nil)
+            }
+            Button("Choose…") { pickProfile() }.buttonStyle(ActionStyle(kind: .secondary))
+                .disabled(checking != nil)
+                .help("Choose the folder Claude Code keeps its sign-in in, such as ~/.claude_personal")
+        }
+        .padding(.leading, Metrics.compactControl + 12)
+        .padding(.bottom, 8)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Claude Code profile folder")
+    }
+
+    private func tilde(_ path: String) -> String { path.replacingOccurrences(of: NSHomeDirectory(), with: "~") }
+
+    private func pickProfile() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.showsHiddenFiles = true
+        panel.directoryURL = URL(filePath: NSHomeDirectory())
+        panel.message = "Choose the folder Claude Code keeps its sign-in in, such as ~/.claude_personal."
+        panel.prompt = "Use this folder"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        setProfile(url.path)
+    }
+
+    private func setProfile(_ path: String) {
+        checking = "claude"
+        problem = nil
+        Task {
+            do { try await model.library.setClaudeProfile(path) } catch {
+                problem = "Could not use that folder: \(AppModel.words(for: error))"
+            }
+            checking = nil
+        }
     }
 
     private func status(_ writer: Writer) -> String {

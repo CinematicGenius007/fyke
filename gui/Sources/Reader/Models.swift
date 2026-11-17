@@ -310,17 +310,24 @@ struct RecipeRevision: Identifiable, Equatable, Sendable {
 struct Writer: Identifiable, Equatable, Sendable {
     let id: String
     let name: String
+    /// Installed and signed in: a brief can be written.
     let found: Bool
+    /// On this Mac, whether or not it is signed in.
+    let installed: Bool
     let path: String?
     let version: String?
     let selected: Bool
     let problem: String?
+    /// The Claude Code profile folder in use; nil means Claude Code's default.
+    let profile: String?
 
     init?(_ j: JSON) {
         guard let id = j["id", "writer", "name"]?.string else { return nil }
         self.id = id
         name = j["label", "displayName", "title"]?.string ?? (id == "claude" ? "Claude Code" : id == "codex" ? "Codex" : id)
-        found = j["found", "available", "installed"]?.bool ?? false
+        found = j["found", "available"]?.bool ?? false
+        installed = j["installed"]?.bool ?? found
+        profile = j["profile"]?.string
         path = j["path"]?.string
         version = j["version"]?.string
         selected = j["selected", "default"]?.bool ?? false

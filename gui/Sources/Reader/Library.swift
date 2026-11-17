@@ -245,6 +245,18 @@ final class Library {
         await loadWriters()
     }
 
+    private struct ProfileParams: Encodable, Sendable {
+        struct AI: Encodable, Sendable { let claudeProfile: String }
+        let ai: AI
+    }
+
+    /// Points Claude Code at the profile folder that holds its sign-in; "" goes back to
+    /// Claude Code's default. The daemon checks Claude Code again with the new folder.
+    func setClaudeProfile(_ path: String) async throws {
+        let _: JSON = try await Daemon.shared.call("config.set", ProfileParams(ai: .init(claudeProfile: path)))
+        await loadWriters()
+    }
+
     // MARK: Routines
 
     struct RoutinePut: Encodable, Sendable {
