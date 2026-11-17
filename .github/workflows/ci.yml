@@ -152,16 +152,16 @@ jobs:
         shell: pwsh
         run: |
           $src = "gui-windows/src"
-          foreach ($name in 'W1','W2','W3','W4') {
+          foreach ($name in 'W5','W6','W7') {
             $d = "$src/$name"
             if (Test-Path $d) { Remove-Item $d -Recurse -Force }
             Copy-Item "$src/Fyke.App" $d -Recurse -Exclude obj,bin
             Rename-Item "$d/Fyke.App.csproj" "$name.csproj"
             Set-Content "$d/MainWindow.xaml.cs" "namespace Fyke.App;`npublic sealed partial class MainWindow : Microsoft.UI.Xaml.Window { public MainWindow() { InitializeComponent(); } }"
             $x = Get-Content "$d/MainWindow.xaml" -Raw
-            if ($name -eq 'W2') { $x = $x -replace 'FontFamily="\{StaticResource FontUi\}"','' -replace '\{ThemeResource \w+\}','Black' -replace 'CornerRadius="\{StaticResource RadiusControl\}"','' }
-            if ($name -eq 'W3') { $x = $x -replace 'Text="\{Binding \w+\}"','Text="x"' -replace 'Command="\{Binding \w+\}"','' }
-            if ($name -eq 'W4') { $x = $x -replace '<Grid.RowDefinitions>.*</Grid.RowDefinitions>','' -replace 'Grid.Row="1"','' }
+            if ($name -eq 'W5') { $x = $x -replace '\{ThemeResource \w+\}','Black' }
+            if ($name -eq 'W6') { $x = $x -replace 'FontFamily="\{StaticResource FontUi\}"','' }
+            if ($name -eq 'W7') { $x = $x -replace 'CornerRadius="\{StaticResource RadiusControl\}"','' }
             Set-Content "$d/MainWindow.xaml" $x
             "== $name"
             $out = dotnet build "$d/$name.csproj" -c Release -p:Platform=x64 -v:q 2>&1 | Out-String
