@@ -103,6 +103,12 @@ The sidebar context menus create top-level or nested folders and open a compact 
 
 Removing a subscription confirms the permanent loss of its saved articles and marks. Deleting a folder keeps its contents by default and moves them to its parent or the top level. An explicit option deletes the entire subtree, including its saved articles. The reader closes an article whose feed was removed and returns to All if its destination disappeared.
 
+## Importing and exporting OPML
+
+The All context menu and command palette offer import and export. Import is also available in the add-feed sheet. The Windows file picker accepts `.opml` and `.xml`. The app passes the chosen path to `opml.import`, then refreshes the catalog and reports how many subscriptions were added and how many already existed. The daemon imports the folder structure and fetches new feeds in the background using its default network rules.
+
+Export requests the document through `opml.export`. The save picker suggests `feeds.opml` and confirms overwrites. The app writes UTF-8 to a temporary file beside the destination and replaces the destination only after writing succeeds. Windows App SDK 1.8 can create an empty file at a newly selected path before Fyke saves the document. Canceling either picker leaves the current screen and files intact.
+
 ## Background running and notifications
 
 Today `fyke service install` registers the daemon in the per-user Run key. The GUI keeps that: closing the window leaves the daemon running. Supervision after a crash, and notifications with every window closed, are planned slices (W4 below) with their own design.
@@ -166,7 +172,8 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W2a | Feed discovery, preview, and subscription with folder placement | API tests for selections and retry, and Windows smoke coverage for discovering two feeds and subscribing to one |
 | W2b | Create, rename, and move feeds and folders | Folder-path and operation tests, plus Windows smoke coverage for creation and rename with an open article |
 | W2c | Subscription refresh and removal | Operation and removal-scope tests, plus Windows smoke coverage for refresh, canceled removal, subscription removal, and keeping folder contents |
-| W2d | OPML, settings, weight editing, persistent folder disclosure, themes, agent setup, storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
+| W2d | OPML import and export | Operation and file-write tests, daemon round-trip with nested folders, manual Windows checks for picker cancellation and overwrite confirmation |
+| W2e | Settings, weight editing, persistent folder disclosure, themes, agent setup, storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
 | W3 | Saved views, Today, recipes, briefs, Ask, catch-up, routines, Activity, and citation navigation | One module per flow with fixture-driven API and desktop checks, including failed or partial work |
 | W4 | Restart supervision, notifications and activation | Close the window, crash and restart the daemon, sign out/in, deny notification access, reopen the right result |
 | W5 | Versioned GUI/core bundle, runtime dependencies, signing, installer, upgrades, uninstall and release notes | Clean Windows 11 x64 standard-user install, upgrade from a prior build, rollback and uninstall with data retention, verified published checksums |

@@ -338,7 +338,7 @@ opml = f"""<opml version="2.0"><body>
 <outline text="Tech"><outline text="Zig"><outline text="A &amp; B" xmlUrl="{base}/a?x=1&amp;y=2" htmlUrl="{base}/"/></outline>
 <outline text="Two" xmlUrl="{base}/b"/></outline>
 <outline text="Top" xmlUrl="{base}/c"/><outline text="Bad" xmlUrl="ftp://example.com/x"/></body></opml>"""
-path = home + "/in.opml"
+path = os.path.join(home, "Abonnements à lire.opml")
 open(path, "w").write(opml)
 out = rss("import", path, "--allow-private").stdout
 check("import adds feeds", "3 added, 0 already" in out, out)

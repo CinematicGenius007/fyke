@@ -47,6 +47,8 @@ public sealed partial class MainWindow
         var create = Add("New folder", target => OpenCatalogEdit(CatalogEditKind.CreateFolder, target));
         var addFeed = Add("Add feed here", target => OpenAddFeed(target.Id));
         var refresh = Add("Refresh", target => _ = RefreshSubscriptionsAsync(target.Scope == ReaderScope.Feed ? target : null));
+        var import = Add("Import OPML…", target => _ = ImportOpmlAsync());
+        var export = Add("Export OPML…", target => _ = ExportOpmlAsync());
         var mark = Add("Mark all read", target => StartBulkMark(target));
         var remove = Add("Remove…", target => OpenCatalogEdit(CatalogEditKind.Remove, target));
         flyout.Opening += (_, _) =>
@@ -60,6 +62,8 @@ public sealed partial class MainWindow
             refresh.Visibility = scope is ReaderScope.All or ReaderScope.Feed ? Visibility.Visible : Visibility.Collapsed;
             refresh.Text = scope == ReaderScope.Feed ? "Refresh feed" : "Refresh all feeds";
             refresh.IsEnabled = !refreshingSubscriptions;
+            import.Visibility = export.Visibility = scope == ReaderScope.All ? Visibility.Visible : Visibility.Collapsed;
+            import.IsEnabled = export.IsEnabled = !transferringOpml;
             mark.IsEnabled = CanChangeBulkMarks;
             remove.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
             remove.Text = scope == ReaderScope.Folder ? "Delete folder…" : "Remove feed…";

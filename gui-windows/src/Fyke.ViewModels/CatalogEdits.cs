@@ -57,6 +57,8 @@ public sealed record CatalogRemoval(ReaderDestination Item, IReadOnlyList<Reader
 
 public sealed record FeedRefresh(long Id, string Status, [property: JsonPropertyName("new")] int NewCount, int Updated);
 
+public sealed record OpmlImportResult(int Added, int Existing);
+
 /// <summary>Edits subscriptions and folders through the daemon's management operations.</summary>
 public sealed class CatalogEdits(IDaemonClient client)
 {
@@ -102,6 +104,26 @@ public sealed class CatalogEdits(IDaemonClient client)
             ?? throw new DaemonProtocolException("The daemon did not report how many feeds were queued.");
     }
 
+    public async Task<OpmlImportResult> ImportOpmlAsync(string path, CancellationToken ct)
+    {
+        if (!Path.IsPathFullyQualified(path))
+        {
+            throw new ArgumentException("Select an absolute path to an OPML file.", nameof(path));
+        }
+
+        var reply = await client.CallAsync("opml.import", new { Path = path }, ct).ConfigureAwait(false);
+        return reply.Deserialize<OpmlImportCounts>(Wire) is { Added: >= 0 and int added, Existing: >= 0 and int existing }
+            ? new OpmlImportResult(added, existing)
+            : throw new DaemonProtocolException("The daemon did not report the OPML import counts.");
+    }
+
+    public async Task<string> ExportOpmlAsync(CancellationToken ct)
+    {
+        var reply = await client.CallAsync("opml.export", null, ct).ConfigureAwait(false);
+        return reply.Deserialize<OpmlDocument>(Wire) is { Opml.Length: > 0 } document ? document.Opml
+            : throw new DaemonProtocolException("The daemon returned an empty OPML document.");
+    }
+
     internal static FeedRefresh ReadRefresh(JsonElement reply)
     {
         var result = reply.Deserialize<FeedRefresh>(Wire);
@@ -110,4 +132,8 @@ public sealed class CatalogEdits(IDaemonClient client)
     }
 
     private sealed record RefreshQueue(int? Queued);
+
+    private sealed record OpmlImportCounts(int? Added, int? Existing);
+
+    private sealed record OpmlDocument(string Opml);
 }

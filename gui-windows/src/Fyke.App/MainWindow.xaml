@@ -558,13 +558,21 @@
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
-                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,20,0,0">
-                        <Button x:Name="CancelAddFeed" Content="Cancel" Height="32" Click="AddFeedCancelClicked"
+                    <Grid Grid.Row="2" ColumnSpacing="12" Margin="0,20,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="AddFeedImport" Content="Import OPML…" Height="32" Click="ImportOpmlClicked"
                                 CornerRadius="{StaticResource RadiusControl}" FontFamily="{StaticResource FontUi}" />
-                        <Button x:Name="AddFeedPrimary" Content="Find feeds" Height="32" Click="AddFeedPrimaryClicked"
-                                Style="{StaticResource AccentButtonStyle}" AutomationProperties.AutomationId="AddFeedPrimary"
-                                CornerRadius="{StaticResource RadiusControl}" FontFamily="{StaticResource FontUi}" />
-                    </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="CancelAddFeed" Content="Cancel" Height="32" Click="AddFeedCancelClicked"
+                                    CornerRadius="{StaticResource RadiusControl}" FontFamily="{StaticResource FontUi}" />
+                            <Button x:Name="AddFeedPrimary" Content="Find feeds" Height="32" Click="AddFeedPrimaryClicked"
+                                    Style="{StaticResource AccentButtonStyle}" AutomationProperties.AutomationId="AddFeedPrimary"
+                                    CornerRadius="{StaticResource RadiusControl}" FontFamily="{StaticResource FontUi}" />
+                        </StackPanel>
+                    </Grid>
                 </Grid>
             </Border>
         </Grid>

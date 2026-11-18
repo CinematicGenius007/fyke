@@ -207,6 +207,12 @@ public sealed partial class MainWindow
                 null, "C", () => _ = OpenCurrentDiscussionAsync());
         }
 
+        if (!transferringOpml)
+        {
+            yield return new("import-opml", "Import OPML", null, null, () => _ = ImportOpmlAsync());
+            yield return new("export-opml", "Export OPML", null, null, () => _ = ExportOpmlAsync());
+        }
+
         yield return new("focus-sidebar", "Focus sidebar", null, null, FocusSidebar);
         yield return new("focus-timeline", "Focus timeline", null, null, FocusTimeline);
         yield return new("focus-reader", "Focus reader", null, null, FocusArticle);

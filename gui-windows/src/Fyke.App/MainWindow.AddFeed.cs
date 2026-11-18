@@ -213,6 +213,8 @@ public sealed partial class MainWindow
         AddFeedOptions.Visibility = found ? Visibility.Visible : Visibility.Collapsed;
         AddFeedNameRow.Visibility = selected == 1 ? Visibility.Visible : Visibility.Collapsed;
         AddFeedFolder.IsEnabled = !addingFeeds && !finishedAddingFeeds;
+        AddFeedImport.IsEnabled = editing;
+        AddFeedImport.Visibility = finishedAddingFeeds ? Visibility.Collapsed : Visibility.Visible;
         CancelAddFeed.IsEnabled = !addingFeeds;
         CancelAddFeed.Visibility = finishedAddingFeeds ? Visibility.Collapsed : Visibility.Visible;
         AddFeedPrimary.IsEnabled = !addingFeeds && (finishedAddingFeeds || feedBatch is not null || selected > 0
