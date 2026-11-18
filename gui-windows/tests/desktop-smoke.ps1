@@ -71,9 +71,37 @@ try {
         if (!$element -or $element.Current.IsOffscreen) { $true }
     } | Out-Null
 
+    $destinationsId = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::AutomationIdProperty, 'ReaderDestinations')
+    $starredName = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::NameProperty, 'Starred')
+    $items = Wait-For 'the reader destinations' {
+        $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $destinationsId)
+    }
+    $starred = Wait-For 'the Starred destination' {
+        $items.FindFirst([Windows.Automation.TreeScope]::Descendants, $starredName)
+    }
+    $selection = $null
+    if ($starred.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selection)) {
+        $selection.Select()
+    } else {
+        $parent = [Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($starred)
+        while ($parent -and !$parent.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selection)) {
+            $parent = [Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($parent)
+        }
+        if (!$selection) { throw 'The Starred row does not expose selection.' }
+        $selection.Select()
+    }
+    $headingId = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::AutomationIdProperty, 'TimelineHeading')
+    Wait-For 'the Starred timeline heading' {
+        $heading = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $headingId)
+        if ($heading -and $heading.Current.Name -eq 'Starred') { $true }
+    } | Out-Null
+
     & $daemonPath status
     if ($LASTEXITCODE -ne 0) { throw 'The companion daemon did not answer status' }
-    Write-Host 'WinUI recovered from a missing companion and restarted the daemon after a crash.'
+    Write-Host 'WinUI recovered the daemon and switched the reader to Starred.'
 } finally {
     try {
         if ($window) {

@@ -39,6 +39,7 @@ public sealed partial class MainWindow : Window
         DetailText.FontFamily = ui;
         RetryButton.FontFamily = ui;
         Root.DataContext = ViewModel;
+        InitializeReader(ui);
         ViewModel.PropertyChanged += (_, _) => ShowState();
         ShowState();
         Closed += OnClosed;
@@ -68,6 +69,7 @@ public sealed partial class MainWindow : Window
         var failed = ViewModel.CanRetry ? Visibility.Visible : Visibility.Collapsed;
         DetailText.Visibility = failed;
         RetryButton.Visibility = failed;
+        ShowReaderConnection();
     }
 
     private async void OnClosed(object sender, WindowEventArgs args)

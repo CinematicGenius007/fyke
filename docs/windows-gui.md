@@ -1,6 +1,6 @@
 # Windows GUI
 
-Status: W0 only. The solution, protocol client, view-model library, token generation and an empty window are the first slice; the reading screens and the feature flows in [reader-features.md](reader-features.md) come slice by slice, as the table at the end records. Windows CI compiles the app and runs the client and view-model tests. Windows desktop CI has verified launch, the missing-companion Retry flow, and daemon restart after a crash with the window open. Reader rendering and interaction remain planned. The macOS GUI in `gui/` is the reference client.
+Status: the Windows reader shell connects to the daemon and shows the subscription catalog and article timeline. The solution, protocol client, view-model library, and generated tokens support the shell. Article bodies and the feature flows in [reader-features.md](reader-features.md) are planned. Windows CI compiles the app and runs the client and view-model tests. Windows desktop CI has verified launch, the missing-companion Retry flow, and daemon restart after a crash with the window open. The Windows smoke test also exercises selection of the Starred destination. Visual comparison of the reader shell and full article rendering remain separate checks. The macOS GUI in `gui/` is the reference client.
 
 ## Goals
 
@@ -54,16 +54,18 @@ Only `Fyke.App` depends on Windows. Everything a test can reach without a window
 
 `tools/gen_tokens.py` also writes `gui-windows/src/Fyke.App/Themes/Tokens.xaml`: colors as `Color` and `SolidColorBrush` resources in `Light` and `Dark` theme dictionaries, radii as `CornerRadius`, and font families. As with Swift, the XAML is generated and never edited. Inter, Newsreader and JetBrains Mono come from `gui/Fonts` and are bundled with the app.
 
-## Planned layout on Windows
+## Reader layout on Windows
 
 The structure and measurements follow the design rules; the chrome is Windows:
 
 - The window uses Mica and an extended title bar; the sidebar sits on Mica and the list and reader on the ground color.
 - Panes are 232 / 368 / flexible, and the reading column is 640.
 - Sidebar rows are 32 high with 14 px Segoe Fluent Icons; indent is `10 + 22 × depth`.
-- The ⌘ shortcuts become Ctrl: Ctrl+K palette, Ctrl+S save as view, Ctrl+Z undo, Ctrl+F search.
-- Focus visuals use the system focus ring. High contrast themes replace the token colors with system colors.
-- Popovers are `Flyout`s styled with the popover radius and shadow.
+- Planned keyboard mappings use Ctrl: Ctrl+K palette, Ctrl+S save as view, Ctrl+Z undo, Ctrl+F search.
+- Focus uses native controls. The system high contrast resource mapping and visual acceptance checks are planned.
+- Planned popovers use native flyouts with the shared popover treatment.
+
+The sidebar and timeline use native lists. The catalog groups feeds by folder and aggregates unread counts. Selecting a destination requests a 100-article page using the daemon’s feed, folder, or starred filter. Load more passes the returned keyset cursor back to the daemon. Navigation cancels stale requests, and reconnect refreshes the catalog and timeline. The reader pane displays the selected article’s title and source.
 
 ## Planned article reader
 
@@ -119,8 +121,8 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W0d | Move data to a path with spaces and non-ASCII characters and reopen it through Windows profile discovery | The C# client reads a saved view written before the move, and the old folder retains only the location pointer |
 | W0e | Replace an older daemon at startup with the bundled executable | Client tests verify one shutdown request, a compatible restart, and refusal of an incompatible replacement |
 | W0f | Check socket and data access from another Windows account on a controlled Windows host | A separate standard Windows account cannot read or open the database for writing or connect to a daemon under another user’s local profile |
-| W1a | Reader shell, sidebar, folders and resizable panes | Design measurements and snapshots at narrow and wide widths, light/dark/high contrast |
-| W1b | Virtualized timeline, native block rendering, fonts and weights, image loading, article links and discussion | Shared content fixtures, keyboard/Narrator checks, DPI and scrolling measurements |
+| W1a | Reader shell, feed and folder destinations, Starred, timeline paging and a resizable list divider | API parameter tests, native selection smoke test, and visual checks at narrow and wide widths |
+| W1b | Native block rendering, live timeline updates, folder collapse, fonts and weights, image loading, article links and discussion | Shared content fixtures, keyboard/Narrator checks, DPI and scrolling measurements |
 | W1c | Search, marks, undo, command palette and focus | Same task outcomes as macOS, including reconnect and missing selection |
 | W2 | Subscription discovery, OPML, settings, themes, agent setup, storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
 | W3 | Saved views, Today, recipes, briefs, Ask, catch-up, routines, Activity, and citation navigation | One module per flow with fixture-driven API and desktop checks, including failed or partial work |
