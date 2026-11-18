@@ -7,9 +7,18 @@ import sys
 from threading import Event, Thread
 
 image_requested = Event()
+feed_updated = Event()
 
 
 class Fixture(BaseHTTPRequestHandler):
+    def do_POST(self):
+        if self.path != "/advance":
+            self.send_error(404)
+            return
+        feed_updated.set()
+        self.send_response(204)
+        self.end_headers()
+
     def do_GET(self):
         if self.path == "/fixture.png":
             image_requested.set()
@@ -18,11 +27,17 @@ class Fixture(BaseHTTPRequestHandler):
             return
 
         port = self.server.server_address[1]
+        update = (
+            '<item><title>Live reader update</title><guid isPermaLink="false">reader-update</guid>'
+            '<description>Arrives while the first article is open.</description></item>'
+            if feed_updated.is_set()
+            else ""
+        )
         body = f"""<rss version="2.0"><channel><title>Desktop fixture</title>
         <item><title>Native reader fixture</title><guid isPermaLink="false">reader-fixture</guid>
         <description><![CDATA[<p>The story is rendered from stored blocks.</p>
         <p><img src="http://127.0.0.1:{port}/fixture.png" alt="Fixture illustration"></p>]]>
-        </description></item></channel></rss>""".encode()
+        </description></item>{update}</channel></rss>""".encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/rss+xml")
         self.send_header("Content-Length", str(len(body)))

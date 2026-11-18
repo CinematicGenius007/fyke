@@ -51,9 +51,9 @@ public sealed partial class MainWindow : Window
         await ViewModel.StartAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            // The subscription detects a disconnect even when the window makes no requests.
-            await foreach (var _ in client.EventsAsync(cancellationToken).ConfigureAwait(false))
+            await foreach (var change in client.EventsAsync(cancellationToken).ConfigureAwait(false))
             {
+                QueueReaderChange(change);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -74,6 +74,7 @@ public sealed partial class MainWindow : Window
 
     private async void OnClosed(object sender, WindowEventArgs args)
     {
+        readerReloadTimer.Stop();
         await lifetime.CancelAsync();
         await connection;
         ViewModel.Dispose();

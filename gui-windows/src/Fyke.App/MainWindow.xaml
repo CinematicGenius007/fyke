@@ -23,6 +23,11 @@
                            Foreground="{ThemeResource MutedBrush}" />
                 <ListView Grid.Row="1" x:Name="Destinations" SelectionChanged="DestinationChanged"
                           AutomationProperties.Name="Reading destinations" AutomationProperties.AutomationId="ReaderDestinations">
+                    <ListView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <ItemsStackPanel ItemsUpdatingScrollMode="KeepItemsInView" />
+                        </ItemsPanelTemplate>
+                    </ListView.ItemsPanel>
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
                             <Setter Property="Padding" Value="0" />
@@ -63,6 +68,11 @@
                            AutomationProperties.AutomationId="TimelineHeading" />
                 <ListView Grid.Row="2" x:Name="Timeline" Margin="8,0" SelectionChanged="ArticleChanged"
                           AutomationProperties.Name="Articles" AutomationProperties.AutomationId="ReaderTimeline">
+                    <ListView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <ItemsStackPanel ItemsUpdatingScrollMode="KeepItemsInView" />
+                        </ItemsPanelTemplate>
+                    </ListView.ItemsPanel>
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">
                             <Setter Property="HorizontalContentAlignment" Value="Stretch" />

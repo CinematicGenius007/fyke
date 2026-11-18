@@ -65,7 +65,7 @@ The structure and measurements follow the design rules; the chrome is Windows:
 - Focus uses native controls. The system high contrast resource mapping and visual acceptance checks are planned.
 - Planned popovers use native flyouts with the shared popover treatment.
 
-The sidebar and timeline use native lists. The catalog groups feeds by folder and aggregates unread counts. Selecting a destination requests a 100-article page using the daemon’s feed, folder, or starred filter. Load more passes the returned keyset cursor back to the daemon. Navigation cancels stale requests, and reconnect refreshes the catalog and timeline. The reader pane displays the selected article’s title, source, and stored body. Changing selection cancels the previous body request.
+The sidebar and timeline use native lists. The catalog groups feeds by folder and aggregates unread counts. Selecting a destination requests a 100-article page using the daemon’s feed, folder, or starred filter. Load more passes the returned keyset cursor back to the daemon. Navigation cancels stale requests. Entry events, catalog events, and replay gaps trigger a batched reload. Reconnect refreshes the catalog and timeline. The lists apply changes by row identity so unchanged rows and the open article stay in place while they are still in the result. The reader pane displays the selected article’s title, source, and stored body. Changing selection cancels the previous body request.
 
 ## Article reader
 
@@ -123,7 +123,8 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W0f | Check socket and data access from another Windows account on a controlled Windows host | A separate standard Windows account cannot read or open the database for writing or connect to a daemon under another user’s local profile |
 | W1a | Reader shell, feed and folder destinations, Starred, timeline paging and a resizable list divider | API parameter tests, native selection smoke test, and visual checks at narrow and wide widths |
 | W1b.1 | Native block rendering with on-demand images and article selection | Shared content fixture, Windows desktop smoke test, and URL handling tests |
-| W1b.2 | Live timeline updates, folder collapse, reading weights, and discussion | Updates preserve selection and scroll, with keyboard, Narrator, DPI, and scrolling checks |
+| W1b.2 | Live timeline updates and stable article selection | Native smoke test receives an article while the previous one stays open. Unit tests check that unchanged rows retain their identity |
+| W1b.3 | Folder collapse, reading weights, and discussion | Keyboard, Narrator, DPI, and scrolling checks |
 | W1c | Search, marks, undo, command palette and focus | Same task outcomes as macOS, including reconnect and missing selection |
 | W2 | Subscription discovery, OPML, settings, themes, agent setup, storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
 | W3 | Saved views, Today, recipes, briefs, Ask, catch-up, routines, Activity, and citation navigation | One module per flow with fixture-driven API and desktop checks, including failed or partial work |

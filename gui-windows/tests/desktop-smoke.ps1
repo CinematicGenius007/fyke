@@ -121,9 +121,22 @@ try {
         $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $imageButton)
     } | Out-Null
 
+    $advance = [Uri]::new([Uri]$FeedUrl, '/advance')
+    Invoke-WebRequest -Uri $advance -Method Post -UseBasicParsing | Out-Null
+    & $daemonPath refresh
+    if ($LASTEXITCODE -ne 0) { throw 'Could not refresh the reader fixture feed' }
+    $newArticle = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::NameProperty, 'Live reader update')
+    Wait-For 'the live arrival in the timeline' {
+        $timeline.FindFirst([Windows.Automation.TreeScope]::Descendants, $newArticle)
+    } | Out-Null
+    if (!$root.FindFirst([Windows.Automation.TreeScope]::Descendants, $paragraph)) {
+        throw 'The live update displaced the article being read.'
+    }
+
     & $daemonPath status
     if ($LASTEXITCODE -ne 0) { throw 'The companion daemon did not answer status' }
-    Write-Host 'WinUI recovered the daemon, switched destinations, and rendered the fixture article.'
+    Write-Host 'WinUI recovered the daemon and kept the article open through a live feed update.'
 } finally {
     try {
         if ($window) {

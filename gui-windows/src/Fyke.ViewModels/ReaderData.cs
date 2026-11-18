@@ -79,14 +79,14 @@ public sealed class ReaderData(IDaemonClient client)
         }
     }
 
-    public async Task<TimelinePage> TimelineAsync(ReaderDestination destination, string? before, CancellationToken ct)
+    public async Task<TimelinePage> TimelineAsync(ReaderDestination destination, string? before, CancellationToken ct, int limit = PageSize)
     {
         var filter = new
         {
             FeedId = destination.Scope == ReaderScope.Feed ? (long?)destination.Id : null,
             FolderId = destination.Scope == ReaderScope.Folder ? (long?)destination.Id : null,
             StarredOnly = destination.Scope == ReaderScope.Starred ? (bool?)true : null,
-            Limit = PageSize,
+            Limit = Math.Clamp(limit, PageSize, 1000),
             Before = before,
         };
         var response = Read<EntryPage>(await client.CallAsync("entries.list", filter, ct).ConfigureAwait(false));

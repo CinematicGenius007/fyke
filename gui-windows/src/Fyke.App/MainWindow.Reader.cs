@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.Json;
@@ -6,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Fyke.Client;
 using Fyke.ViewModels;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -18,6 +20,9 @@ namespace Fyke.App;
 public sealed partial class MainWindow
 {
     private readonly ObservableCollection<TimelineArticle> articles = [];
+    private readonly ObservableCollection<ReaderDestination> destinations = [];
+    private DispatcherQueueTimer readerReloadTimer = null!;
+    private int readerChangesPending;
     private ReaderData reader = null!;
     private CancellationTokenSource? readerRequest;
     private CancellationTokenSource? articleRequest;
@@ -26,12 +31,19 @@ public sealed partial class MainWindow
     private string? nextCursor;
     private bool readerConnected;
     private bool restoringDestination;
+    private bool applyingTimeline;
+    private bool articleInterrupted;
     private double requestedTimelineWidth = ReaderPaneLayout.DefaultTimeline;
 
     private void InitializeReader(FontFamily ui)
     {
         reader = new ReaderData(client);
         Timeline.ItemsSource = articles;
+        Destinations.ItemsSource = destinations;
+        readerReloadTimer = DispatcherQueue.CreateTimer();
+        readerReloadTimer.Interval = TimeSpan.FromMilliseconds(250);
+        readerReloadTimer.IsRepeating = false;
+        readerReloadTimer.Tick += (_, _) => ReloadChangedReader();
         Destinations.FontFamily = ui;
         Timeline.FontFamily = ui;
         var resources = Application.Current.Resources;
@@ -58,8 +70,41 @@ public sealed partial class MainWindow
         }
         else
         {
+            readerReloadTimer.Stop();
             readerRequest?.Cancel();
+            articleInterrupted |= articleRequest is not null;
             articleRequest?.Cancel();
+        }
+    }
+
+    private void QueueReaderChange(DaemonEvent change)
+    {
+        // Gap events also cover replay after pruned or reset daemon history.
+        if ((change.IsGap || change.Type.StartsWith("entry.", StringComparison.Ordinal)
+            || change.Type.StartsWith("feed.", StringComparison.Ordinal)
+            || change.Type.StartsWith("folder.", StringComparison.Ordinal))
+            && Interlocked.Exchange(ref readerChangesPending, 1) == 0)
+        {
+            _ = DispatcherQueue.TryEnqueue(ScheduleReaderReload);
+        }
+    }
+
+    private void ScheduleReaderReload()
+    {
+        if (readerConnected && !lifetime.IsCancellationRequested && readerRequest is null
+            && Volatile.Read(ref readerChangesPending) != 0 && !readerReloadTimer.IsRunning)
+        {
+            readerReloadTimer.Start();
+        }
+    }
+
+    private void ReloadChangedReader()
+    {
+        readerReloadTimer.Stop();
+        if (readerConnected && !lifetime.IsCancellationRequested && readerRequest is null
+            && Interlocked.Exchange(ref readerChangesPending, 0) != 0)
+        {
+            _ = LoadReaderAsync(refreshCatalog: true);
         }
     }
 
@@ -71,8 +116,19 @@ public sealed partial class MainWindow
         }
 
         destination = selected;
-        articles.Clear();
-        ShowArticle(null);
+        applyingTimeline = true;
+        try
+        {
+            articles.Clear();
+        }
+        finally
+        {
+            applyingTimeline = false;
+        }
+        articleInterrupted = false;
+        nextCursor = null;
+        MoreArticles.Visibility = Visibility.Collapsed;
+        _ = OpenArticleAsync(null);
         _ = LoadReaderAsync();
     }
 
@@ -87,12 +143,7 @@ public sealed partial class MainWindow
         using var request = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         readerRequest = request;
         var cursor = append ? nextCursor : null;
-        if (!append)
-        {
-            nextCursor = null;
-            MoreArticles.Visibility = Visibility.Collapsed;
-        }
-        var selectedId = (Timeline.SelectedItem as TimelineArticle)?.Id;
+        var limit = append ? ReaderData.PageSize : Math.Max(ReaderData.PageSize, articles.Count);
         MoreArticles.IsEnabled = false;
         RetryTimeline.Visibility = Visibility.Collapsed;
         TimelineState.Visibility = articles.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -110,8 +161,11 @@ public sealed partial class MainWindow
                 restoringDestination = true;
                 try
                 {
-                    Destinations.ItemsSource = rows;
-                    Destinations.SelectedItem = current;
+                    ReaderRows.Reconcile(destinations, rows, row => (row.Scope, row.Id));
+                    if (!Equals(Destinations.SelectedItem, current))
+                    {
+                        Destinations.SelectedItem = destinations.First(row => row.Scope == current.Scope && row.Id == current.Id);
+                    }
                     destination = current;
                 }
                 finally
@@ -126,21 +180,22 @@ public sealed partial class MainWindow
             }
 
             TimelineHeading.Text = destination.Title;
-            var page = await reader.TimelineAsync(destination, cursor, request.Token);
+            var page = await reader.TimelineAsync(destination, cursor, request.Token, limit);
             request.Token.ThrowIfCancellationRequested();
-            if (!append)
+            if (append)
             {
-                articles.Clear();
+                var ids = articles.Select(row => row.Id).ToHashSet();
+                foreach (var article in page.Articles)
+                {
+                    if (ids.Add(article.Id))
+                    {
+                        articles.Add(article);
+                    }
+                }
             }
-
-            foreach (var article in page.Articles)
+            else
             {
-                articles.Add(article);
-            }
-
-            if (!append && selectedId is long id)
-            {
-                Timeline.SelectedItem = articles.FirstOrDefault(article => article.Id == id);
+                ApplyTimeline(page.Articles);
             }
 
             nextCursor = page.NextCursor;
@@ -168,6 +223,7 @@ public sealed partial class MainWindow
             {
                 readerRequest = null;
                 MoreArticles.IsEnabled = true;
+                ScheduleReaderReload();
             }
         }
     }
@@ -176,8 +232,46 @@ public sealed partial class MainWindow
 
     private void MoreArticlesClicked(object sender, RoutedEventArgs args) => _ = LoadReaderAsync(append: true);
 
-    private void ArticleChanged(object sender, SelectionChangedEventArgs args) =>
-        _ = OpenArticleAsync(Timeline.SelectedItem as TimelineArticle);
+    private void ApplyTimeline(IReadOnlyList<TimelineArticle> updated)
+    {
+        var selected = Timeline.SelectedItem as TimelineArticle;
+        applyingTimeline = true;
+        try
+        {
+            ReaderRows.Reconcile(articles, updated, row => row.Id);
+            if (selected is not null)
+            {
+                var current = articles.FirstOrDefault(row => row.Id == selected.Id);
+                if (current is null)
+                {
+                    _ = OpenArticleAsync(null);
+                }
+                else if (!ReferenceEquals(Timeline.SelectedItem, current))
+                {
+                    Timeline.SelectedItem = current;
+                }
+            }
+        }
+        finally
+        {
+            applyingTimeline = false;
+        }
+
+        if (articleInterrupted && Timeline.SelectedItem is TimelineArticle interrupted)
+        {
+            articleInterrupted = false;
+            _ = OpenArticleAsync(interrupted);
+        }
+    }
+
+    private void ArticleChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (!applyingTimeline)
+        {
+            articleInterrupted = false;
+            _ = OpenArticleAsync(Timeline.SelectedItem as TimelineArticle);
+        }
+    }
 
     private void RetryArticleClicked(object sender, RoutedEventArgs args) =>
         _ = OpenArticleAsync(Timeline.SelectedItem as TimelineArticle);
