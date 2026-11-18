@@ -39,9 +39,23 @@ public sealed partial class MainWindow
         {
             var flyout = new MenuFlyout();
             var mark = new MenuFlyoutItem { Text = "Mark all read" };
+            var add = new MenuFlyoutItem { Text = "Add feed here" };
             mark.Click += (_, _) => StartBulkMark(row.DataContext as ReaderDestination);
+            add.Click += (_, _) =>
+            {
+                if (row.DataContext is ReaderDestination { Scope: ReaderScope.Folder } folder)
+                {
+                    OpenAddFeed(folder.Id);
+                }
+            };
             flyout.Items.Add(mark);
-            flyout.Opening += (_, _) => mark.IsEnabled = CanChangeBulkMarks;
+            flyout.Items.Add(add);
+            flyout.Opening += (_, _) =>
+            {
+                mark.IsEnabled = CanChangeBulkMarks;
+                add.Visibility = row.DataContext is ReaderDestination { Scope: ReaderScope.Folder }
+                    ? Visibility.Visible : Visibility.Collapsed;
+            };
             row.ContextFlyout = flyout;
         }
     }

@@ -132,7 +132,8 @@ public sealed class DaemonClient : IDaemonClient
             {
                 // A lost reply can follow a committed write. Only replay operations known to read.
                 if (method is not ("ping" or "stats.get" or "entries.list" or "entries.get"
-                    or "entries.search" or "entries.discussion" or "feeds.list" or "folders.list" or "config.get"))
+                    or "entries.search" or "entries.discussion" or "feeds.list" or "feeds.preview"
+                    or "folders.list" or "config.get"))
                 {
                     await TryReconnectAsync(epoch, ct).ConfigureAwait(false);
                     throw new DaemonOutcomeUnknownException(method, e);

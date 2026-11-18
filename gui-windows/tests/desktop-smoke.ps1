@@ -354,9 +354,35 @@ try {
         Find-ByName $root 'Arrives while the first article is open.'
     } | Out-Null
 
+    $openAddFeed = Wait-ForArticleAction 'AddFeedButton' 'Add feed'
+    $openAddFeed.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    $addAddressId = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::AutomationIdProperty, 'AddFeedAddress')
+    $addAddress = Wait-For 'the add-feed address field' {
+        $element = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $addAddressId)
+        if ($element -and !$element.Current.IsOffscreen) { $element }
+    }
+    $addAddress.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue(
+        [Uri]::new([Uri]$FeedUrl, '/subscribe').AbsoluteUri)
+    $findLocal = Wait-ForArticleAction 'AddFeedLocalRetry' 'Find feeds on the local network'
+    $findLocal.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'the second discovered feed' { Find-ByName $root 'Other discovered feed' } | Out-Null
+    Wait-For 'the discovered article preview' { Find-ByName $root 'First discovered article' } | Out-Null
+    $addNameId = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::AutomationIdProperty, 'AddFeedName')
+    $addName = Wait-For 'the feed name field' {
+        $element = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $addNameId)
+        if ($element -and !$element.Current.IsOffscreen) { $element }
+    }
+    $addName.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue('Renamed discovery feed')
+    $subscribe = Wait-ForArticleAction 'AddFeedPrimary' 'Subscribe'
+    $subscribe.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'the new subscription in the sidebar' { Find-ByName $items 'Renamed discovery feed' } | Out-Null
+    if (Find-ByName $items 'Other discovered feed') { throw 'The unselected candidate was subscribed.' }
+
     & $daemonPath status
     if ($LASTEXITCODE -ne 0) { throw 'The companion daemon did not answer status' }
-    Write-Host 'WinUI verified daemon recovery, reading, discussion, search, article marks, bulk undo, and the palette.'
+    Write-Host 'WinUI verified daemon recovery, the reader, search and palette, bulk undo, and feed discovery.'
 } catch {
     Write-Host $_.ScriptStackTrace
     throw

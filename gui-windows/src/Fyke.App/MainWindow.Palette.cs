@@ -42,7 +42,7 @@ public sealed partial class MainWindow
 
     private void OpenPalette()
     {
-        if (!readerConnected)
+        if (!readerConnected || !CloseAddFeed())
         {
             return;
         }
@@ -161,6 +161,7 @@ public sealed partial class MainWindow
     private IEnumerable<PaletteResult> PaletteActions()
     {
         yield return new("search", "Search articles", null, "Ctrl+F", OpenSearch);
+        yield return new("add-feed", "Add feed", null, "Ctrl+N", () => OpenAddFeed());
         if (CanChangeBulkMarks && destination is { Scope: not ReaderScope.Starred } selected)
         {
             yield return new("mark-all", $"Mark all read in {selected.Title}", null,

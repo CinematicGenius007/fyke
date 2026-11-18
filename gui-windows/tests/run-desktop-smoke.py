@@ -33,6 +33,23 @@ class Fixture(BaseHTTPRequestHandler):
         if self.path == "/items/46001":
             self.serve_discussion()
             return
+        if self.path == "/subscribe":
+            page = b"""<!doctype html><html><head>
+            <link rel="alternate" type="application/rss+xml" title="Discovery feed" href="/subscribe/first">
+            <link rel="alternate" type="application/rss+xml" title="Other discovered feed" href="/subscribe/second">
+            </head><body>Feeds</body></html>"""
+            self.send_body(page, "text/html")
+            return
+        if self.path in ("/subscribe/first", "/subscribe/second"):
+            first = self.path.endswith("/first")
+            name = "Discovery feed" if first else "Other discovered feed"
+            title = "First discovered article" if first else "Other discovered article"
+            self.send_body(
+                f'<rss version="2.0"><channel><title>{name}</title>'
+                f'<item><title>{title}</title><guid>{self.path}</guid></item></channel></rss>'.encode(),
+                "application/rss+xml",
+            )
+            return
         if self.path != "/feed":
             self.send_error(404)
             return

@@ -89,6 +89,12 @@ The timeline search button and Ctrl+F open the search panel. It uses `entries.se
 
 Ctrl+K or the command button in the sidebar opens the palette. It matches typed letters against destinations and available reader actions, with up to four article matches through `entries.search`. Feed and folder destinations remain searchable when hidden by a collapsed parent. Search and the palette share Up, Down, Enter, Escape, and focus restoration. F6 and Shift+F6 move forward and backward between the sidebar, timeline, and article reader.
 
+## Adding a feed
+
+The sidebar's add button, Ctrl+N, and the palette open the add-feed sheet. Pausing after typing or pasting a site or feed address starts discovery through `feeds.preview`. The sheet shows candidate feeds and their latest titles. Choose one or more feeds and an existing folder, and optionally give a single feed a display name. The daemon blocks private addresses by default. If it refuses a private address, the sheet offers an explicit local-network lookup for that address.
+
+`feeds.add` creates each selected subscription. `feeds.update` places it in the chosen folder. If adding or placing a feed fails partway through a group, Retry resumes at the first unconfirmed step. The sheet reports any confirmed subscriptions and lets the reader choose another folder for the remaining placements. Opening the sheet from a folder's context menu preselects that folder.
+
 ## Background running and notifications
 
 Today `fyke service install` registers the daemon in the per-user Run key. The GUI keeps that: closing the window leaves the daemon running. Supervision after a crash, and notifications with every window closed, are planned slices (W4 below) with their own design.
@@ -149,7 +155,8 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W1c.2 | Read and star marks, including mark-on-open | API tests for preserving the untouched flag, plus Windows smoke coverage for marking, filtering, and retaining the open article |
 | W1c.3 | Bulk mark-as-read and Undo | View-model tests for scope paging and interrupted batches, and Windows smoke coverage for restoring the affected unread article |
 | W1c.4 | Command palette and reader focus | Matching tests, Windows smoke coverage for navigating to a hidden feed and opening an article, manual keyboard and focus checks |
-| W2 | Subscription discovery, OPML, settings, weight editing, persistent folder disclosure, themes, agent setup, storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
+| W2a | Feed discovery, preview, and subscription with folder placement | API tests for selections and retry, and Windows smoke coverage for discovering two feeds and subscribing to one |
+| W2b | Subscription and folder management, OPML, settings, weight editing, persistent folder disclosure, themes, agent setup, storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
 | W3 | Saved views, Today, recipes, briefs, Ask, catch-up, routines, Activity, and citation navigation | One module per flow with fixture-driven API and desktop checks, including failed or partial work |
 | W4 | Restart supervision, notifications and activation | Close the window, crash and restart the daemon, sign out/in, deny notification access, reopen the right result |
 | W5 | Versioned GUI/core bundle, runtime dependencies, signing, installer, upgrades, uninstall and release notes | Clean Windows 11 x64 standard-user install, upgrade from a prior build, rollback and uninstall with data retention, verified published checksums |

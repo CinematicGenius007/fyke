@@ -60,6 +60,7 @@ public sealed partial class MainWindow
         InitializeDiscussion(reading, ui, code);
         InitializeSearch();
         InitializePalette();
+        InitializeAddFeed();
         InitializeBulkMarks();
         ShowArticle(null);
         UpdateMarkControls();
@@ -85,6 +86,7 @@ public sealed partial class MainWindow
         {
             CloseSearch(restoreFocus: false);
             ClosePalette(restoreFocus: false);
+            CloseAddFeed(restoreFocus: false);
             HideBulkNotice();
             readerReloadTimer.Stop();
             readerRequest?.Cancel();
@@ -263,6 +265,10 @@ public sealed partial class MainWindow
                     && row.Scope == previous.Scope && row.Id == previous.Id) ?? rows[0];
 
                 catalog = rows;
+                if (IsAddFeedOpen && !addingFeeds)
+                {
+                    PopulateAddFeedFolders((AddFeedFolder.SelectedItem as FeedFolderChoice)?.Id);
+                }
                 destination = current;
                 UpdateBulkButton();
                 ApplyVisibleDestinations();

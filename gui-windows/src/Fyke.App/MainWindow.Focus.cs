@@ -12,7 +12,7 @@ public sealed partial class MainWindow
 {
     private Control? focusBeforeOverlay;
 
-    private bool IsReaderOverlayOpen => IsSearchOpen || IsPaletteOpen;
+    private bool IsReaderOverlayOpen => IsSearchOpen || IsPaletteOpen || IsAddFeedOpen;
 
     private void ShowReaderOverlay(Grid overlay, TextBox query)
     {

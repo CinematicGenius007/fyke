@@ -39,7 +39,7 @@ public sealed partial class MainWindow
 
     private void OpenSearch()
     {
-        if (!readerConnected)
+        if (!readerConnected || !CloseAddFeed())
         {
             return;
         }

@@ -27,6 +27,7 @@
                 <KeyboardAccelerator Key="C" Invoked="DiscussionShortcut" />
                 <KeyboardAccelerator Key="F" Modifiers="Control" Invoked="SearchShortcut" />
                 <KeyboardAccelerator Key="K" Modifiers="Control" Invoked="PaletteShortcut" />
+                <KeyboardAccelerator Key="N" Modifiers="Control" Invoked="AddFeedShortcut" />
                 <KeyboardAccelerator Key="F6" Invoked="PaneFocusShortcut" />
                 <KeyboardAccelerator Key="F6" Modifiers="Shift" Invoked="PaneFocusShortcut" />
                 <KeyboardAccelerator Key="M" Invoked="ArticleMarkShortcut" />
@@ -54,12 +55,20 @@
                     <TextBlock Text="LIBRARY" FontSize="11" FontFamily="{StaticResource FontUi}" VerticalAlignment="Center"
                                FontWeight="{Binding SectionLabel, Source={StaticResource ReaderFonts}}"
                                Foreground="{ThemeResource MutedBrush}" />
-                    <Button Grid.Column="1" x:Name="PaletteButton" Width="32" Height="32" Padding="0"
-                            Click="PaletteClicked" CornerRadius="{StaticResource RadiusControl}"
-                            AutomationProperties.AutomationId="PaletteButton" AutomationProperties.Name="Command palette"
-                            AutomationProperties.AcceleratorKey="Ctrl+K" ToolTipService.ToolTip="Command palette (Ctrl+K)">
-                        <FontIcon Glyph="&#xE765;" FontSize="14" />
-                    </Button>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                        <Button x:Name="AddFeedButton" Width="32" Height="32" Padding="0"
+                                Click="AddFeedClicked" CornerRadius="{StaticResource RadiusControl}"
+                                AutomationProperties.AutomationId="AddFeedButton" AutomationProperties.Name="Add feed"
+                                AutomationProperties.AcceleratorKey="Ctrl+N" ToolTipService.ToolTip="Add feed (Ctrl+N)">
+                            <FontIcon Glyph="&#xE710;" FontSize="14" />
+                        </Button>
+                        <Button x:Name="PaletteButton" Width="32" Height="32" Padding="0"
+                                Click="PaletteClicked" CornerRadius="{StaticResource RadiusControl}"
+                                AutomationProperties.AutomationId="PaletteButton" AutomationProperties.Name="Command palette"
+                                AutomationProperties.AcceleratorKey="Ctrl+K" ToolTipService.ToolTip="Command palette (Ctrl+K)">
+                            <FontIcon Glyph="&#xE765;" FontSize="14" />
+                        </Button>
+                    </StackPanel>
                 </Grid>
                 <ListView Grid.Row="1" x:Name="Destinations" SelectionChanged="DestinationChanged"
                           AutomationProperties.Name="Reading destinations" AutomationProperties.AutomationId="ReaderDestinations">
@@ -455,6 +464,100 @@
                             </ListView>
                         </Grid>
                     </Border>
+                </Grid>
+            </Border>
+        </Grid>
+        <Grid Grid.RowSpan="2" x:Name="AddFeedOverlay" Visibility="Collapsed" TabFocusNavigation="Cycle">
+            <Border Background="{ThemeResource ScrimBrush}" PointerPressed="AddFeedBackdropPressed" />
+            <Border MaxWidth="560" Margin="16,96,16,16" VerticalAlignment="Top"
+                    CornerRadius="{StaticResource RadiusSheet}" BorderThickness="1"
+                    BorderBrush="{ThemeResource HairlineBrush}" Background="{ThemeResource SurfaceBrush}">
+                <Grid Padding="24">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="Add a feed" FontSize="26" Margin="0,0,0,16"
+                               FontFamily="{StaticResource FontReading}" FontWeight="{Binding Title, Source={StaticResource ReaderFonts}}"
+                               Foreground="{ThemeResource InkBrush}" />
+                    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Spacing="12">
+                            <TextBox x:Name="AddFeedAddress" PlaceholderText="Site or feed address" MinHeight="38"
+                                     FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                     TextChanged="AddFeedAddressChanged" AutomationProperties.Name="Site or feed address"
+                                     AutomationProperties.AutomationId="AddFeedAddress" />
+                            <TextBlock x:Name="AddFeedStatus" TextWrapping="Wrap" FontSize="13"
+                                       FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                       Foreground="{ThemeResource InkSoftBrush}" AutomationProperties.LiveSetting="Polite" />
+                            <Button x:Name="AddFeedLocalRetry" Content="Find feeds on the local network" Visibility="Collapsed"
+                                    Height="32" Click="AddFeedLocalClicked" CornerRadius="{StaticResource RadiusControl}"
+                                    AutomationProperties.AutomationId="AddFeedLocalRetry"
+                                    FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}" />
+                            <StackPanel x:Name="AddFeedOptions" Spacing="12" Visibility="Collapsed">
+                                <ListView x:Name="AddFeedCandidates" SelectionMode="Multiple" MaxHeight="240"
+                                          SelectionChanged="AddFeedSelectionChanged" AutomationProperties.Name="Discovered feeds"
+                                          AutomationProperties.AutomationId="AddFeedCandidates">
+                                    <ListView.ItemContainerStyle>
+                                        <Style TargetType="ListViewItem">
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                        </Style>
+                                    </ListView.ItemContainerStyle>
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Spacing="4" Padding="4,8" AutomationProperties.Name="{Binding DisplayTitle}">
+                                                <TextBlock Text="{Binding DisplayTitle}" FontSize="15" TextTrimming="CharacterEllipsis"
+                                                           FontFamily="{StaticResource FontUi}" FontWeight="{Binding SectionLabel, Source={StaticResource ReaderFonts}}"
+                                                           Foreground="{ThemeResource InkBrush}" />
+                                                <TextBlock Text="{Binding Url}" FontSize="12" TextTrimming="CharacterEllipsis"
+                                                           FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource MutedBrush}" />
+                                                <ItemsControl ItemsSource="{Binding Latest}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Text="{Binding}" FontSize="15" TextTrimming="CharacterEllipsis"
+                                                                       FontFamily="{StaticResource FontReading}"
+                                                                       FontWeight="{Binding Reading, Source={StaticResource ReaderFonts}}"
+                                                                       Foreground="{ThemeResource UnreadBrush}" />
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                                <Grid x:Name="AddFeedNameRow" ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="64" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Name" VerticalAlignment="Center" FontFamily="{StaticResource FontUi}"
+                                               Foreground="{ThemeResource InkSoftBrush}" />
+                                    <TextBox Grid.Column="1" x:Name="AddFeedName" MinHeight="32"
+                                             FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                             AutomationProperties.Name="Feed name" AutomationProperties.AutomationId="AddFeedName" />
+                                </Grid>
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="64" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="Folder" VerticalAlignment="Center" FontFamily="{StaticResource FontUi}"
+                                               Foreground="{ThemeResource InkSoftBrush}" />
+                                    <ComboBox Grid.Column="1" x:Name="AddFeedFolder" DisplayMemberPath="Name" MinHeight="32"
+                                              HorizontalAlignment="Stretch" FontFamily="{StaticResource FontUi}"
+                                              FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                              AutomationProperties.Name="Folder" AutomationProperties.AutomationId="AddFeedFolder" />
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,20,0,0">
+                        <Button x:Name="CancelAddFeed" Content="Cancel" Height="32" Click="AddFeedCancelClicked"
+                                CornerRadius="{StaticResource RadiusControl}" FontFamily="{StaticResource FontUi}" />
+                        <Button x:Name="AddFeedPrimary" Content="Find feeds" Height="32" Click="AddFeedPrimaryClicked"
+                                Style="{StaticResource AccentButtonStyle}" AutomationProperties.AutomationId="AddFeedPrimary"
+                                CornerRadius="{StaticResource RadiusControl}" FontFamily="{StaticResource FontUi}" />
+                    </StackPanel>
                 </Grid>
             </Border>
         </Grid>
