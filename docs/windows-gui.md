@@ -75,6 +75,8 @@ The reader requests `entries.get` in blocks format and renders the stored nodes 
 
 The reader loads saved reading, title, interface, and code weights from `ui.weights` through `config.get` when the window first connects. Each preference shifts its baseline weight by up to two steps, using the same profile fields and steps as macOS. Missing or invalid fields use the role's default. Emphasized body text starts at semibold before applying the reading preference. The Windows weight controls are planned with Settings.
 
+An article with a Hacker News discussion offers **Show comments** below its body. Press **C** or follow an inline link to the article's own thread to jump there. The client calls `entries.discussion` on demand, then shows returned blocks in a virtualized list inside the reader's scroll area. Readers can collapse a comment and its replies, retry a failed load, and open the full thread in their browser. Other discussion addresses open in the browser. Changing articles clears discussion state and cancels an in-flight request.
+
 ## Background running and notifications
 
 Today `fyke service install` registers the daemon in the per-user Run key. The GUI keeps that: closing the window leaves the daemon running. Supervision after a crash, and notifications with every window closed, are planned slices (W4 below) with their own design.
@@ -130,7 +132,7 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W1b.2 | Live timeline updates and stable article selection | Native smoke test receives an article while the previous one stays open. Unit tests check that unchanged rows retain their identity |
 | W1b.3 | Folder disclosure and stable navigation when descendants are hidden | View-model tests check nested collapse and unread totals. The desktop smoke test checks collapse and expand with an open article |
 | W1b.4 | Apply saved reading, title, interface, and code weights | Profile and weight mapping tests, plus Windows UI Automation checks for article title and paragraph weights |
-| W1b.5 | Discussion and its reader shortcut | Keyboard, Narrator, DPI, and scrolling checks |
+| W1b.5 | On-demand discussion, reply disclosure, and the C shortcut | Windows smoke test for a failed load, retry, nested replies, and another provider's link. Manual keyboard, Narrator, and scrolling checks |
 | W1c | Search, marks, undo, command palette and focus | Same task outcomes as macOS, including reconnect and missing selection |
 | W2 | Subscription discovery, OPML, settings, weight editing, persistent folder disclosure, themes, agent setup, storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
 | W3 | Saved views, Today, recipes, briefs, Ask, catch-up, routines, Activity, and citation navigation | One module per flow with fixture-driven API and desktop checks, including failed or partial work |

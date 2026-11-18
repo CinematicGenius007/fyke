@@ -105,7 +105,20 @@ public sealed class ReaderData(IDaemonClient client)
             await client.CallAsync("entries.get", new { Id = id, Format = "blocks" }, ct).ConfigureAwait(false));
         var blocks = JsonSerializer.Deserialize<ArticleBlock[]>(response.Body, Wire)
             ?? throw new DaemonProtocolException("The daemon returned an empty article response.");
-        return new ReaderArticle(response.Title, response.FeedTitle, response.Author, blocks);
+        return new ReaderArticle(response.Title, response.FeedTitle, response.Author, blocks,
+            DiscussionLink.FromAddress(response.DiscussionUrl));
+    }
+
+    public async Task<DiscussionThread> DiscussionAsync(long id, CancellationToken ct)
+    {
+        var thread = Read<DiscussionThread>(
+            await client.CallAsync("entries.discussion", new { Id = id }, ct).ConfigureAwait(false));
+        if (thread.Comments is null || thread.Comments.Any(comment => comment is null || comment.Blocks is null))
+        {
+            throw new DaemonProtocolException("The daemon returned an incomplete discussion.");
+        }
+
+        return thread;
     }
 
     private static T Read<T>(JsonElement result) =>
@@ -115,6 +128,6 @@ public sealed class ReaderData(IDaemonClient client)
     private sealed record Feed(long Id, long? FolderId, string? Title, string Url, long Unread, long Starred);
     private sealed record Folder(long Id, long? ParentId, string Name);
     private sealed record Entry(long Id, string? Title, string? FeedTitle, bool Read);
-    private sealed record ArticleBody(string? Title, string? FeedTitle, string? Author, string Body);
+    private sealed record ArticleBody(string? Title, string? FeedTitle, string? Author, string? DiscussionUrl, string Body);
     private sealed record EntryPage(Entry[] Items, string? NextCursor);
 }

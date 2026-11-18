@@ -3,7 +3,8 @@ using System.Text.Json.Serialization;
 namespace Fyke.ViewModels;
 
 /// <summary>The article and its stored, structured body. Text in both comes from the feed.</summary>
-public sealed record ReaderArticle(string? Title, string? FeedTitle, string? Author, IReadOnlyList<ArticleBlock> Blocks);
+public sealed record ReaderArticle(string? Title, string? FeedTitle, string? Author, IReadOnlyList<ArticleBlock> Blocks,
+    DiscussionLink? Discussion);
 
 /// <summary>The stored node shape from src/blocks.zig. Unknown kinds are ignored by the renderer.</summary>
 public sealed record ArticleBlock(

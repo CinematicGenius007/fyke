@@ -181,6 +181,32 @@ try {
     $expand.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
     Wait-For 'the feed to return after expanding the folder' { Find-ByName $items 'Desktop fixture' } | Out-Null
 
+    $discussionId = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::AutomationIdProperty, 'ArticleDiscussion')
+    $discussion = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $discussionId)
+    $showComments = Wait-For 'the on-demand comments button' { Find-ByName $discussion 'Show comments' }
+    Invoke-WebRequest -Uri ([Uri]::new([Uri]$FeedUrl, '/enable-discussion')) -Method Post -UseBasicParsing | Out-Null
+    $showComments.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'the discussion failure state' { Find-ByName $discussion 'The comments did not load' } | Out-Null
+    $retryComments = Find-ByName $discussion 'Try again'
+    $retryComments.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'the two comments after retry' { Find-ByName $discussion '2 comments' } | Out-Null
+    Wait-For 'the nested reply' { Find-ByName $discussion 'A nested reply.' } | Out-Null
+    $fold = Find-ByName $discussion 'Collapse comment by first-reader'
+    $fold.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    $unfold = Wait-For 'the comment to hide its reply' {
+        $control = Find-ByName $discussion 'Expand comment by first-reader'
+        if ($control -and !(Find-ByName $discussion 'A nested reply.')) { $control }
+    }
+    $unfold.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'the reply to return after expanding the comment' { Find-ByName $discussion 'A nested reply.' } | Out-Null
+
+    Select-ReaderItem $timeline 'Live reader update'
+    Wait-For 'the other discussion provider to use a link' {
+        $link = Find-ByName $discussion 'Open discussion'
+        if ($link -and !(Find-ByName $discussion 'A nested reply.')) { $link }
+    } | Out-Null
+
     & $daemonPath status
     if ($LASTEXITCODE -ne 0) { throw 'The companion daemon did not answer status' }
     Write-Host 'WinUI recovered the daemon and kept the article open through folder disclosure and a live feed update.'

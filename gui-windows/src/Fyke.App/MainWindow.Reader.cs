@@ -52,9 +52,11 @@ public sealed partial class MainWindow
         Destinations.FontFamily = ui;
         Timeline.FontFamily = ui;
         var resources = Application.Current.Resources;
+        var reading = (FontFamily)resources["FontReading"];
+        var code = (FontFamily)resources["FontCode"];
         readerFonts = (ReaderFontWeights)Root.Resources["ReaderFonts"];
-        articleRenderer = new ArticleBlockRenderer(
-            (FontFamily)resources["FontReading"], ui, (FontFamily)resources["FontCode"], readerFonts);
+        articleRenderer = new ArticleBlockRenderer(reading, ui, code, readerFonts, linkAction: DiscussionLinkAction);
+        InitializeDiscussion(reading, ui, code);
         ShowArticle(null);
     }
 
@@ -364,6 +366,7 @@ public sealed partial class MainWindow
     private async Task OpenArticleAsync(TimelineArticle? article)
     {
         articleRequest?.Cancel();
+        ResetDiscussion();
         ShowArticle(article);
         ArticleBody.Children.Clear();
         ArticleStatus.Visibility = Visibility.Collapsed;
@@ -385,6 +388,7 @@ public sealed partial class MainWindow
             ArticleHeading.Text = result.Title ?? article.Title;
             ArticleSource.Text = string.Join(" · ", new[] { result.FeedTitle ?? article.FeedTitle, result.Author }
                 .Where(value => !string.IsNullOrWhiteSpace(value)));
+            SetDiscussion(article.Id, result.Discussion);
             articleRenderer.Append(ArticleBody, result.Blocks);
             ArticleStatus.Text = "This article has no text.";
             ArticleStatus.Visibility = ArticleBody.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;

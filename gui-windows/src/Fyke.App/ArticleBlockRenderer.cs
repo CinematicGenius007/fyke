@@ -13,7 +13,8 @@ using Windows.UI.Text;
 namespace Fyke.App;
 
 /// <summary>Turns the daemon's article nodes into native controls. Images load only on request.</summary>
-internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, FontFamily code, ReaderFontWeights weights)
+internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, FontFamily code,
+    ReaderFontWeights weights, double textSize = 20, Func<Uri, Action?>? linkAction = null)
 {
     public void Append(StackPanel panel, IEnumerable<ArticleBlock> nodes)
     {
@@ -67,12 +68,12 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
         return panel;
     }
 
-    private TextBlock Text(IEnumerable<ArticleBlock> nodes, double size = 20, bool heading = false)
+    private TextBlock Text(IEnumerable<ArticleBlock> nodes, double? size = null, bool heading = false)
     {
         var text = new TextBlock
         {
             FontFamily = reading,
-            FontSize = size,
+            FontSize = size ?? textSize,
             FontWeight = heading ? weights.Title : weights.Reading,
             IsTextSelectionEnabled = true,
             TextWrapping = TextWrapping.Wrap,
@@ -106,7 +107,15 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
                 case "link":
                     if (!insideLink && ArticleBlock.WebAddress(node.Href) is Uri address)
                     {
-                        var link = new Hyperlink { NavigateUri = address };
+                        var link = new Hyperlink();
+                        if (linkAction?.Invoke(address) is Action open)
+                        {
+                            link.Click += (_, _) => open();
+                        }
+                        else
+                        {
+                            link.NavigateUri = address;
+                        }
                         AppendInlines(link.Inlines, node.Children ?? [], emphasis, insideLink: true);
                         target.Add(link);
                     }
@@ -153,7 +162,7 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
             var marker = new TextBlock
             {
                 Text = node.Ordered == true ? (++index).ToString(CultureInfo.CurrentCulture) + "." : "•",
-                FontFamily = reading, FontSize = 20, FontWeight = weights.Reading,
+                FontFamily = reading, FontSize = textSize, FontWeight = weights.Reading,
             };
             var content = Flow(item);
             Grid.SetColumn(content, 1);

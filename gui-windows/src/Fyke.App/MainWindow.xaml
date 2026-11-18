@@ -11,6 +11,9 @@
         <Grid x:Name="TitleBar" />
         <Grid Grid.Row="1" x:Name="ReaderShell" Visibility="Collapsed" SizeChanged="ReaderSizeChanged"
               AutomationProperties.AutomationId="ReaderShell">
+            <Grid.KeyboardAccelerators>
+                <KeyboardAccelerator Key="C" Invoked="DiscussionShortcut" />
+            </Grid.KeyboardAccelerators>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="SidebarColumn" Width="232" />
                 <ColumnDefinition Width="1" />
@@ -147,6 +150,37 @@
                             FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
                             Visibility="Collapsed" Height="32" CornerRadius="{StaticResource RadiusControl}" />
                     <StackPanel x:Name="ArticleBody" Spacing="16" AutomationProperties.AutomationId="ArticleBody" />
+                    <StackPanel x:Name="ArticleDiscussion" Visibility="Collapsed" Spacing="8" Margin="0,12,0,0"
+                                AutomationProperties.AutomationId="ArticleDiscussion">
+                        <Border Style="{StaticResource ArticleRule}" />
+                        <TextBlock x:Name="DiscussionHeading" FontSize="15" TextWrapping="Wrap"
+                                   FontFamily="{StaticResource FontUi}"
+                                   FontWeight="{Binding SectionLabel, Source={StaticResource ReaderFonts}}"
+                                   Foreground="{ThemeResource InkBrush}" AutomationProperties.LiveSetting="Polite" />
+                        <TextBlock x:Name="DiscussionDetail" FontSize="13" TextWrapping="Wrap"
+                                   FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                   Foreground="{ThemeResource MutedBrush}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="DiscussionAction" Height="32" Click="DiscussionActionClicked"
+                                    AutomationProperties.AcceleratorKey="C"
+                                    FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                    CornerRadius="{StaticResource RadiusControl}" />
+                            <HyperlinkButton x:Name="DiscussionWebsite" Height="32"
+                                             FontFamily="{StaticResource FontUi}"
+                                             FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}" />
+                        </StackPanel>
+                        <ItemsRepeater x:Name="DiscussionComments" ElementPrepared="PrepareDiscussionComment"
+                                       AutomationProperties.Name="Comments">
+                            <ItemsRepeater.Layout>
+                                <StackLayout Spacing="12" />
+                            </ItemsRepeater.Layout>
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate>
+                                    <ContentPresenter />
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+                    </StackPanel>
                 </StackPanel>
             </ScrollViewer>
         </Grid>

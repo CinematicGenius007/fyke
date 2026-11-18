@@ -11,6 +11,11 @@
                 <Setter Property="Background" Value="{ThemeResource HairlineBrush}" />
                 <Setter Property="Margin" Value="0,8" />
             </Style>
+            <Style x:Key="DiscussionReplyLine" TargetType="Border">
+                <Setter Property="Width" Value="1" />
+                <Setter Property="HorizontalAlignment" Value="Left" />
+                <Setter Property="Background" Value="{ThemeResource HairlineBrush}" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>
