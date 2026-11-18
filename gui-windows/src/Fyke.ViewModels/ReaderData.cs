@@ -96,6 +96,15 @@ public sealed class ReaderData(IDaemonClient client)
             response.NextCursor);
     }
 
+    public async Task<ReaderArticle> ArticleAsync(long id, CancellationToken ct)
+    {
+        var response = Read<ArticleBody>(
+            await client.CallAsync("entries.get", new { Id = id, Format = "blocks" }, ct).ConfigureAwait(false));
+        var blocks = JsonSerializer.Deserialize<ArticleBlock[]>(response.Body, Wire)
+            ?? throw new DaemonProtocolException("The daemon returned an empty article response.");
+        return new ReaderArticle(response.Title, response.FeedTitle, response.Author, blocks);
+    }
+
     private static T Read<T>(JsonElement result) =>
         result.Deserialize<T>(Wire) ?? throw new DaemonProtocolException("The daemon returned an empty reader response.");
 
@@ -103,5 +112,6 @@ public sealed class ReaderData(IDaemonClient client)
     private sealed record Feed(long Id, long? FolderId, string? Title, string Url, long Unread, long Starred);
     private sealed record Folder(long Id, long? ParentId, string Name);
     private sealed record Entry(long Id, string? Title, string? FeedTitle, bool Read);
+    private sealed record ArticleBody(string? Title, string? FeedTitle, string? Author, string Body);
     private sealed record EntryPage(Entry[] Items, string? NextCursor);
 }

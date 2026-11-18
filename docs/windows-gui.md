@@ -1,6 +1,6 @@
 # Windows GUI
 
-Status: the Windows reader shell connects to the daemon and shows the subscription catalog and article timeline. The solution, protocol client, view-model library, and generated tokens support the shell. Article bodies and the feature flows in [reader-features.md](reader-features.md) are planned. Windows CI compiles the app and runs the client and view-model tests. Windows desktop CI has verified launch, the missing-companion Retry flow, and daemon restart after a crash with the window open. The Windows smoke test also exercises selection of the Starred destination. Visual comparison of the reader shell and full article rendering remain separate checks. The macOS GUI in `gui/` is the reference client.
+Status: the Windows reader shell connects to the daemon and shows the subscription catalog and article timeline. The solution, protocol client, view-model library, and generated tokens support the shell. Article selection opens stored blocks in a native reading pane. The feature flows in [reader-features.md](reader-features.md) are planned. Windows CI compiles the app and runs the client and view-model tests. Windows desktop CI has verified launch, the missing-companion Retry flow, and daemon restart after a crash with the window open. The Windows smoke test exercises Starred selection and opens an article from a local feed fixture. It checks that an article image makes no network request until asked. Visual comparison of the reader remains a separate check. The macOS GUI in `gui/` is the reference client.
 
 ## Goals
 
@@ -65,11 +65,11 @@ The structure and measurements follow the design rules; the chrome is Windows:
 - Focus uses native controls. The system high contrast resource mapping and visual acceptance checks are planned.
 - Planned popovers use native flyouts with the shared popover treatment.
 
-The sidebar and timeline use native lists. The catalog groups feeds by folder and aggregates unread counts. Selecting a destination requests a 100-article page using the daemon’s feed, folder, or starred filter. Load more passes the returned keyset cursor back to the daemon. Navigation cancels stale requests, and reconnect refreshes the catalog and timeline. The reader pane displays the selected article’s title and source.
+The sidebar and timeline use native lists. The catalog groups feeds by folder and aggregates unread counts. Selecting a destination requests a 100-article page using the daemon’s feed, folder, or starred filter. Load more passes the returned keyset cursor back to the daemon. Navigation cancels stale requests, and reconnect refreshes the catalog and timeline. The reader pane displays the selected article’s title, source, and stored body. Changing selection cancels the previous body request.
 
-## Planned article reader
+## Article reader
 
-The reader will render article blocks with native controls: `RichTextBlock` paragraphs with inline links, lists, quotes, code in JetBrains Mono, tables in a `Grid`, and images that load on request. Feed HTML never reaches a web view, as [decision 0002](decisions/0002-web-viewer.md) requires. Links open in the default browser.
+The reader requests `entries.get` in blocks format and renders the stored nodes with native controls. Paragraphs use selectable text and inline links. Lists, quotes, headings, code, tables, and separators keep their structure. Images have an explicit load control. Feed HTML never reaches a web view, as [decision 0002](decisions/0002-web-viewer.md) requires. Links open in the default browser.
 
 ## Background running and notifications
 
@@ -122,7 +122,8 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W0e | Replace an older daemon at startup with the bundled executable | Client tests verify one shutdown request, a compatible restart, and refusal of an incompatible replacement |
 | W0f | Check socket and data access from another Windows account on a controlled Windows host | A separate standard Windows account cannot read or open the database for writing or connect to a daemon under another user’s local profile |
 | W1a | Reader shell, feed and folder destinations, Starred, timeline paging and a resizable list divider | API parameter tests, native selection smoke test, and visual checks at narrow and wide widths |
-| W1b | Native block rendering, live timeline updates, folder collapse, fonts and weights, image loading, article links and discussion | Shared content fixtures, keyboard/Narrator checks, DPI and scrolling measurements |
+| W1b.1 | Native block rendering with on-demand images and article selection | Shared content fixture, Windows desktop smoke test, and URL handling tests |
+| W1b.2 | Live timeline updates, folder collapse, reading weights, and discussion | Updates preserve selection and scroll, with keyboard, Narrator, DPI, and scrolling checks |
 | W1c | Search, marks, undo, command palette and focus | Same task outcomes as macOS, including reconnect and missing selection |
 | W2 | Subscription discovery, OPML, settings, themes, agent setup, storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
 | W3 | Saved views, Today, recipes, briefs, Ask, catch-up, routines, Activity, and citation navigation | One module per flow with fixture-driven API and desktop checks, including failed or partial work |

@@ -88,6 +88,54 @@ public sealed class ReaderDataTests
         Assert.Equal(new TimelineArticle(9, "Untitled article", "News", false), Assert.Single(page.Articles));
     }
 
+    [Fact]
+    public async Task ArticleRequestsStoredBlocksAndDecodesTheirStructure()
+    {
+        var fake = new FakeClient
+        {
+            OnCall = (method, parameters) =>
+            {
+                Assert.Equal("entries.get", method);
+                var sent = JsonSerializer.SerializeToElement(parameters);
+                Assert.Equal(9, sent.GetProperty("Id").GetInt64());
+                Assert.Equal("blocks", sent.GetProperty("Format").GetString());
+                return JsonSerializer.SerializeToElement(new
+                {
+                    title = "Reader fixture", feed_title = "News", author = "Alex",
+                    body = """
+                        [
+                          {"t":"h","level":2,"c":[{"t":"text","v":"Title"}]},
+                          {"t":"list","ordered":true,"items":[[{"t":"strong","c":[{"t":"text","v":"Bold"}]}]]},
+                          {"t":"table","rows":[[[{"t":"text","v":"Cell"}]]]},
+                          {"t":"img","src":"https://example.com/a.png","alt":"Figure"},
+                          {"t":"unknown"}
+                        ]
+                        """,
+                });
+            },
+        };
+
+        var article = await new ReaderData(fake).ArticleAsync(9, CancellationToken.None);
+
+        Assert.Equal(("Reader fixture", "News", "Alex"), (article.Title, article.FeedTitle, article.Author));
+        Assert.Equal("Title", Assert.Single(article.Blocks[0].Children!).Text);
+        Assert.True(article.Blocks[1].Ordered);
+        Assert.Equal("Bold", article.Blocks[1].Items![0][0].Children![0].Text);
+        Assert.Equal("Cell", article.Blocks[2].Rows![0][0][0].Text);
+        Assert.Equal("Figure", article.Blocks[3].Alt);
+        Assert.Equal("unknown", article.Blocks[4].Kind);
+    }
+
+    [Theory]
+    [InlineData("https://example.com/page", true)]
+    [InlineData("http://example.com/image.png", true)]
+    [InlineData("file:///C:/Windows/win.ini", false)]
+    [InlineData("javascript:alert(1)", false)]
+    [InlineData("https://user:secret@example.com", false)]
+    [InlineData("/relative", false)]
+    public void FeedAddressesAreLimitedToWebUrls(string value, bool allowed) =>
+        Assert.Equal(allowed, ArticleBlock.WebAddress(value) is not null);
+
     private static JsonElement Parse(string json)
     {
         using var document = JsonDocument.Parse(json);

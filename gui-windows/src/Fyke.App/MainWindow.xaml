@@ -98,13 +98,18 @@
                     </ControlTemplate>
                 </primitives:Thumb.Template>
             </primitives:Thumb>
-            <ScrollViewer Grid.Column="4" Background="{ThemeResource GroundBrush}"
+            <ScrollViewer x:Name="ArticleScroller" Grid.Column="4" Background="{ThemeResource GroundBrush}"
                           HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="24,20" Spacing="12" MaxWidth="640" HorizontalAlignment="Stretch"
                             AutomationProperties.AutomationId="ArticlePane">
                     <TextBlock x:Name="ArticleHeading" FontSize="32" TextWrapping="Wrap"
                                Foreground="{ThemeResource InkBrush}" />
                     <TextBlock x:Name="ArticleSource" TextWrapping="Wrap" Foreground="{ThemeResource MutedBrush}" />
+                    <TextBlock x:Name="ArticleStatus" TextWrapping="Wrap" Foreground="{ThemeResource InkSoftBrush}"
+                               Visibility="Collapsed" AutomationProperties.LiveSetting="Polite" />
+                    <Button x:Name="RetryArticle" Content="Try again" Click="RetryArticleClicked"
+                            Visibility="Collapsed" Height="32" CornerRadius="{StaticResource RadiusControl}" />
+                    <StackPanel x:Name="ArticleBody" Spacing="16" AutomationProperties.AutomationId="ArticleBody" />
                 </StackPanel>
             </ScrollViewer>
         </Grid>

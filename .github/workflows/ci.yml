@@ -52,7 +52,7 @@ jobs:
         run: |
           dotnet build src/Fyke.App -c Release -p:Platform=x64 -o "$env:RUNNER_TEMP/fyke-desktop"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/desktop-smoke.ps1 -App "$env:RUNNER_TEMP/fyke-desktop/Fyke.App.exe" -Daemon "$env:GITHUB_WORKSPACE/zig-out/bin/fyke.exe"
+          python ./tests/run-desktop-smoke.py "$env:RUNNER_TEMP/fyke-desktop/Fyke.App.exe" "$env:GITHUB_WORKSPACE/zig-out/bin/fyke.exe"
 
       # Each script is its own step, so that one failure does not hide the others.
       - name: e2e

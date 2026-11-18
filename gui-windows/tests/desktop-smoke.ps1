@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory)][string]$App,
-    [Parameter(Mandatory)][string]$Daemon
+    [Parameter(Mandatory)][string]$Daemon,
+    [Parameter(Mandatory)][string]$FeedUrl
 )
 
 $ErrorActionPreference = 'Stop'
@@ -73,25 +74,28 @@ try {
 
     $destinationsId = [Windows.Automation.PropertyCondition]::new(
         [Windows.Automation.AutomationElement]::AutomationIdProperty, 'ReaderDestinations')
-    $starredName = [Windows.Automation.PropertyCondition]::new(
-        [Windows.Automation.AutomationElement]::NameProperty, 'Starred')
     $items = Wait-For 'the reader destinations' {
         $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $destinationsId)
     }
-    $starred = Wait-For 'the Starred destination' {
-        $items.FindFirst([Windows.Automation.TreeScope]::Descendants, $starredName)
-    }
-    $selection = $null
-    if ($starred.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selection)) {
-        $selection.Select()
-    } else {
-        $parent = [Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($starred)
-        while ($parent -and !$parent.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selection)) {
-            $parent = [Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($parent)
+
+    function Select-ReaderItem($list, [string]$name) {
+        $condition = [Windows.Automation.PropertyCondition]::new(
+            [Windows.Automation.AutomationElement]::NameProperty, $name)
+        $unreadName = [Windows.Automation.PropertyCondition]::new(
+            [Windows.Automation.AutomationElement]::NameProperty, "$name, unread")
+        $rowName = [Windows.Automation.OrCondition]::new($condition, $unreadName)
+        $item = Wait-For "the $name row" {
+            $list.FindFirst([Windows.Automation.TreeScope]::Descendants, $rowName)
         }
-        if (!$selection) { throw 'The Starred row does not expose selection.' }
+        $selection = $null
+        while ($item -and !$item.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selection)) {
+            $item = [Windows.Automation.TreeWalker]::ControlViewWalker.GetParent($item)
+        }
+        if (!$selection) { throw "The $name row does not expose selection." }
         $selection.Select()
     }
+
+    Select-ReaderItem $items 'Starred'
     $headingId = [Windows.Automation.PropertyCondition]::new(
         [Windows.Automation.AutomationElement]::AutomationIdProperty, 'TimelineHeading')
     Wait-For 'the Starred timeline heading' {
@@ -99,9 +103,27 @@ try {
         if ($heading -and $heading.Current.Name -eq 'Starred') { $true }
     } | Out-Null
 
+    & $daemonPath add $FeedUrl --allow-private
+    if ($LASTEXITCODE -ne 0) { throw 'Could not add the reader fixture feed' }
+    Select-ReaderItem $items 'All'
+    $timelineId = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::AutomationIdProperty, 'ReaderTimeline')
+    $timeline = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $timelineId)
+    Select-ReaderItem $timeline 'Native reader fixture'
+    $paragraph = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::NameProperty, 'The story is rendered from stored blocks.')
+    Wait-For 'the article paragraph' {
+        $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $paragraph)
+    } | Out-Null
+    $imageButton = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::NameProperty, ("Load image " + [char]0x00b7 + " Fixture illustration"))
+    Wait-For 'the image load control' {
+        $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $imageButton)
+    } | Out-Null
+
     & $daemonPath status
     if ($LASTEXITCODE -ne 0) { throw 'The companion daemon did not answer status' }
-    Write-Host 'WinUI recovered the daemon and switched the reader to Starred.'
+    Write-Host 'WinUI recovered the daemon, switched destinations, and rendered the fixture article.'
 } finally {
     try {
         if ($window) {

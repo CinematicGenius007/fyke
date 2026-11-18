@@ -20,6 +20,8 @@ public sealed partial class MainWindow
     private readonly ObservableCollection<TimelineArticle> articles = [];
     private ReaderData reader = null!;
     private CancellationTokenSource? readerRequest;
+    private CancellationTokenSource? articleRequest;
+    private ArticleBlockRenderer articleRenderer = null!;
     private ReaderDestination? destination;
     private string? nextCursor;
     private bool readerConnected;
@@ -32,7 +34,11 @@ public sealed partial class MainWindow
         Timeline.ItemsSource = articles;
         Destinations.FontFamily = ui;
         Timeline.FontFamily = ui;
-        ArticleHeading.FontFamily = (FontFamily)Application.Current.Resources["FontReading"];
+        var resources = Application.Current.Resources;
+        var reading = (FontFamily)resources["FontReading"];
+        ArticleHeading.FontFamily = reading;
+        ArticleSource.FontFamily = ui;
+        articleRenderer = new ArticleBlockRenderer(reading, ui, (FontFamily)resources["FontCode"]);
         ShowArticle(null);
     }
 
@@ -53,6 +59,7 @@ public sealed partial class MainWindow
         else
         {
             readerRequest?.Cancel();
+            articleRequest?.Cancel();
         }
     }
 
@@ -169,7 +176,59 @@ public sealed partial class MainWindow
 
     private void MoreArticlesClicked(object sender, RoutedEventArgs args) => _ = LoadReaderAsync(append: true);
 
-    private void ArticleChanged(object sender, SelectionChangedEventArgs args) => ShowArticle(Timeline.SelectedItem as TimelineArticle);
+    private void ArticleChanged(object sender, SelectionChangedEventArgs args) =>
+        _ = OpenArticleAsync(Timeline.SelectedItem as TimelineArticle);
+
+    private void RetryArticleClicked(object sender, RoutedEventArgs args) =>
+        _ = OpenArticleAsync(Timeline.SelectedItem as TimelineArticle);
+
+    private async Task OpenArticleAsync(TimelineArticle? article)
+    {
+        articleRequest?.Cancel();
+        ShowArticle(article);
+        ArticleBody.Children.Clear();
+        ArticleStatus.Visibility = Visibility.Collapsed;
+        RetryArticle.Visibility = Visibility.Collapsed;
+        _ = ArticleScroller.ChangeView(null, 0, null, disableAnimation: true);
+        if (article is null || lifetime.IsCancellationRequested || !readerConnected)
+        {
+            return;
+        }
+
+        using var request = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        articleRequest = request;
+        ArticleStatus.Text = "Opening article…";
+        ArticleStatus.Visibility = Visibility.Visible;
+        try
+        {
+            var result = await reader.ArticleAsync(article.Id, request.Token);
+            request.Token.ThrowIfCancellationRequested();
+            ArticleHeading.Text = result.Title ?? article.Title;
+            ArticleSource.Text = string.Join(" · ", new[] { result.FeedTitle ?? article.FeedTitle, result.Author }
+                .Where(value => !string.IsNullOrWhiteSpace(value)));
+            articleRenderer.Append(ArticleBody, result.Blocks);
+            ArticleStatus.Text = "This article has no text.";
+            ArticleStatus.Visibility = ArticleBody.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+        catch (OperationCanceledException) when (request.IsCancellationRequested)
+        {
+        }
+        catch (Exception error) when (error is DaemonException or TimeoutException or JsonException)
+        {
+            if (!request.IsCancellationRequested)
+            {
+                ArticleStatus.Text = "Fyke couldn’t open this article. Your list is still available.";
+                RetryArticle.Visibility = Visibility.Visible;
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(articleRequest, request))
+            {
+                articleRequest = null;
+            }
+        }
+    }
 
     private void ShowArticle(TimelineArticle? article)
     {
