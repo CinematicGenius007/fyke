@@ -7,11 +7,11 @@
         <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"
                     Spacing="12" MaxWidth="400"
                     x:Name="InlineState">
-            <TextBlock x:Name="MessageText" Text="{Binding Message}" FontSize="20" TextWrapping="Wrap"
+            <TextBlock x:Name="MessageText" AutomationProperties.AutomationId="ConnectionMessage" Text="{Binding Message}" FontSize="20" TextWrapping="Wrap"
                        Foreground="{ThemeResource InkBrush}" />
             <TextBlock x:Name="DetailText" Text="{Binding Detail}" TextWrapping="Wrap"
                        Foreground="{ThemeResource InkSoftBrush}" />
-            <Button x:Name="RetryButton" Content="Try again" Command="{Binding RetryCommand}" Height="32"
+            <Button x:Name="RetryButton" AutomationProperties.AutomationId="ConnectionRetry" Content="Try again" Command="{Binding RetryCommand}" Height="32"
                     CornerRadius="{StaticResource RadiusControl}" />
         </StackPanel>
     </Grid>

@@ -79,7 +79,7 @@ Today `fyke service install` registers the daemon in the per-user Run key. The G
 |---|---|
 | Protocol client | xUnit against an in-process fake daemon on a temporary Unix socket, on every OS in CI |
 | View models | xUnit for connection state and retry behavior. Each new flow adds tests for its presentation state. |
-| App | Built on `windows-latest` in CI. Planned UI Automation smoke test launches the app with `FYKE_HOME` and a real `fyke.exe`. |
+| App | Built on `windows-latest` in CI. The CI smoke script launches WinUI with an isolated `FYKE_HOME`, checks the missing-companion state, then uses UI Automation to retry after placing the real `fyke.exe` beside the app. |
 | Manual | Narrator, keyboard only, 100/150/200% scaling, light/dark/high contrast, non-Latin text, data move |
 
 Run the client integration check with `FYKE_TEST_BIN` set to the absolute path of a built `fyke` or `fyke.exe` and run `dotnet test gui-windows/tests/Fyke.Client.Tests`. Windows CI runs this check against its release build. The test uses a temporary data directory and removes it after stopping the daemon.
@@ -114,7 +114,8 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | Unit | Work | Evidence |
 |---|---|---|
 | W0a | Exercise C# startup, handshake, and event replay across the real Windows socket | CI against the built executable with an isolated home |
-| W0b | Launch the WinUI window with real companion binaries and check first launch, recovery, old daemon, moved data, paths with spaces and non-ASCII characters, and access from another Windows account | Repeatable Windows desktop smoke test and installation-path checks |
+| W0b | Launch WinUI and recover from a missing companion through Retry | Windows CI desktop smoke test with a real daemon and isolated home |
+| W0c | Check a live daemon disconnect, older daemon, moved data, non-ASCII paths, and access from another Windows account | Repeatable recovery and installation-path checks |
 | W1a | Reader shell, sidebar, folders and resizable panes | Design measurements and snapshots at narrow and wide widths, light/dark/high contrast |
 | W1b | Virtualized timeline, native block rendering, fonts and weights, image loading, article links and discussion | Shared content fixtures, keyboard/Narrator checks, DPI and scrolling measurements |
 | W1c | Search, marks, undo, command palette and focus | Same task outcomes as macOS, including reconnect and missing selection |
