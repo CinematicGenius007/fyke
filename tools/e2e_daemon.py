@@ -472,8 +472,13 @@ check("the retry fetches the article", wait_for(lambda: full_row("Flaky")[0] == 
 check("a 404 is final", wait_for(lambda: full_row("Gone")[0] == "failed", 15), full_row("Gone"))
 check("and is not tried again", flaky["hits"]["/gone"] == 1, flaky["hits"])
 
-dead = socket.socket(); dead.bind(("127.0.0.1", 0)); dead_port = dead.getsockname()[1]; dead.close()
-outage_items = "".join(f"<item><title>Dead {i}</title><guid>d{i}</guid><link>http://127.0.0.1:{dead_port + i}/a</link><description>Short.</description></item>" for i in range(6))
+# Let the OS choose six distinct unused ports. Release them before connecting:
+# a bound socket that has not called listen can time out instead of refusing.
+dead_sockets = [socket.socket() for _ in range(6)]
+for dead in dead_sockets:
+    dead.bind(("127.0.0.1", 0))
+dead_ports = [dead.getsockname()[1] for dead in dead_sockets]
+outage_items = "".join(f'<item><title>Dead {i}</title><guid>d{i}</guid><link>http://127.0.0.1:{port}/a</link><description>Short.</description></item>' for i, port in enumerate(dead_ports))
 class Outage(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def do_GET(self):
@@ -481,13 +486,13 @@ class Outage(http.server.BaseHTTPRequestHandler):
         self.send_response(200); self.send_header("Content-Type", "application/rss+xml"); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
 outage_server = Server(("127.0.0.1", 0), Outage)
 threading.Thread(target=outage_server.serve_forever, daemon=True).start()
+for dead in dead_sockets:
+    dead.close()
 rss("add", f"http://127.0.0.1:{outage_server.server_address[1]}/feed.xml", "--allow-private")
 time.sleep(8)
 rows = json.loads(rss("query", "SELECT full_status, full_attempts FROM entries WHERE title LIKE 'Dead %'").stdout)["rows"]
 check("an outage settles nothing", all(status is None for status, _ in rows), rows)
 check("and costs at most the two tries before it was noticed", sum(tries for _, tries in rows) <= 2, rows)
-for dead in dead_sockets:
-    dead.close()
 
 rss("daemon", "stop")
 
