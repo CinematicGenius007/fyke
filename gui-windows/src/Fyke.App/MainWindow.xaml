@@ -150,8 +150,7 @@
                             FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
                             Visibility="Collapsed" Height="32" CornerRadius="{StaticResource RadiusControl}" />
                     <StackPanel x:Name="ArticleBody" Spacing="16" AutomationProperties.AutomationId="ArticleBody" />
-                    <StackPanel x:Name="ArticleDiscussion" Visibility="Collapsed" Spacing="8" Margin="0,12,0,0"
-                                AutomationProperties.AutomationId="ArticleDiscussion">
+                    <StackPanel x:Name="ArticleDiscussion" Visibility="Collapsed" Spacing="8" Margin="0,12,0,0">
                         <Border Style="{StaticResource ArticleRule}" />
                         <TextBlock x:Name="DiscussionHeading" FontSize="15" TextWrapping="Wrap"
                                    FontFamily="{StaticResource FontUi}"
@@ -162,6 +161,7 @@
                                    Foreground="{ThemeResource MutedBrush}" />
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Button x:Name="DiscussionAction" Height="32" Click="DiscussionActionClicked"
+                                    AutomationProperties.AutomationId="DiscussionAction"
                                     AutomationProperties.AcceleratorKey="C"
                                     FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
                                     CornerRadius="{StaticResource RadiusControl}" />
