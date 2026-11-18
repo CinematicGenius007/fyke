@@ -56,9 +56,24 @@ try {
         if ((Test-Path (Join-Path $testHome 'fyked.sock')) -and (!$element -or $element.Current.IsOffscreen)) { $true }
     } | Out-Null
 
+    function Get-CompanionProcess {
+        Get-CimInstance Win32_Process -Filter "Name = 'fyke.exe' AND ParentProcessId = $($window.Id)" |
+            Where-Object { $_.CommandLine -and $_.CommandLine.Contains($testHome) }
+    }
+
+    $original = Wait-For 'the companion process' { Get-CompanionProcess | Select-Object -First 1 }
+    Stop-Process -Id $original.ProcessId -Force
+    Wait-For 'a replacement companion started by the window' {
+        Get-CompanionProcess | Where-Object { $_.ProcessId -ne $original.ProcessId } | Select-Object -First 1
+    } | Out-Null
+    Wait-For 'a reconnected window' {
+        $element = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $messageCondition)
+        if (!$element -or $element.Current.IsOffscreen) { $true }
+    } | Out-Null
+
     & $daemonPath status
     if ($LASTEXITCODE -ne 0) { throw 'The companion daemon did not answer status' }
-    Write-Host 'WinUI launched and recovered from a missing companion via Retry.'
+    Write-Host 'WinUI recovered from a missing companion and restarted the daemon after a crash.'
 } finally {
     try {
         if ($window) {

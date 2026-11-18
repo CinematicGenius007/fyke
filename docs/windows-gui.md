@@ -1,6 +1,6 @@
 # Windows GUI
 
-Status: W0 only. The solution, protocol client, view-model library, token generation and an empty window are the first slice; the reading screens and the feature flows in [reader-features.md](reader-features.md) come slice by slice, as the table at the end records. Windows CI compiles the app and runs the client and view-model tests. Desktop launch, rendering, and interaction remain unverified. The macOS GUI in `gui/` is the reference client.
+Status: W0 only. The solution, protocol client, view-model library, token generation and an empty window are the first slice; the reading screens and the feature flows in [reader-features.md](reader-features.md) come slice by slice, as the table at the end records. Windows CI compiles the app and runs the client and view-model tests. Windows desktop CI has verified launch and the missing-companion Retry flow. Reader rendering and interaction remain planned. The macOS GUI in `gui/` is the reference client.
 
 ## Goals
 
@@ -115,7 +115,8 @@ Each row is a reviewable unit with evidence required before its gate is complete
 |---|---|---|
 | W0a | Exercise C# startup, handshake, and event replay across the real Windows socket | CI against the built executable with an isolated home |
 | W0b | Launch WinUI and recover from a missing companion through Retry | Windows CI desktop smoke test with a real daemon and isolated home |
-| W0c | Check a live daemon disconnect, older daemon, moved data, non-ASCII paths, and access from another Windows account | Repeatable recovery and installation-path checks |
+| W0c | Use the window’s event subscription to recover from a live daemon disconnect | Windows UI Automation confirms the app starts a replacement daemon after a crash |
+| W0d | Check older daemon, moved data, non-ASCII paths, and access from another Windows account | Repeatable compatibility and installation-path checks |
 | W1a | Reader shell, sidebar, folders and resizable panes | Design measurements and snapshots at narrow and wide widths, light/dark/high contrast |
 | W1b | Virtualized timeline, native block rendering, fonts and weights, image loading, article links and discussion | Shared content fixtures, keyboard/Narrator checks, DPI and scrolling measurements |
 | W1c | Search, marks, undo, command palette and focus | Same task outcomes as macOS, including reconnect and missing selection |

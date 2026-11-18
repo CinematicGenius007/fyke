@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using System.Threading.Tasks;
 using Fyke.Client;
 using Fyke.ViewModels;
 using Microsoft.UI.Dispatching;
@@ -13,6 +14,7 @@ public sealed partial class MainWindow : Window
 {
     private readonly IDaemonClient client = new DaemonClient(new DaemonClientOptions());
     private readonly CancellationTokenSource lifetime = new();
+    private readonly Task connection;
 
     public ConnectionViewModel ViewModel { get; }
 
@@ -35,8 +37,22 @@ public sealed partial class MainWindow : Window
         ViewModel.PropertyChanged += (_, _) => ShowState();
         ShowState();
         Closed += OnClosed;
-        // The view model shows a failure where the window can say it; nothing is thrown here.
-        _ = ViewModel.StartAsync(lifetime.Token);
+        connection = KeepConnectionAsync(lifetime.Token);
+    }
+
+    private async Task KeepConnectionAsync(CancellationToken cancellationToken)
+    {
+        await ViewModel.StartAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            // The subscription detects a disconnect even when the window makes no requests.
+            await foreach (var _ in client.EventsAsync(cancellationToken).ConfigureAwait(false))
+            {
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
     }
 
     /// Quiet until it matters: the state shows only while connecting or failed, and the
@@ -52,6 +68,7 @@ public sealed partial class MainWindow : Window
     private async void OnClosed(object sender, WindowEventArgs args)
     {
         await lifetime.CancelAsync();
+        await connection;
         ViewModel.Dispose();
         await client.DisposeAsync();
         lifetime.Dispose();
