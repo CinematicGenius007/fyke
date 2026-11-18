@@ -486,6 +486,8 @@ time.sleep(8)
 rows = json.loads(rss("query", "SELECT full_status, full_attempts FROM entries WHERE title LIKE 'Dead %'").stdout)["rows"]
 check("an outage settles nothing", all(status is None for status, _ in rows), rows)
 check("and costs at most the two tries before it was noticed", sum(tries for _, tries in rows) <= 2, rows)
+for dead in dead_sockets:
+    dead.close()
 
 rss("daemon", "stop")
 

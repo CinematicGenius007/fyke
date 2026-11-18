@@ -61,12 +61,19 @@ exit 0
     $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($probe))
     $start = [Diagnostics.ProcessStartInfo]::new((Get-Process -Id $PID).Path)
     $start.UseShellExecute = $false
+    # A process started with other credentials needs valid standard handles of its own.
+    $start.RedirectStandardInput = $true
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
     $start.UserName = $account
     $start.Domain = $env:COMPUTERNAME
     $start.Password = $password
     $start.WorkingDirectory = $env:SystemRoot
     $start.Arguments = "-NoProfile -NonInteractive -EncodedCommand $encoded"
     $child = [Diagnostics.Process]::Start($start)
+    $child.StandardInput.Close()
+    $stdout = $child.StandardOutput.ReadToEndAsync()
+    $stderr = $child.StandardError.ReadToEndAsync()
     if (!$child.WaitForExit(15000)) { throw 'The second-account probe timed out.' }
 
     # Confirm the socket still answers for the owner before interpreting the negative probe.
@@ -78,7 +85,7 @@ exit 0
         12 { throw 'A separate account could read the database.' }
         13 { throw 'A separate account could open the database for writing.' }
         14 { throw 'A separate account could connect to the daemon socket.' }
-        default { throw "The separate-account probe failed with exit code $($child.ExitCode)." }
+        default { throw "The separate-account probe failed with exit code $($child.ExitCode). $($stdout.GetAwaiter().GetResult()) $($stderr.GetAwaiter().GetResult())" }
     }
 } finally {
     try {
