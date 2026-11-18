@@ -3,17 +3,17 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Fyke.ViewModels;
-using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.UI.Text;
 
 namespace Fyke.App;
 
 /// <summary>Turns the daemon's article nodes into native controls. Images load only on request.</summary>
-internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, FontFamily code)
+internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, FontFamily code, ReaderFontWeights weights)
 {
     public void Append(StackPanel panel, IEnumerable<ArticleBlock> nodes)
     {
@@ -67,20 +67,22 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
         return panel;
     }
 
-    private TextBlock Text(IEnumerable<ArticleBlock> nodes, double size = 20)
+    private TextBlock Text(IEnumerable<ArticleBlock> nodes, double size = 20, bool heading = false)
     {
         var text = new TextBlock
         {
             FontFamily = reading,
             FontSize = size,
+            FontWeight = heading ? weights.Title : weights.Reading,
             IsTextSelectionEnabled = true,
             TextWrapping = TextWrapping.Wrap,
         };
-        AppendInlines(text.Inlines, nodes);
+        AppendInlines(text.Inlines, nodes, heading ? weights.Title : weights.ReadingStrong);
         return text;
     }
 
-    private void AppendInlines(InlineCollection target, IEnumerable<ArticleBlock> nodes, bool insideLink = false)
+    private void AppendInlines(InlineCollection target, IEnumerable<ArticleBlock> nodes,
+        FontWeight emphasis, bool insideLink = false)
     {
         foreach (var node in nodes)
         {
@@ -90,27 +92,27 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
                     target.Add(new Run { Text = node.Text ?? string.Empty });
                     break;
                 case "code":
-                    target.Add(new Run { Text = node.Text ?? string.Empty, FontFamily = code });
+                    target.Add(new Run { Text = node.Text ?? string.Empty, FontFamily = code, FontWeight = weights.Code });
                     break;
                 case "br":
                     target.Add(new LineBreak());
                     break;
                 case "em":
                 case "strong":
-                    Span style = node.Kind == "em" ? new Italic() : new Bold();
-                    AppendInlines(style.Inlines, node.Children ?? [], insideLink);
+                    Span style = node.Kind == "em" ? new Italic() : new Span { FontWeight = emphasis };
+                    AppendInlines(style.Inlines, node.Children ?? [], emphasis, insideLink);
                     target.Add(style);
                     break;
                 case "link":
                     if (!insideLink && ArticleBlock.WebAddress(node.Href) is Uri address)
                     {
                         var link = new Hyperlink { NavigateUri = address };
-                        AppendInlines(link.Inlines, node.Children ?? [], insideLink: true);
+                        AppendInlines(link.Inlines, node.Children ?? [], emphasis, insideLink: true);
                         target.Add(link);
                     }
                     else
                     {
-                        AppendInlines(target, node.Children ?? [], insideLink);
+                        AppendInlines(target, node.Children ?? [], emphasis, insideLink);
                     }
                     break;
             }
@@ -120,8 +122,7 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
     private TextBlock Heading(ArticleBlock node)
     {
         var level = node.Level ?? 2;
-        var text = Text(node.Children ?? [], level <= 2 ? 27 : level == 3 ? 23 : 20);
-        text.FontWeight = FontWeights.SemiBold;
+        var text = Text(node.Children ?? [], level <= 2 ? 27 : level == 3 ? 23 : 20, heading: true);
         text.Margin = new Thickness(0, 8, 0, 0);
         return text;
     }
@@ -134,7 +135,7 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
             VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
             Content = new TextBlock
             {
-                Text = value ?? string.Empty, FontFamily = code, FontSize = 14,
+                Text = value ?? string.Empty, FontFamily = code, FontSize = 14, FontWeight = weights.Code,
                 IsTextSelectionEnabled = true, Margin = new Thickness(16, 12, 16, 12),
             },
         };
@@ -152,7 +153,7 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
             var marker = new TextBlock
             {
                 Text = node.Ordered == true ? (++index).ToString(CultureInfo.CurrentCulture) + "." : "•",
-                FontFamily = reading, FontSize = 20,
+                FontFamily = reading, FontSize = 20, FontWeight = weights.Reading,
             };
             var content = Flow(item);
             Grid.SetColumn(content, 1);
@@ -190,7 +191,7 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
     }
 
     private HyperlinkButton? LinkBlock(string? value) => ArticleBlock.WebAddress(value) is Uri address
-        ? new HyperlinkButton { NavigateUri = address, Content = address.Host, FontFamily = ui }
+        ? new HyperlinkButton { NavigateUri = address, Content = address.Host, FontFamily = ui, FontWeight = weights.Ui }
         : null;
 
     private StackPanel? ImagePlaceholder(ArticleBlock node)
@@ -202,7 +203,7 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
 
         var panel = new StackPanel { Spacing = 8 };
         var label = string.IsNullOrWhiteSpace(node.Alt) ? "Image" : node.Alt;
-        var button = new Button { Content = $"Load image · {label}", FontFamily = ui, Height = 32 };
+        var button = new Button { Content = $"Load image · {label}", FontFamily = ui, FontWeight = weights.Ui, Height = 32 };
         var image = new Image { Visibility = Visibility.Collapsed, Stretch = Stretch.Uniform, MaxHeight = 720 };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(image, label);
         image.ImageOpened += (_, _) => button.Visibility = Visibility.Collapsed;

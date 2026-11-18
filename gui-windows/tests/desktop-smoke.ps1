@@ -31,6 +31,10 @@ function Wait-For([string]$Description, [scriptblock]$Probe) {
 }
 
 try {
+    [IO.Directory]::CreateDirectory($testHome) | Out-Null
+    [IO.File]::WriteAllText((Join-Path $testHome 'config.json'),
+        '{"ui":{"weights":{"reading":1,"title":2,"ui":-1,"code":-2}}}')
+
     # Start the GUI with its normal companion lookup. Its first attempt fails because the
     # companion is absent. PATH is removed only for the child so a host install cannot mask it.
     $env:FYKE_BIN = $null
@@ -125,9 +129,23 @@ try {
     Select-ReaderItem $timeline 'Native reader fixture'
     $paragraph = [Windows.Automation.PropertyCondition]::new(
         [Windows.Automation.AutomationElement]::NameProperty, 'The story is rendered from stored blocks.')
-    Wait-For 'the article paragraph' {
+    $bodyText = Wait-For 'the article paragraph' {
         $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $paragraph)
-    } | Out-Null
+    }
+    $articleHeadingId = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::AutomationIdProperty, 'ArticleHeading')
+    $articleHeading = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $articleHeadingId)
+
+    function Assert-TextWeight($element, [int]$expected, [string]$description) {
+        $pattern = $element.GetCurrentPattern([Windows.Automation.TextPattern]::Pattern)
+        $weight = $pattern.DocumentRange.GetAttributeValue([Windows.Automation.TextPattern]::FontWeightAttribute)
+        if ($weight -ne $expected) {
+            throw "Expected weight $expected for ${description}. UI Automation reported $weight."
+        }
+    }
+
+    Assert-TextWeight $bodyText 500 'the article body'
+    Assert-TextWeight $articleHeading 800 'the article heading'
     $imageButton = [Windows.Automation.PropertyCondition]::new(
         [Windows.Automation.AutomationElement]::NameProperty, ("Load image " + [char]0x00b7 + " Fixture illustration"))
     Wait-For 'the image load control' {

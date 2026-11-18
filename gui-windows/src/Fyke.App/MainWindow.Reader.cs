@@ -27,6 +27,8 @@ public sealed partial class MainWindow
     private DispatcherQueueTimer readerReloadTimer = null!;
     private int readerChangesPending;
     private ReaderData reader = null!;
+    private ReaderFontWeights readerFonts = null!;
+    private bool typographyRead;
     private CancellationTokenSource? readerRequest;
     private CancellationTokenSource? articleRequest;
     private ArticleBlockRenderer articleRenderer = null!;
@@ -50,10 +52,9 @@ public sealed partial class MainWindow
         Destinations.FontFamily = ui;
         Timeline.FontFamily = ui;
         var resources = Application.Current.Resources;
-        var reading = (FontFamily)resources["FontReading"];
-        ArticleHeading.FontFamily = reading;
-        ArticleSource.FontFamily = ui;
-        articleRenderer = new ArticleBlockRenderer(reading, ui, (FontFamily)resources["FontCode"]);
+        readerFonts = (ReaderFontWeights)Root.Resources["ReaderFonts"];
+        articleRenderer = new ArticleBlockRenderer(
+            (FontFamily)resources["FontReading"], ui, (FontFamily)resources["FontCode"], readerFonts);
         ShowArticle(null);
     }
 
@@ -226,6 +227,11 @@ public sealed partial class MainWindow
         {
             if (refreshCatalog)
             {
+                if (!typographyRead)
+                {
+                    await LoadTypographyAsync(request.Token);
+                }
+
                 var rows = await reader.DestinationsAsync(request.Token);
                 request.Token.ThrowIfCancellationRequested();
                 var previous = destination;
@@ -289,6 +295,22 @@ public sealed partial class MainWindow
                 ScheduleReaderReload();
             }
         }
+    }
+
+    private async Task LoadTypographyAsync(CancellationToken ct)
+    {
+        try
+        {
+            var typography = await reader.TypographyAsync(ct);
+            ct.ThrowIfCancellationRequested();
+            readerFonts.Apply(typography);
+        }
+        catch (Exception error) when (!ct.IsCancellationRequested && error is DaemonException or TimeoutException)
+        {
+            // Reading remains available with the built-in typography if settings are unavailable.
+        }
+
+        typographyRead = true;
     }
 
     private void RetryTimelineClicked(object sender, RoutedEventArgs args) => _ = LoadReaderAsync(refreshCatalog: true);
