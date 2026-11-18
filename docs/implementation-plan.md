@@ -31,7 +31,7 @@ The [v2 design page](https://app.paper.design/file/01M6R7CJ81MKH0TMWJ8KNC6QGX/p-
 - `src/windows_startup.zig` uses `HKCU` Run for sign-in startup. It does not supervise crashes. `src/systemd.zig` and `src/launchd.zig` use service managers.
 - `gui/Sources/Reader/Daemon.swift` provides socket calls and events. `AppModel.swift`, `Sidebar.swift`, and `RootView.swift` own navigation/view state; `ReaderPane.swift` renders blocks.
 - `gui/tokens.css` is exported from Paper. `tools/gen_tokens.py` generates Swift tokens. Do not edit `Tokens.swift` or silently change the bundled reading default.
-- Existing Linux/Windows CI and archive builds do not build a new desktop GUI. A successful cross-compile is not a native GUI test.
+- Windows CI compiles the WinUI scaffold and runs the client and view-model suites. Desktop execution and GUI packaging are tracked in [the Windows delivery plan](windows-gui.md).
 
 ## Shared core changes
 
@@ -113,6 +113,8 @@ Use native navigation/controls, Inter/Newsreader/JetBrains Mono where the design
 Create a C# protocol client with typed DTOs, cancellation, framing/body limits, separate event/long-running connections, and API-version compatibility handling. Prototype `.NET` `AddressFamily.Unix` against Fyke's current Windows socket. Use `FYKE_HOME` and the existing location pointer. Do not introduce named pipes or TCP without a demonstrated compatibility problem and an ADR.
 
 ### Windows delivery slices
+
+The [Windows delivery plan](windows-gui.md#remaining-launch-work) tracks current evidence and the smaller review units within these slices.
 
 | Slice | Planned changes | Gate |
 |---|---|---|

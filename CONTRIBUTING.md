@@ -16,6 +16,8 @@ python3 -m venv .venv
 .venv/bin/pip install pyte mcp
 ```
 
+For Windows GUI changes, follow the [architecture and review standards](docs/windows-gui.md#architecture-and-review-standards) and run the client and view-model suites.
+
 Set `FYKE_HOME` to a scratch directory whenever you run the app or daemon by hand, so that checks never touch your real data.
 
 ## Checks

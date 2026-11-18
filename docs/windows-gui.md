@@ -42,7 +42,7 @@ Only `Fyke.App` depends on Windows. Everything a test can reach without a window
 
 - **Discovery.** The data folder is `%LOCALAPPDATA%\Fyke`, or the folder named in its `location` pointer file, or `FYKE_HOME`; the socket is `fyked.sock` inside it, exactly as `src/main.zig` resolves it.
 - **Transport.** `System.Net.Sockets.Socket` with `AddressFamily.Unix` and `UnixDomainSocketEndPoint`, which Windows 10 1803 and later support. No named pipe or TCP port is added.
-- **Connections.** One for requests, one for the event stream, so a long call never delays events.
+- **Connections.** A bounded pool serves requests. The event stream has a dedicated connection.
 - **Lost replies.** The client reconnects and only replays operations explicitly known to read. For other operations it reports an unknown outcome so the caller can refresh before retrying.
 - **Limits.** Lines over 16 MiB are refused; every call takes a `CancellationToken` and a timeout.
 - **Starting the daemon.** If the socket does not answer, the app starts `fyke.exe daemon` from its own folder (or `PATH`) without a console window and retries with backoff. The daemon's lock keeps a second copy from starting.
@@ -78,9 +78,11 @@ Today `fyke service install` registers the daemon in the per-user Run key. The G
 | Layer | How |
 |---|---|
 | Protocol client | xUnit against an in-process fake daemon on a temporary Unix socket, on every OS in CI |
-| View models | xUnit, no window: indent, sentence editing, undo stack, palette matching, state messages |
+| View models | xUnit for connection state and retry behavior. Each new flow adds tests for its presentation state. |
 | App | Built on `windows-latest` in CI. Planned UI Automation smoke test launches the app with `FYKE_HOME` and a real `fyke.exe`. |
 | Manual | Narrator, keyboard only, 100/150/200% scaling, light/dark/high contrast, non-Latin text, data move |
+
+Run the client integration check with `FYKE_TEST_BIN` set to the absolute path of a built `fyke` or `fyke.exe` and run `dotnet test gui-windows/tests/Fyke.Client.Tests`. Windows CI runs this check against its release build. The test uses a temporary data directory and removes it after stopping the daemon.
 
 ## Delivery
 
@@ -92,3 +94,33 @@ Today `fyke service install` registers the daemon in the per-user Run key. The G
 | W3 | Views, Today, recipes, routines, Ask, catch-up, Activity, palette | The flows in reader-features.md, with the same operations as macOS |
 | W4 | Crash supervision, notifications with the window closed | Survives crash, sign-out and upgrade |
 | W5 | Installer, update, uninstall, release CI | Clean-machine install on Windows 11 |
+
+## Architecture and review standards
+
+Dependencies flow from `Fyke.App` to `Fyke.ViewModels` and `Fyke.Client`. XAML and code-behind own control layout, focus, dispatcher work, and Windows integrations. View models own presentation state and commands and can run without WinUI. The client owns transport, discovery, process startup, wire types, and connection lifetime. The daemon owns data, scheduling, and mutations. Each user-facing capability uses the shared operation registry.
+
+Review one module at a time with these criteria:
+
+- Keep nullable analysis and analyzers enabled. Address handwritten warnings at their source and scope any tooling suppression to the affected code.
+- Keep file, socket, process, and time dependencies at the boundary. Test view-model transitions without a window and protocol behavior against both a fake socket and a real daemon.
+- Bound asynchronous work and cancel it when its owner closes. Preserve selection and scroll position across updates. Use virtualized article lists and coalesce reloads during event bursts. Measure on a large fixture before making performance claims.
+- Use shared tokens and the measurements in [design-rules.md](design-rules.md), including reading weight preferences. Follow [the macOS feature flows](reader-features.md) for navigation, empty states, undo, and citations. Review native keyboard access, Narrator, text scaling and contrast with each screen.
+- Comments explain invariants, ownership, and failure handling. Avoid narrating the code or recording review history. Update public interfaces and architecture docs when a contract changes.
+
+## Remaining launch work
+
+Each row is a reviewable unit with evidence required before its gate is complete. The Windows 11 x64 per-user installer is the proposed first launch. Store distribution and additional architectures have separate validation and distribution gates.
+
+| Unit | Work | Evidence |
+|---|---|---|
+| W0a | Exercise C# startup, handshake, and event replay across the real Windows socket | CI against the built executable with an isolated home |
+| W0b | Launch the WinUI window with real companion binaries and check first launch, recovery, old daemon, moved data, paths with spaces and non-ASCII characters, and access from another Windows account | Repeatable Windows desktop smoke test and installation-path checks |
+| W1a | Reader shell, sidebar, folders and resizable panes | Design measurements and snapshots at narrow and wide widths, light/dark/high contrast |
+| W1b | Virtualized timeline, native block rendering, fonts and weights, image loading, article links and discussion | Shared content fixtures, keyboard/Narrator checks, DPI and scrolling measurements |
+| W1c | Search, marks, undo, command palette and focus | Same task outcomes as macOS, including reconnect and missing selection |
+| W2 | Subscription discovery, OPML, settings, themes, agent setup, storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
+| W3 | Saved views, Today, recipes, briefs, Ask, catch-up, routines, Activity, and citation navigation | One module per flow with fixture-driven API and desktop checks, including failed or partial work |
+| W4 | Restart supervision, notifications and activation | Close the window, crash and restart the daemon, sign out/in, deny notification access, reopen the right result |
+| W5 | Versioned GUI/core bundle, runtime dependencies, signing, installer, upgrades, uninstall and release notes | Clean Windows 11 x64 standard-user install, upgrade from a prior build, rollback and uninstall with data retention, verified published checksums |
+
+Release evidence records the tested OS build, display scaling, app and daemon versions, launch method, and results. Review compatibility with the installed Codex and other supported writers on Windows separately from the fake-writer tests. When an embedded remote page viewer is considered, apply [decision 0002](decisions/0002-web-viewer.md) to its address-only boundary.

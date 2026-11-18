@@ -36,6 +36,16 @@ jobs:
       - run: zig build test
       - run: zig build -Drelease
 
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: gui-windows/global.json
+      - name: Desktop client against the real daemon
+        working-directory: gui-windows
+        shell: pwsh
+        run: |
+          $env:FYKE_TEST_BIN = Join-Path $env:GITHUB_WORKSPACE "zig-out/bin/fyke.exe"
+          dotnet test tests/Fyke.Client.Tests -c Release --filter FullyQualifiedName~RealDaemonTests
+
       # Each script is its own step, so that one failure does not hide the others.
       - name: e2e
         if: ${{ !cancelled() }}
