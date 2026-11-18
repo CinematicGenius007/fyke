@@ -108,7 +108,7 @@ struct AskView: View {
                                         primary: turn.job.map { job in ("Cancel", { Task { await model.library.cancel(job.id) } }) })
                         }
                     } else {
-                        Text("Ask your feeds").font(.custom(titleFamily, fixedSize: 34).weight(.semibold)).tracking(-0.5).padding(.bottom, 8)
+                        Text("Ask your feeds").font(.title(titleFamily, 34, .semibold)).tracking(-0.5).padding(.bottom, 8)
                         Text("Answers come only from your articles \(scope), with every claim cited.").font(.ui(14)).foregroundStyle(p.inkSoft).padding(.bottom, 24)
                         questionField(placeholder: "Which posts disagree about…", autofocus: true)
                         if !model.library.available {
@@ -138,7 +138,7 @@ struct AskView: View {
                     .font(.ui(13)).foregroundStyle(p.muted)
             }
             .padding(.bottom, 12)
-            Text(turn.question).font(.custom(titleFamily, fixedSize: 32).weight(.semibold)).tracking(-0.4)
+            Text(turn.question).font(.title(titleFamily, 32, .semibold)).tracking(-0.4)
                 .fixedSize(horizontal: false, vertical: true).padding(.bottom, 24)
                 .textSelection(.enabled)
         }

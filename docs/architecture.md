@@ -65,6 +65,7 @@ interests.md      Your stated interests, plain text, used for ranking (planned)
     "open_links": "app",
     "scrollbars": "scrolling",
     "fonts": { "reading": "Georgia" },
+    "weights": { "reading": -1, "title": 1, "ui": 0, "code": 0 },
     "themes": [
       {
         "id": "dusk",
@@ -79,7 +80,7 @@ interests.md      Your stated interests, plain text, used for ranking (planned)
 }
 ```
 
-A theme holds colors, fonts and radii. Light, Dark, Newsprint and Terminal are built in and read-only, so they always match the design. A theme in `themes` stores only what differs from its `base`, and removing a key restores the base's value. `ui.fonts` is a temporary layer on top of the active theme: it survives a restart, and clears when the active theme changes, including when following the system moves from day to night.
+A theme holds colors, fonts and radii. Light, Dark, Newsprint and Terminal are built in and read-only, so they always match the design. A theme in `themes` stores only what differs from its `base`, and removing a key restores the base's value. `ui.weights` sets how many steps lighter (negative) or bolder (positive), from -2 to 2, each kind of text is drawn: every weight the app asks for moves along the same ladder, so headings stay heavier than text. It belongs to the reader, not the theme. `ui.fonts` is a temporary layer on top of the active theme: it survives a restart, and clears when the active theme changes, including when following the system moves from day to night.
 
 Keeping raw bodies means a parser bug is fixable after the fact: fix it, reparse history. Retention is the last 20 distinct bodies per feed, counting bodies that failed to parse.
 

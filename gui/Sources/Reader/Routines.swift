@@ -157,10 +157,10 @@ struct RoutineEditor: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 if renaming {
-                    Field(placeholder: "Routine name", text: $routine.name, height: 44, font: .custom(titleFamily, fixedSize: 30).weight(.semibold), submit: { renaming = false }, autofocus: true)
+                    Field(placeholder: "Routine name", text: $routine.name, height: 44, font: .title(titleFamily, 30, .semibold), submit: { renaming = false }, autofocus: true)
                 } else {
                     Button { renaming = true } label: {
-                        Text(routine.name).font(.custom(titleFamily, fixedSize: 34).weight(.semibold)).tracking(-0.5)
+                        Text(routine.name).font(.title(titleFamily, 34, .semibold)).tracking(-0.5)
                     }
                     .buttonStyle(.bare)
                     .help("Rename")
@@ -360,10 +360,10 @@ struct RoutineEditor: View {
                 SectionLabel(text: "Dry run · last week")
                 if routine.id == nil {
                     Text("Save to see what this routine would have caught last week.")
-                        .font(.custom(family, fixedSize: 17)).foregroundStyle(p.inkSoft)
+                        .font(.reading(family, 17)).foregroundStyle(p.inkSoft)
                 } else if let dryRun {
                     Text(DryRunWords.summary(counts: dryRun.days.map(\.count)))
-                        .font(.custom(family, fixedSize: 19)).fixedSize(horizontal: false, vertical: true)
+                        .font(.reading(family, 19)).fixedSize(horizontal: false, vertical: true)
                     ForEach(dryRun.actions, id: \.self) { line in
                         Text(line).font(.ui(13)).foregroundStyle(p.muted)
                     }

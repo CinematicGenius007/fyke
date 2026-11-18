@@ -545,7 +545,7 @@ struct ConfirmationDialog: View {
     }
 
     private func title(_ text: String) -> some View {
-        Text(text).font(.custom(family, fixedSize: 24).weight(.semibold)).tracking(-0.24).padding(.bottom, 6)
+        Text(text).font(.title(family, 24, .semibold)).tracking(-0.24).padding(.bottom, 6)
     }
 
     private func count(_ number: Int64, _ noun: String) -> String {
@@ -635,7 +635,7 @@ struct ShortcutsPopup: View {
             p.scrim.ignoresSafeArea().onTapGesture { model.showingShortcuts = false }
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text("Shortcuts").font(.custom(family, fixedSize: 26).weight(.semibold)).tracking(-0.26)
+                    Text("Shortcuts").font(.title(family, 26, .semibold)).tracking(-0.26)
                     Spacer()
                     Text("Esc to close").font(.ui(13)).foregroundStyle(p.muted)
                 }
@@ -692,7 +692,7 @@ struct MoveDialog: View {
             p.scrim.ignoresSafeArea()
             VStack(alignment: .leading, spacing: 0) {
                 Text(move.phase == .asking || isFailed ? "Move your data?" : "Moving your data")
-                    .font(.custom(family, fixedSize: 22).weight(.semibold)).tracking(-0.22).padding(.bottom, 6)
+                    .font(.title(family, 22, .semibold)).tracking(-0.22).padding(.bottom, 6)
                 switch move.phase {
                 case .asking: asking
                 case .moving(let stage): Text(stage).font(.ui(14)).foregroundStyle(p.inkSoft)

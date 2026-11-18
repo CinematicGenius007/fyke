@@ -63,7 +63,7 @@ struct BriefBody: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(artifact.sections.enumerated()), id: \.offset) { _, section in
                 if let heading = section.heading, !heading.isEmpty {
-                    Text(heading).font(.custom(titleFamily, fixedSize: 22).weight(.semibold))
+                    Text(heading).font(.title(titleFamily, 22, .semibold))
                         .padding(.top, 12).padding(.bottom, 8)
                         .accessibilityAddTraits(.isHeader)
                 }
@@ -79,12 +79,12 @@ struct BriefBody: View {
                 ForEach(Array(words.enumerated()), id: \.offset) { position, word in
                     // The last word keeps no trailing space when numbers follow it.
                     let spaced = position == words.count - 1 && !claim.sources.isEmpty ? String(word) : word + " "
-                    Text(spaced).font(.custom(family, fixedSize: size)).foregroundStyle(p.ink)
+                    Text(spaced).font(.reading(family, size)).foregroundStyle(p.ink)
                 }
                 ForEach(Array(claim.sources.enumerated()), id: \.offset) { position, number in
                     CitationMark(number: number, last: position == claim.sources.count - 1, active: focus?.number == number, hover: { hover(number, $0, $1) }, pin: { pin(number, $0) })
                 }
-                if !claim.sources.isEmpty { Text(" ").font(.custom(family, fixedSize: size)) }
+                if !claim.sources.isEmpty { Text(" ").font(.reading(family, size)) }
                 let _ = index
             }
         }
@@ -154,11 +154,11 @@ struct CitationPopover: View {
         VStack(alignment: .leading, spacing: 0) {
             Text(["\(citation.number)", citation.feedTitle, citation.date.map { Dates.relative($0) }].compactMap { $0 }.joined(separator: " · "))
                 .font(.ui(12)).foregroundStyle(p.muted).padding(.bottom, 4)
-            Text(citation.title).font(.custom(titleFamily, fixedSize: 17).weight(.semibold))
+            Text(citation.title).font(.title(titleFamily, 17, .semibold))
                 .fixedSize(horizontal: false, vertical: true).padding(.bottom, 8)
             if let snippet = citation.snippet, !snippet.isEmpty {
                 Text("“\(snippet.trimmingCharacters(in: .whitespacesAndNewlines))”")
-                    .font(.custom(family, fixedSize: 14)).foregroundStyle(p.inkSoft).line(21, size: 14).lineLimit(4)
+                    .font(.reading(family, 14)).foregroundStyle(p.inkSoft).line(21, size: 14).lineLimit(4)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.leading, 12)
                     .overlay(alignment: .leading) { Rectangle().fill(p.unread).frame(width: 2) }
@@ -219,7 +219,7 @@ private struct SourceRow: View {
         Button(action: open) {
             HStack(alignment: .firstTextBaseline, spacing: 0) {
                 Text("\(citation.number)").font(.ui(13, .medium)).foregroundStyle(p.unread).frame(width: 28, alignment: .leading)
-                Text(citation.title).font(.custom(titleFamily, fixedSize: 17).weight(.medium))
+                Text(citation.title).font(.title(titleFamily, 17, .medium))
                     .foregroundStyle(citation.read ? p.read : p.unread).lineLimit(1)
                     .underline(hovering)
                 Spacer(minLength: 16)

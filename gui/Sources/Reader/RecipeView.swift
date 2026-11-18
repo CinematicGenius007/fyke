@@ -31,7 +31,7 @@ struct RecipeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if let recipe {
-                        Text(recipe.name).font(.custom(titleFamily, fixedSize: 34).weight(.semibold)).tracking(-0.5)
+                        Text(recipe.name).font(.title(titleFamily, 34, .semibold)).tracking(-0.5)
                             .accessibilityAddTraits(.isHeader)
                         Text(subtitle(recipe)).font(.ui(13)).foregroundStyle(p.muted).padding(.top, 8).padding(.bottom, 24)
                         switch tab {
@@ -256,7 +256,7 @@ private struct RecipeTrial: View {
                             primary: ("Try again", start))
             } else if let result {
                 GeneratedTag(text: "Trial · not saved").padding(.bottom, 12)
-                Text(result.title).font(.custom(Fonts.resolve(Prefs.shared.currentFonts.title ?? Tokens.fontReading), fixedSize: 28).weight(.semibold)).padding(.bottom, 16)
+                Text(result.title).font(.title(Fonts.resolve(Prefs.shared.currentFonts.title ?? Tokens.fontReading), 28, .semibold)).padding(.bottom, 16)
                 BriefBody(artifact: result, focus: nil)
             }
         }

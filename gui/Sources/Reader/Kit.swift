@@ -395,10 +395,10 @@ struct InlineState: View {
                     .foregroundStyle(tone == .empty ? p.muted : p.unread)
             }
             .padding(.bottom, 12)
-            Text(title).font(.custom(titleFamily, fixedSize: 26).weight(.semibold)).tracking(-0.26)
+            Text(title).font(.title(titleFamily, 26, .semibold)).tracking(-0.26)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 12)
-            Text(detail).font(.custom(family, fixedSize: 17)).foregroundStyle(p.inkSoft).line(26, size: 17)
+            Text(detail).font(.reading(family, 17)).foregroundStyle(p.inkSoft).line(26, size: 17)
                 .fixedSize(horizontal: false, vertical: true)
             if primary != nil || secondary != nil {
                 HStack(spacing: 8) {

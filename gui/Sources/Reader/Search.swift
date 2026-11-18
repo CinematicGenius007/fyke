@@ -269,7 +269,7 @@ private struct ReadingText: View {
 
     var body: some View {
         Text(text)
-            .font(.custom(family, fixedSize: size).weight(.medium))
+            .font(.title(family, size, .medium))
             .foregroundStyle(color ?? p.ink)
             .lineLimit(1)
     }

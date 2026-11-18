@@ -170,11 +170,23 @@ enum Fonts {
 
 extension Font {
     @MainActor static func ui(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        .custom(Fonts.resolve(Prefs.shared.currentFonts.ui ?? Tokens.fontUi, fallback: Tokens.fontUi), fixedSize: size).weight(weight)
+        .custom(Fonts.resolve(Prefs.shared.currentFonts.ui ?? Tokens.fontUi, fallback: Tokens.fontUi), fixedSize: size)
+            .weight(weight.shifted(Prefs.shared.ui.weights.ui))
+    }
+
+    /// Text in the reading font, at the weight the reader chose for it.
+    @MainActor static func reading(_ family: String, _ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        .custom(family, fixedSize: size).weight(weight.shifted(Prefs.shared.ui.weights.reading))
+    }
+
+    /// Headings, in the title font and its chosen weight.
+    @MainActor static func title(_ family: String, _ size: CGFloat, _ weight: Font.Weight = .semibold) -> Font {
+        .custom(family, fixedSize: size).weight(weight.shifted(Prefs.shared.ui.weights.title))
     }
 
     @MainActor static func code(_ size: CGFloat) -> Font {
         .custom(Fonts.resolve(Prefs.shared.currentFonts.code ?? Tokens.fontCode, fallback: Tokens.fontCode), fixedSize: size)
+            .weight(Font.Weight.regular.shifted(Prefs.shared.ui.weights.code))
     }
 }
 
@@ -182,5 +194,16 @@ extension Font {
 extension View {
     func line(_ height: CGFloat, size: CGFloat) -> some View {
         lineSpacing(max(0, height - size * 1.2))
+    }
+}
+
+extension Font.Weight {
+    private static let ladder: [Font.Weight] = [.ultraLight, .thin, .light, .regular, .medium, .semibold, .bold, .heavy, .black]
+
+    /// This weight moved by `steps` on the ladder from light to black, so a heading that
+    /// is semibold stays heavier than the text under it whichever way the reader moves it.
+    func shifted(_ steps: Int) -> Font.Weight {
+        guard steps != 0, let at = Font.Weight.ladder.firstIndex(of: self) else { return self }
+        return Font.Weight.ladder[min(max(at + steps, 0), Font.Weight.ladder.count - 1)]
     }
 }
