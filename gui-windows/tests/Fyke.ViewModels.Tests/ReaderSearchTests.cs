@@ -5,8 +5,10 @@ namespace Fyke.ViewModels.Tests;
 
 public sealed class ReaderSearchTests
 {
-    [Fact]
-    public async Task SendsTheUnreadFilterAndKeepsReturnedOrderAndMetadata()
+    [Theory]
+    [InlineData(100)]
+    [InlineData(4)]
+    public async Task SendsTheLimitAndUnreadFilterAndKeepsReturnedOrderAndMetadata(int limit)
     {
         using var response = JsonDocument.Parse("""
             {"items":[
@@ -21,13 +23,13 @@ public sealed class ReaderSearchTests
                 Assert.Equal("entries.search", method);
                 var request = JsonSerializer.SerializeToElement(parameters);
                 Assert.Equal("zig", request.GetProperty("Query").GetString());
-                Assert.Equal(100, request.GetProperty("Limit").GetInt32());
+                Assert.Equal(limit, request.GetProperty("Limit").GetInt32());
                 Assert.True(request.GetProperty("UnreadOnly").GetBoolean());
                 return response.RootElement;
             },
         };
 
-        var results = await new ReaderData(client).SearchAsync("  zig  ", true, CancellationToken.None);
+        var results = await new ReaderData(client).SearchAsync("  zig  ", true, CancellationToken.None, limit);
 
         Assert.Equal([2L, 1L], results.Select(hit => hit.Article.Id));
         Assert.Equal("Second, unread", results[0].AccessibleName);

@@ -11,7 +11,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Input;
-using VirtualKey = Windows.System.VirtualKey;
 
 namespace Fyke.App;
 
@@ -19,7 +18,6 @@ public sealed partial class MainWindow
 {
     private static readonly TimeSpan SearchTypingPause = TimeSpan.FromMilliseconds(150);
     private CancellationTokenSource? searchRequest;
-    private Control? focusBeforeSearch;
     private bool IsSearchOpen => SearchOverlay?.Visibility == Visibility.Visible;
 
     private void InitializeSearch()
@@ -48,13 +46,14 @@ public sealed partial class MainWindow
 
         if (!IsSearchOpen)
         {
-            focusBeforeSearch = FocusManager.GetFocusedElement(Root.XamlRoot) as Control;
-            ReaderShell.IsHitTestVisible = false;
+            ClosePalette();
             ShowSearchMessage("Find words in titles, article text, and feed names.");
-            SearchOverlay.Visibility = Visibility.Visible;
+            ShowReaderOverlay(SearchOverlay, SearchQuery);
         }
-
-        SearchQuery.Focus(FocusState.Programmatic);
+        else
+        {
+            SearchQuery.Focus(FocusState.Programmatic);
+        }
     }
 
     private void SearchBackdropPressed(object sender, PointerRoutedEventArgs args)
@@ -73,16 +72,9 @@ public sealed partial class MainWindow
         }
 
         searchRequest?.Cancel();
-        SearchOverlay.Visibility = Visibility.Collapsed;
+        HideReaderOverlay(SearchOverlay, SearchButton, restoreFocus);
         SearchResults.ItemsSource = null;
         SearchQuery.Text = string.Empty;
-        ReaderShell.IsHitTestVisible = true;
-        if (restoreFocus && focusBeforeSearch?.Focus(FocusState.Programmatic) != true)
-        {
-            SearchButton.Focus(FocusState.Programmatic);
-        }
-
-        focusBeforeSearch = null;
     }
 
     private void SearchQueryChanged(object sender, TextChangedEventArgs args) => _ = RunSearchAsync(debounce: true);
@@ -170,34 +162,8 @@ public sealed partial class MainWindow
         RetrySearch.Visibility = retry ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void SearchKeyDown(object sender, KeyRoutedEventArgs args)
-    {
-        if (args.Key == VirtualKey.Escape)
-        {
-            args.Handled = true;
-            CloseSearch();
-            return;
-        }
-
-        if (SearchResults.Items.Count == 0)
-        {
-            return;
-        }
-
-        if (SearchQuery.FocusState != FocusState.Unfocused && args.Key is VirtualKey.Up or VirtualKey.Down)
-        {
-            args.Handled = true;
-            var step = args.Key == VirtualKey.Up ? -1 : 1;
-            SearchResults.SelectedIndex = Math.Clamp(SearchResults.SelectedIndex + step, 0, SearchResults.Items.Count - 1);
-            SearchResults.ScrollIntoView(SearchResults.SelectedItem);
-        }
-        else if (args.Key == VirtualKey.Enter && SearchResults.SelectedItem is SearchHit hit
-            && FocusManager.GetFocusedElement(Root.XamlRoot) is TextBox or ListViewItem or ListView)
-        {
-            args.Handled = true;
-            OpenSearchResult(hit);
-        }
-    }
+    private void SearchKeyDown(object sender, KeyRoutedEventArgs args) =>
+        HandleOverlayKeys(args, SearchQuery, SearchResults, () => CloseSearch(), item => OpenSearchResult((SearchHit)item));
 
     private void SearchResultClicked(object sender, RoutedEventArgs args)
     {
@@ -210,7 +176,12 @@ public sealed partial class MainWindow
     private void OpenSearchResult(SearchHit hit)
     {
         CloseSearch();
-        var row = articles.FirstOrDefault(article => article.Id == hit.Article.Id);
+        OpenResultArticle(hit.Article);
+    }
+
+    private void OpenResultArticle(TimelineArticle article)
+    {
+        var row = articles.FirstOrDefault(candidate => candidate.Id == article.Id);
         applyingTimeline = true;
         try
         {
@@ -226,10 +197,10 @@ public sealed partial class MainWindow
             Timeline.ScrollIntoView(row);
         }
 
-        if (openArticle?.Id != hit.Article.Id || RetryArticle.Visibility == Visibility.Visible)
+        if (openArticle?.Id != article.Id || RetryArticle.Visibility == Visibility.Visible)
         {
             articleInterrupted = false;
-            _ = OpenArticleAsync(row ?? hit.Article);
+            _ = OpenArticleAsync(row ?? article);
         }
     }
 

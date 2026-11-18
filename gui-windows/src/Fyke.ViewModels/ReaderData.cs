@@ -148,14 +148,15 @@ public sealed class ReaderData(IDaemonClient client)
         return previous.Where(entry => !entry.Read).Select(entry => entry.Id).ToArray();
     }
 
-    public async Task<IReadOnlyList<SearchHit>> SearchAsync(string query, bool unreadOnly, CancellationToken ct)
+    public async Task<IReadOnlyList<SearchHit>> SearchAsync(string query, bool unreadOnly, CancellationToken ct,
+        int limit = SearchLimit)
     {
         if (string.IsNullOrWhiteSpace(query))
         {
             return [];
         }
 
-        var parameters = new { Query = query.Trim(), Limit = SearchLimit, UnreadOnly = unreadOnly };
+        var parameters = new { Query = query.Trim(), Limit = Math.Clamp(limit, 1, SearchLimit), UnreadOnly = unreadOnly };
         var result = Read<CatalogItems<Entry>>(
             await client.CallAsync("entries.search", parameters, ct).ConfigureAwait(false));
         if (result.Items is null)

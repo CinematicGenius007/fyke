@@ -23,7 +23,7 @@ public sealed partial class MainWindow
 
     private void ArticleMarkShortcut(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        if (!IsSearchOpen && ToggleArticleMark(sender.Key))
+        if (!IsReaderOverlayOpen && ToggleArticleMark(sender.Key))
         {
             args.Handled = true;
         }

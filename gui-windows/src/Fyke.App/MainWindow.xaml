@@ -26,6 +26,9 @@
             <Grid.KeyboardAccelerators>
                 <KeyboardAccelerator Key="C" Invoked="DiscussionShortcut" />
                 <KeyboardAccelerator Key="F" Modifiers="Control" Invoked="SearchShortcut" />
+                <KeyboardAccelerator Key="K" Modifiers="Control" Invoked="PaletteShortcut" />
+                <KeyboardAccelerator Key="F6" Invoked="PaneFocusShortcut" />
+                <KeyboardAccelerator Key="F6" Modifiers="Shift" Invoked="PaneFocusShortcut" />
                 <KeyboardAccelerator Key="M" Invoked="ArticleMarkShortcut" />
                 <KeyboardAccelerator Key="S" Invoked="ArticleMarkShortcut" />
                 <KeyboardAccelerator Key="K" Modifiers="Control,Shift" Invoked="MarkAllReadShortcut" />
@@ -38,14 +41,26 @@
                 <ColumnDefinition Width="8" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <Grid Padding="12,16,12,8">
+            <Grid x:Name="SidebarPane" Padding="12,16,12,8">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
-                <TextBlock Text="LIBRARY" Margin="10,0,0,8" FontSize="11" FontFamily="{StaticResource FontUi}"
-                           FontWeight="{Binding SectionLabel, Source={StaticResource ReaderFonts}}"
-                           Foreground="{ThemeResource MutedBrush}" />
+                <Grid Margin="10,0,0,8" ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="LIBRARY" FontSize="11" FontFamily="{StaticResource FontUi}" VerticalAlignment="Center"
+                               FontWeight="{Binding SectionLabel, Source={StaticResource ReaderFonts}}"
+                               Foreground="{ThemeResource MutedBrush}" />
+                    <Button Grid.Column="1" x:Name="PaletteButton" Width="32" Height="32" Padding="0"
+                            Click="PaletteClicked" CornerRadius="{StaticResource RadiusControl}"
+                            AutomationProperties.AutomationId="PaletteButton" AutomationProperties.Name="Command palette"
+                            AutomationProperties.AcceleratorKey="Ctrl+K" ToolTipService.ToolTip="Command palette (Ctrl+K)">
+                        <FontIcon Glyph="&#xE765;" FontSize="14" />
+                    </Button>
+                </Grid>
                 <ListView Grid.Row="1" x:Name="Destinations" SelectionChanged="DestinationChanged"
                           AutomationProperties.Name="Reading destinations" AutomationProperties.AutomationId="ReaderDestinations">
                     <ListView.ItemsPanel>
@@ -91,7 +106,7 @@
                 </ListView>
             </Grid>
             <Border Grid.Column="1" Background="{ThemeResource HairlineBrush}" />
-            <Grid Grid.Column="2" Background="{ThemeResource GroundBrush}">
+            <Grid Grid.Column="2" x:Name="TimelinePane" Background="{ThemeResource GroundBrush}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -170,7 +185,7 @@
                     </ControlTemplate>
                 </primitives:Thumb.Template>
             </primitives:Thumb>
-            <Grid Grid.Column="4" Background="{ThemeResource GroundBrush}">
+            <Grid Grid.Column="4" x:Name="ArticlePane" Background="{ThemeResource GroundBrush}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -197,7 +212,8 @@
                         </Button>
                     </StackPanel>
                 </Grid>
-                <ScrollViewer x:Name="ArticleScroller" Grid.Row="1"
+                <ScrollViewer x:Name="ArticleScroller" Grid.Row="1" IsTabStop="True" UseSystemFocusVisuals="True"
+                                  AutomationProperties.Name="Article reader"
                               HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="24,20" Spacing="12" MaxWidth="640" HorizontalAlignment="Stretch"
                                 AutomationProperties.AutomationId="ArticlePane">
@@ -371,6 +387,74 @@
                                 FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
                                 CornerRadius="{StaticResource RadiusControl}" AutomationProperties.AcceleratorKey="Esc" />
                     </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+        <Grid Grid.RowSpan="2" x:Name="PaletteOverlay" Visibility="Collapsed" TabFocusNavigation="Cycle">
+            <Border Background="{ThemeResource ScrimBrush}" PointerPressed="PaletteBackdropPressed" />
+            <Border MaxWidth="620" Margin="16,120,16,16" VerticalAlignment="Top"
+                    CornerRadius="{StaticResource RadiusSheet}" BorderThickness="1"
+                    BorderBrush="{ThemeResource HairlineBrush}" Background="{ThemeResource SurfaceBrush}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Grid Margin="20,12" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="PaletteQuery" PlaceholderText="Go to, do, or find…" FontSize="18"
+                                 FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                 TextChanged="PaletteQueryChanged" AutomationProperties.Name="Command palette"
+                                 AutomationProperties.AutomationId="PaletteQuery" />
+                        <Button Grid.Column="1" Content="Close" Height="32" VerticalAlignment="Center" Click="ClosePaletteClicked"
+                                FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                CornerRadius="{StaticResource RadiusControl}" AutomationProperties.AcceleratorKey="Esc" />
+                    </Grid>
+                    <Border Grid.Row="1" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource HairlineBrush}">
+                        <Grid>
+                            <TextBlock x:Name="PaletteStatus" Margin="20,16" TextWrapping="Wrap" FontSize="14"
+                                       FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                       Foreground="{ThemeResource InkSoftBrush}" AutomationProperties.LiveSetting="Polite" />
+                            <ListView x:Name="PaletteResults" Margin="8" MaxHeight="420"
+                                      AutomationProperties.Name="Commands and articles" AutomationProperties.AutomationId="PaletteResults">
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="Padding" Value="0" />
+                                        <Setter Property="MinHeight" Value="36" />
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Height="36" Padding="12,4" HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Stretch" Background="Transparent" BorderThickness="0"
+                                                CornerRadius="{StaticResource RadiusControl}" Click="PaletteResultClicked"
+                                                AutomationProperties.Name="{Binding Title}" AutomationProperties.AcceleratorKey="{Binding Shortcut}">
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" MaxWidth="140" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                                           FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                                           Foreground="{ThemeResource InkBrush}" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Detail}" TextTrimming="CharacterEllipsis"
+                                                           FontSize="12" VerticalAlignment="Center" FontFamily="{StaticResource FontUi}"
+                                                           FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}" Foreground="{ThemeResource MutedBrush}" />
+                                                <TextBlock Grid.Column="2" Text="{Binding Shortcut}" FontSize="12" VerticalAlignment="Center"
+                                                           FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                                           Foreground="{ThemeResource MutedBrush}" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Grid>
+                    </Border>
                 </Grid>
             </Border>
         </Grid>

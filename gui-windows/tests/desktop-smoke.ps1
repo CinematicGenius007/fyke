@@ -314,9 +314,49 @@ try {
         throw 'Undo changed an article outside the bulk read action or failed to restore the affected article.'
     }
 
+    $collapse = Wait-For 'the folder collapse control before palette navigation' { Find-ByName $items 'Collapse Fixture folder' }
+    $collapse.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'the palette destination to be hidden in the sidebar' {
+        if (!(Find-ByName $items 'Desktop fixture') -and (Find-ByName $items 'Expand Fixture folder')) { $true }
+    } | Out-Null
+
+    function Invoke-PaletteResult([string]$query, [string]$title) {
+        $openPalette = Wait-ForArticleAction 'PaletteButton' 'Command palette'
+        $openPalette.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+        $paletteQueryId = [Windows.Automation.PropertyCondition]::new(
+            [Windows.Automation.AutomationElement]::AutomationIdProperty, 'PaletteQuery')
+        $field = Wait-For 'the command palette field' {
+            $element = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $paletteQueryId)
+            if ($element -and !$element.Current.IsOffscreen) { $element }
+        }
+        $field.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($query)
+        $paletteResultsId = [Windows.Automation.PropertyCondition]::new(
+            [Windows.Automation.AutomationElement]::AutomationIdProperty, 'PaletteResults')
+        $name = [Windows.Automation.PropertyCondition]::new(
+            [Windows.Automation.AutomationElement]::NameProperty, $title)
+        $resultButton = [Windows.Automation.AndCondition]::new($name, $buttonType)
+        $result = Wait-For "the $title palette result" {
+            $results = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $paletteResultsId)
+            if ($results) { $results.FindFirst([Windows.Automation.TreeScope]::Descendants, $resultButton) }
+        }
+        $result.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    }
+
+    Invoke-PaletteResult 'dsf' 'Desktop fixture'
+    Wait-For 'the hidden feed destination to open from the palette' {
+        $heading = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $headingId)
+        if ($heading -and $heading.Current.Name -eq 'Desktop fixture') { $true }
+    } | Out-Null
+    if (!(Find-ByName $items 'Expand Fixture folder')) { throw 'The palette expanded the folder.' }
+
+    Invoke-PaletteResult 'Live reader' 'Live reader update'
+    Wait-For 'the article opened directly from the palette' {
+        Find-ByName $root 'Arrives while the first article is open.'
+    } | Out-Null
+
     & $daemonPath status
     if ($LASTEXITCODE -ne 0) { throw 'The companion daemon did not answer status' }
-    Write-Host 'WinUI recovered the daemon and verified reading, discussion, search, article marks, and bulk undo.'
+    Write-Host 'WinUI verified daemon recovery, reading, discussion, search, article marks, bulk undo, and the palette.'
 } catch {
     Write-Host $_.ScriptStackTrace
     throw

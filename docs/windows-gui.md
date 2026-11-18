@@ -61,7 +61,7 @@ The structure and measurements follow the design rules; the chrome is Windows:
 - The window uses Mica and an extended title bar; the sidebar sits on Mica and the list and reader on the ground color.
 - Panes are 232 / 368 / flexible, and the reading column is 640.
 - Sidebar rows are 32 high with 14 px Segoe Fluent Icons; indent is `10 + 22 × depth`.
-- Ctrl+F opens search, Ctrl+Shift+K marks the current scope read, and Ctrl+Z undoes the last bulk mark. Ctrl+K for the palette and Ctrl+S to save a view are planned.
+- Ctrl+F opens search, Ctrl+K opens the command palette, Ctrl+Shift+K marks the current scope read, and Ctrl+Z undoes the last bulk mark. Ctrl+S to save a view is planned.
 - Focus uses native controls. The system high contrast resource mapping and visual acceptance checks are planned.
 - Planned popovers use native flyouts with the shared popover treatment.
 
@@ -84,6 +84,10 @@ Opening an article marks it read after its body loads. The reader toolbar and th
 ## Search
 
 The timeline search button and Ctrl+F open the search panel. It uses `entries.search` for titles, body text, and feed names, shows the newest 100 matches with highlighted snippets, and offers an unread-only filter. Up and Down move between results from the search field, Enter opens the selected article, and Escape closes the panel and returns focus. Opening a match leaves the current destination selected, including when the result is outside it. Editing the query, closing search, or disconnecting cancels any pending search. Saving the query as a view is planned.
+
+## Command palette and focus
+
+Ctrl+K or the command button in the sidebar opens the palette. It matches typed letters against destinations and available reader actions, with up to four article matches through `entries.search`. Feed and folder destinations remain searchable when hidden by a collapsed parent. Search and the palette share Up, Down, Enter, Escape, and focus restoration. F6 and Shift+F6 move forward and backward between the sidebar, timeline, and article reader.
 
 ## Background running and notifications
 
@@ -144,7 +148,7 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W1c.1 | Search, unread filtering, and opening a result without leaving the current destination | API and snippet tests, Windows smoke test for filtering and opening a result, manual keyboard and focus checks |
 | W1c.2 | Read and star marks, including mark-on-open | API tests for preserving the untouched flag, plus Windows smoke coverage for marking, filtering, and retaining the open article |
 | W1c.3 | Bulk mark-as-read and Undo | View-model tests for scope paging and interrupted batches, and Windows smoke coverage for restoring the affected unread article |
-| W1c.4 | Command palette and reader focus | Same task outcomes as macOS, including reconnect and missing selection |
+| W1c.4 | Command palette and reader focus | Matching tests, Windows smoke coverage for navigating to a hidden feed and opening an article, manual keyboard and focus checks |
 | W2 | Subscription discovery, OPML, settings, weight editing, persistent folder disclosure, themes, agent setup, storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
 | W3 | Saved views, Today, recipes, briefs, Ask, catch-up, routines, Activity, and citation navigation | One module per flow with fixture-driven API and desktop checks, including failed or partial work |
 | W4 | Restart supervision, notifications and activation | Close the window, crash and restart the daemon, sign out/in, deny notification access, reopen the right result |

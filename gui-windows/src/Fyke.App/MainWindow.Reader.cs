@@ -59,6 +59,7 @@ public sealed partial class MainWindow
         articleRenderer = new ArticleBlockRenderer(reading, ui, code, readerFonts, linkAction: DiscussionLinkAction);
         InitializeDiscussion(reading, ui, code);
         InitializeSearch();
+        InitializePalette();
         InitializeBulkMarks();
         ShowArticle(null);
         UpdateMarkControls();
@@ -83,6 +84,7 @@ public sealed partial class MainWindow
         else
         {
             CloseSearch(restoreFocus: false);
+            ClosePalette(restoreFocus: false);
             HideBulkNotice();
             readerReloadTimer.Stop();
             readerRequest?.Cancel();
@@ -200,7 +202,18 @@ public sealed partial class MainWindow
             return;
         }
 
+        NavigateToDestination(selected);
+    }
+
+    private void NavigateToDestination(ReaderDestination selected)
+    {
+        if (destination is { } current && current.Scope == selected.Scope && current.Id == selected.Id)
+        {
+            return;
+        }
+
         destination = selected;
+        ApplyVisibleDestinations();
         UpdateBulkButton();
         applyingTimeline = true;
         try

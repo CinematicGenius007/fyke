@@ -96,12 +96,22 @@ public sealed partial class MainWindow
 
     private async void DiscussionShortcut(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        if (!readerConnected || IsSearchOpen || discussionLink is not { } link)
+        if (!readerConnected || IsReaderOverlayOpen || discussionLink is null)
         {
             return;
         }
 
         args.Handled = true;
+        await OpenCurrentDiscussionAsync();
+    }
+
+    private async Task OpenCurrentDiscussionAsync()
+    {
+        if (!readerConnected || discussionLink is not { } link)
+        {
+            return;
+        }
+
         if (link.HackerNewsItem is not null)
         {
             OpenDiscussionHere();
