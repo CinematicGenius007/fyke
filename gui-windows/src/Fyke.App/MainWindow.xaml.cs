@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Fyke.Client;
@@ -12,7 +13,11 @@ namespace Fyke.App;
 
 public sealed partial class MainWindow : Window
 {
-    private readonly IDaemonClient client = new DaemonClient(new DaemonClientOptions());
+    private readonly IDaemonClient client = new DaemonClient(new DaemonClientOptions
+    {
+        ReplaceOlderDaemon = string.IsNullOrEmpty(Environment.GetEnvironmentVariable("FYKE_BIN"))
+            && File.Exists(Path.Combine(AppContext.BaseDirectory, "fyke.exe")),
+    });
     private readonly CancellationTokenSource lifetime = new();
     private readonly Task connection;
 

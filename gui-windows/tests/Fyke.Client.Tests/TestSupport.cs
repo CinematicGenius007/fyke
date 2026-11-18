@@ -31,9 +31,10 @@ internal static class TestSupport
     public static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
 
     /// <summary>Options for a client of <paramref name="fake"/>, with waits short enough for a test.</summary>
-    public static DaemonClientOptions Options(FakeDaemon fake, IDaemonProcessStarter? starter = null) => new()
+    public static DaemonClientOptions Options(FakeDaemon fake, IDaemonProcessStarter? starter = null, bool replaceOlder = false) => new()
     {
         DataFolder = fake.Folder,
+        ReplaceOlderDaemon = replaceOlder,
         SocketPath = fake.SocketPath,
         ProcessStarter = starter ?? new RecordingStarter(),
         RetryDelay = TimeSpan.FromMilliseconds(10),

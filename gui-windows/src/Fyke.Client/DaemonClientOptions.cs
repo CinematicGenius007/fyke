@@ -15,6 +15,9 @@ public sealed class DaemonClientOptions
     /// <summary>The oldest <c>api_version</c> the app can use. <c>api_version</c> in src/ops.zig.</summary>
     public long RequiredApiVersion { get; init; } = DaemonClient.RequiredApiVersion;
 
+    /// <summary>Allow one graceful replacement of an older daemon on initial connection.</summary>
+    public bool ReplaceOlderDaemon { get; init; }
+
     /// <summary>How long an ordinary call may take.</summary>
     public TimeSpan CallTimeout { get; init; } = TimeSpan.FromSeconds(35);
 

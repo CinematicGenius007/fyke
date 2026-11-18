@@ -404,6 +404,42 @@ public sealed class DaemonClientTests
 
     // ----- version -----
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task BundledDaemonReplacementRequestsShutdownOnlyOnce(bool compatibleReplacement)
+    {
+        var oldVersion = DaemonClient.RequiredApiVersion - 1;
+        await using var fake = new FakeDaemon { ApiVersion = oldVersion };
+        var stops = 0;
+        fake.On("daemon.stop", _ =>
+        {
+            Interlocked.Increment(ref stops);
+            fake.Kill();
+            return new { };
+        });
+        fake.Start();
+        var starter = new RecordingStarter(_ =>
+        {
+            fake.ApiVersion = compatibleReplacement ? DaemonClient.RequiredApiVersion : oldVersion;
+            fake.Start();
+        });
+        await using var client = new DaemonClient(TestSupport.Options(fake, starter, replaceOlder: true));
+
+        if (compatibleReplacement)
+        {
+            await client.StartAsync(CancellationToken.None);
+            Assert.Equal(ConnectionState.Connected, client.State);
+        }
+        else
+        {
+            await Assert.ThrowsAsync<DaemonTooOldException>(() => client.StartAsync(CancellationToken.None));
+        }
+
+        Assert.Equal(1, stops);
+        Assert.Equal(1, starter.Calls);
+    }
+
     [Fact]
     public async Task ADaemonOlderThanTheAppIsRefusedWithoutRetrying()
     {

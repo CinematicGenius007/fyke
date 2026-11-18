@@ -96,7 +96,7 @@ public sealed class DaemonClient : IDaemonClient
             }
 
             SetState(ConnectionState.Connecting, null);
-            await ConnectAsync(_options.StartupTimeout, linked.Token).ConfigureAwait(false);
+            await ConnectAsync(_options.StartupTimeout, linked.Token, _options.ReplaceOlderDaemon).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -526,7 +526,7 @@ public sealed class DaemonClient : IDaemonClient
     /// Opens a connection, starting the daemon when the socket does not answer, and checks the
     /// daemon's version. Retries with backoff until <paramref name="budget"/> runs out. Must hold the gate.
     /// </summary>
-    private async Task ConnectAsync(TimeSpan budget, CancellationToken ct)
+    private async Task ConnectAsync(TimeSpan budget, CancellationToken ct, bool replaceOlder = false)
     {
         _dataFolder = _options.DataFolder ?? FykeHome.Discover();
         _socketPath = _options.SocketPath ?? FykeHome.SocketPath(_dataFolder);
@@ -535,6 +535,7 @@ public sealed class DaemonClient : IDaemonClient
         var delay = _options.RetryDelay;
         TimeSpan? lastStart = null;
         var detail = string.Empty;
+        DaemonTooOldException? replacement = null;
         while (true)
         {
             ct.ThrowIfCancellationRequested();
@@ -550,6 +551,40 @@ public sealed class DaemonClient : IDaemonClient
                 ReturnIdle(connection);
                 SetState(ConnectionState.Connected, null);
                 return;
+            }
+            catch (DaemonTooOldException e) when (replaceOlder && lastStart is null)
+            {
+                var refused = false;
+                using (connection)
+                {
+                    var remaining = budget - clock.Elapsed;
+                    if (replacement is null && remaining > TimeSpan.Zero)
+                    {
+                        replacement = e;
+                        try
+                        {
+                            var request = BuildRequest("daemon.stop", null);
+                            await ExchangeAsync(connection!, request, "daemon.stop", remaining, ct).ConfigureAwait(false);
+                        }
+                        catch (Exception failure) when (failure is DaemonRpcException or DaemonProtocolException or TimeoutException)
+                        {
+                            refused = true;
+                        }
+                        catch (Exception failure) when (IsTransportFailure(failure))
+                        {
+                            // Shutdown can close the socket before the reply arrives.
+                        }
+                    }
+                }
+
+                if (refused || clock.Elapsed + delay >= budget)
+                {
+                    throw;
+                }
+
+                await Task.Delay(delay, ct).ConfigureAwait(false);
+                delay = TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, _options.MaxRetryDelay.Ticks));
+                continue;
             }
             catch (Exception e) when (IsTransportFailure(e) || e is TimeoutException or DaemonProtocolException)
             {
@@ -577,6 +612,11 @@ public sealed class DaemonClient : IDaemonClient
 
             if (clock.Elapsed + delay >= budget)
             {
+                if (replacement is not null)
+                {
+                    throw replacement;
+                }
+
                 throw new DaemonUnavailableException(FailureReason.NotResponding, $"The daemon did not answer within {budget.TotalSeconds:0.#} seconds. {detail}".TrimEnd());
             }
 

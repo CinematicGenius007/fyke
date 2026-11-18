@@ -46,7 +46,7 @@ Only `Fyke.App` depends on Windows. Everything a test can reach without a window
 - **Lost replies.** The client reconnects and only replays operations explicitly known to read. For other operations it reports an unknown outcome so the caller can refresh before retrying.
 - **Limits.** Lines over 16 MiB are refused; every call takes a `CancellationToken` and a timeout.
 - **Starting the daemon.** If the socket does not answer, the app starts `fyke.exe daemon` from its own folder (or `PATH`) without a console window and retries with backoff. The daemon's lock keeps a second copy from starting.
-- **Versions.** The app reads `api_version` from `stats.get` and shows an inline state if it is older than the app needs.
+- **Versions.** The app reads `api_version` from `stats.get`. On initial connection with its bundled executable, it requests one graceful shutdown of an older daemon and checks the replacement before using it. An incompatible daemon that remains after that attempt produces an inline update state. Automatic reconnects and custom executable configurations leave version replacement to the user.
 - **Reconnects.** Events resume from the last `seq`. The daemon sends no gap marker, so the client detects one itself (event numbers run consecutively; the daemon also prunes events older than 7 days) and yields a `DaemonEvent` of type `events.gap`, on which the app reloads its lists.
 - **Folder agreement.** The app starts `fyke daemon --home <folder>`, so the app and daemon always use the same folder, including after a data move.
 
@@ -117,7 +117,8 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W0b | Launch WinUI and recover from a missing companion through Retry | Windows CI desktop smoke test with a real daemon and isolated home |
 | W0c | Use the window’s event subscription to recover from a live daemon disconnect | Windows UI Automation confirms the app starts a replacement daemon after a crash |
 | W0d | Move data to a path with spaces and non-ASCII characters and reopen it through Windows profile discovery | The C# client reads a saved view written before the move, and the old folder retains only the location pointer |
-| W0e | Check an older daemon and access from another Windows account | Repeatable compatibility and installation-path checks |
+| W0e | Replace an older daemon at startup with the bundled executable | Client tests verify one shutdown request, a compatible restart, and refusal of an incompatible replacement |
+| W0f | Check socket and data access from another Windows account | Verify a standard user cannot read or write another user’s Fyke data or use their socket |
 | W1a | Reader shell, sidebar, folders and resizable panes | Design measurements and snapshots at narrow and wide widths, light/dark/high contrast |
 | W1b | Virtualized timeline, native block rendering, fonts and weights, image loading, article links and discussion | Shared content fixtures, keyboard/Narrator checks, DPI and scrolling measurements |
 | W1c | Search, marks, undo, command palette and focus | Same task outcomes as macOS, including reconnect and missing selection |
