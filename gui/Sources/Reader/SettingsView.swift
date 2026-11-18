@@ -365,10 +365,10 @@ private struct ReadingPane: View {
                 }
             }
             SettingsSection(title: "Fonts", detail: "Each theme keeps its own. A change here applies to the theme in use.") {
-                fontRow("Reading", \.reading)
-                fontRow("Titles", \.title)
-                fontRow("App", \.ui)
-                fontRow("Code", \.code)
+                fontRow("Reading", \.reading, \.reading)
+                fontRow("Titles", \.title, \.title)
+                fontRow("App", \.ui, \.ui)
+                fontRow("Code", \.code, \.code)
                 SettingRow(title: "Colors, fonts and corners", detail: "Every token of every theme", last: true) {
                     Button("Edit Tokens…") { model.settingsTab = .Tokens }.buttonStyle(ActionStyle(kind: .secondary))
                 }
@@ -389,8 +389,20 @@ private struct ReadingPane: View {
         }
     }
 
-    private func fontRow(_ label: String, _ slot: WritableKeyPath<FontTokens, String?>) -> some View {
-        SettingRow(title: label) { FontField(slot: slot) }
+    private func fontRow(_ label: String, _ slot: WritableKeyPath<FontTokens, String?>, _ weight: WritableKeyPath<FontWeights, Int>) -> some View {
+        SettingRow(title: label) {
+            HStack(spacing: 8) {
+                FontField(slot: slot)
+                SelectBox(selection: Binding(get: { Prefs.shared.ui.weights[keyPath: weight] }, set: { Prefs.shared.ui.weights[keyPath: weight] = $0 }), options: [
+                    SelectOption(value: -2, label: "Much lighter"),
+                    SelectOption(value: -1, label: "Lighter"),
+                    SelectOption(value: 0, label: "Normal"),
+                    SelectOption(value: 1, label: "Bolder"),
+                    SelectOption(value: 2, label: "Much bolder"),
+                ], width: 132, height: Metrics.control)
+                .accessibilityLabel("\(label) weight")
+            }
+        }
     }
 
     private func tile(_ id: String) -> some View {

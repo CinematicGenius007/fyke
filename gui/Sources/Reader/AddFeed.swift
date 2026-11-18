@@ -141,7 +141,7 @@ private struct SheetBody: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Add a feed")
-                .font(.custom(titleFamily, fixedSize: 26).weight(.semibold)).tracking(-0.26)
+                .font(.title(titleFamily, 26, .semibold)).tracking(-0.26)
                 .padding(.bottom, 16)
             TextField("", text: $address)
                 .textFieldStyle(.plain).font(.ui(15)).focused($focused)
@@ -208,7 +208,7 @@ private struct SheetBody: View {
             Text(candidate.title ?? "Untitled feed").font(.ui(16, .semibold))
             Text(candidate.url).font(.ui(13)).foregroundStyle(p.muted).padding(.bottom, 12).lineLimit(1)
             ForEach(candidate.latest, id: \.self) { title in
-                Text(title).font(.custom(family, fixedSize: 17)).foregroundStyle(p.unread).lineLimit(1).padding(.vertical, 2)
+                Text(title).font(.reading(family, 17)).foregroundStyle(p.unread).lineLimit(1).padding(.vertical, 2)
             }
             VStack(spacing: 10) {
                 row("Name") {

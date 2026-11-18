@@ -260,6 +260,30 @@ def settings_route():
     play("another destination closes Settings", "cmd+, wait cmd+2 wait n wait", ["Needle one"])
 
 
+@check("font-weight", tags=["settings", "fonts"])
+def font_weight():
+    """Weights saved in the config are read at launch and kept, and the Reading tab with
+    its weight menus draws."""
+    config_path = pathlib.Path(home) / "config.json"
+    saved = json.loads(config_path.read_text()) if config_path.exists() else {}
+    ui = saved.setdefault("ui", {})
+    ui["weights"] = {"reading": -1, "title": 1, "ui": 0, "code": 0}
+    config_path.write_text(json.dumps(saved))
+    target = snapshots / "settings-reading-weights.png"
+    target.unlink(missing_ok=True)
+    launch({"FYKE_SCREEN": "settings", "FYKE_TAB": "Reading", "FYKE_KEYS": "wait wait", "FYKE_SNAPSHOT": str(target), "FYKE_SNAPSHOT_DELAY": "1"},
+           "-theme", "light", "-followSystem", "NO")
+    kept = json.loads(config_path.read_text()).get("ui", {}).get("weights")
+    if kept != {"reading": -1, "title": 1, "ui": 0, "code": 0}:
+        fail("font weights", f"weights after launch: {kept}")
+    ok("saved font weights survive a launch")
+    if not target.exists() or target.stat().st_size < 10000:
+        fail("snapshot settings reading", "no picture")
+    ok("the Reading tab draws with the weight menus")
+    saved["ui"].pop("weights", None)
+    config_path.write_text(json.dumps(saved))
+
+
 @check("view-save", tags=["view", "undo"])
 def view_save():
     scenario("command-S keeps a search as a view, named for its words", "cmd+f needle cmd+s wait wait return",

@@ -16,6 +16,20 @@ struct FontTokens: Codable, Equatable, Sendable {
     var isEmpty: Bool { self == FontTokens() }
 }
 
+/// How many steps lighter (negative) or bolder each kind of text is set, from 0.
+struct FontWeights: Codable, Equatable, Sendable {
+    static let range = -2...2
+    var reading = 0, title = 0, ui = 0, code = 0
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func step(_ key: CodingKeys) -> Int { min(max((try? c.decodeIfPresent(Int.self, forKey: key)) ?? 0, Self.range.lowerBound), Self.range.upperBound) }
+        reading = step(.reading); title = step(.title); ui = step(.ui); code = step(.code)
+    }
+}
+
 struct RadiusTokens: Codable, Equatable, Sendable {
     var control, panel, sheet: Double?
 }
@@ -73,6 +87,8 @@ struct UISettings: Codable, Equatable, Sendable {
     /// Temporary fonts on top of the active theme. They last until the theme changes.
     var fonts = FontTokens()
     var themes: [CustomTheme] = []
+    /// A lasting choice about the reader, so it does not follow the theme.
+    var weights = FontWeights()
 
     init() {}
 
@@ -95,6 +111,7 @@ struct UISettings: Codable, Equatable, Sendable {
         collapsedFolders = try c.decodeIfPresent([Int64].self, forKey: .collapsedFolders) ?? d.collapsedFolders
         fonts = try c.decodeIfPresent(FontTokens.self, forKey: .fonts) ?? d.fonts
         themes = try c.decodeIfPresent([CustomTheme].self, forKey: .themes) ?? d.themes
+        weights = try c.decodeIfPresent(FontWeights.self, forKey: .weights) ?? d.weights
     }
 }
 

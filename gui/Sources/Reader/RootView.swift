@@ -299,7 +299,7 @@ struct EntryList: View {
         return Button { Task { await model.open(row.id) } } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Text(row.title ?? "Untitled")
-                    .font(.custom(titleFamily, fixedSize: 18).weight(.medium))
+                    .font(.title(titleFamily, 18, .medium))
                     .foregroundStyle(row.read ? p.read : p.unread)
                     .line(23, size: 18)
                 if let text = row.preview {
@@ -360,7 +360,7 @@ struct TimelineView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(model.placeTitle)
-                            .font(.custom(titleFamily, fixedSize: 48).weight(.semibold)).tracking(-0.72)
+                            .font(.title(titleFamily, 48, .semibold)).tracking(-0.72)
                         Spacer()
                         Button { model.toggleUnreadOnly() } label: {
                             Text(model.unreadOnly ? "Unread · \(model.totalUnread)" : "All · \(model.totalUnread) unread")
@@ -408,7 +408,7 @@ struct TimelineView: View {
                 HStack(alignment: .top, spacing: 24) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(row.title ?? "Untitled")
-                            .font(.custom(titleFamily, fixedSize: 21).weight(.medium))
+                            .font(.title(titleFamily, 21, .medium))
                             .foregroundStyle(row.read ? p.read : p.unread)
                         if let text = row.preview {
                             Text(text).font(.ui(14)).foregroundStyle(p.inkSoft).lineLimit(1)
@@ -447,9 +447,9 @@ struct FirstRunView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Nothing to read yet.")
-                .font(.custom(titleFamily, fixedSize: 52).weight(.semibold)).tracking(-1)
+                .font(.title(titleFamily, 52, .semibold)).tracking(-1)
             Text("Add a site you like. Everything stays on this Mac.")
-                .font(.custom(family, fixedSize: 21)).foregroundStyle(p.inkSoft)
+                .font(.reading(family, 21)).foregroundStyle(p.inkSoft)
                 .padding(.top, 14).padding(.bottom, 32)
             HStack(spacing: 8) {
                 TextField("Paste a site or feed address", text: $address)

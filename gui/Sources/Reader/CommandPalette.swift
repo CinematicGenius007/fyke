@@ -259,7 +259,7 @@ struct CommandPalette: View {
                     HStack(alignment: .top, spacing: 12) {
                         Circle().fill(entry.read ? .clear : p.unread).frame(width: Metrics.dot, height: Metrics.dot).frame(width: 16).padding(.top, 8)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(entry.title ?? "Untitled").font(.custom(titleFamily, fixedSize: 16).weight(.medium))
+                            Text(entry.title ?? "Untitled").font(.title(titleFamily, 16, .medium))
                                 .foregroundStyle(entry.read ? p.read : p.unread).lineLimit(1)
                             Text([entry.feedTitle, Dates.relative(entry.date)].compactMap { $0 }.joined(separator: " · ")).font(.ui(12)).foregroundStyle(p.muted)
                         }

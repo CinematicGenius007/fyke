@@ -89,7 +89,7 @@ private struct BriefRow: View {
                 Text([brief.viewName ?? (brief.viewId.flatMap { model.library.view($0)?.name }) ?? "All feeds", brief.createdAt.map { $0.formatted(.dateTime.hour().minute()) }]
                     .compactMap { $0 }.joined(separator: " · "))
                     .font(.ui(12)).foregroundStyle(p.muted)
-                Text(brief.title).font(.custom(titleFamily, fixedSize: 18).weight(.medium))
+                Text(brief.title).font(.title(titleFamily, 18, .medium))
                     .foregroundStyle(brief.id == model.library.briefs.first?.id ? p.unread : p.read).lineLimit(2)
                 Text("From \(Plural.count(Int(max(brief.inputCount, Int64(brief.citations.count))), "article"))")
                     .font(.ui(13)).foregroundStyle(p.inkSoft)
@@ -154,7 +154,7 @@ struct TodayReader: View {
                         .font(.ui(13)).foregroundStyle(p.muted)
                 }
                 .padding(.bottom, 16)
-                Text(brief.title).font(.custom(Fonts.resolve(Prefs.shared.currentFonts.title ?? Tokens.fontReading), fixedSize: 40).weight(.semibold))
+                Text(brief.title).font(.title(Fonts.resolve(Prefs.shared.currentFonts.title ?? Tokens.fontReading), 40, .semibold))
                     .tracking(-0.6).fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 24)
                     .textSelection(.enabled)
