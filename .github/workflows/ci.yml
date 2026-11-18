@@ -54,10 +54,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./tests/desktop-smoke.ps1 -App "$env:RUNNER_TEMP/fyke-desktop/Fyke.App.exe" -Daemon "$env:GITHUB_WORKSPACE/zig-out/bin/fyke.exe"
 
-      - name: Check Windows profile isolation
-        shell: pwsh
-        run: ./gui-windows/tests/account-isolation.ps1 -Daemon ./zig-out/bin/fyke.exe
-
       # Each script is its own step, so that one failure does not hide the others.
       - name: e2e
         if: ${{ !cancelled() }}
