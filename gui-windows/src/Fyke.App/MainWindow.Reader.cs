@@ -59,6 +59,7 @@ public sealed partial class MainWindow
         articleRenderer = new ArticleBlockRenderer(reading, ui, code, readerFonts, linkAction: DiscussionLinkAction);
         InitializeDiscussion(reading, ui, code);
         InitializeSearch();
+        InitializeBulkMarks();
         ShowArticle(null);
         UpdateMarkControls();
     }
@@ -74,6 +75,7 @@ public sealed partial class MainWindow
 
         readerConnected = connected;
         UpdateMarkControls();
+        UpdateBulkButton();
         if (connected)
         {
             _ = LoadReaderAsync(refreshCatalog: true);
@@ -81,6 +83,7 @@ public sealed partial class MainWindow
         else
         {
             CloseSearch(restoreFocus: false);
+            HideBulkNotice();
             readerReloadTimer.Stop();
             readerRequest?.Cancel();
             articleInterrupted |= articleRequest is not null;
@@ -198,6 +201,7 @@ public sealed partial class MainWindow
         }
 
         destination = selected;
+        UpdateBulkButton();
         applyingTimeline = true;
         try
         {
@@ -247,6 +251,7 @@ public sealed partial class MainWindow
 
                 catalog = rows;
                 destination = current;
+                UpdateBulkButton();
                 ApplyVisibleDestinations();
             }
 
@@ -444,6 +449,7 @@ public sealed partial class MainWindow
         if (sender is Grid row && args.NewValue is ReaderDestination item)
         {
             row.Padding = new Thickness(10 + 22 * item.Depth, 0, 8, 0);
+            PrepareDestinationActions(row, item);
         }
     }
 

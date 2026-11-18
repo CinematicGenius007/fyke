@@ -61,7 +61,7 @@ The structure and measurements follow the design rules; the chrome is Windows:
 - The window uses Mica and an extended title bar; the sidebar sits on Mica and the list and reader on the ground color.
 - Panes are 232 / 368 / flexible, and the reading column is 640.
 - Sidebar rows are 32 high with 14 px Segoe Fluent Icons; indent is `10 + 22 × depth`.
-- Ctrl+F opens search. Ctrl+K for the palette, Ctrl+S to save a view, and Ctrl+Z for undo are planned.
+- Ctrl+F opens search, Ctrl+Shift+K marks the current scope read, and Ctrl+Z undoes the last bulk mark. Ctrl+K for the palette and Ctrl+S to save a view are planned.
 - Focus uses native controls. The system high contrast resource mapping and visual acceptance checks are planned.
 - Planned popovers use native flyouts with the shared popover treatment.
 
@@ -78,6 +78,8 @@ The reader loads saved reading, title, interface, and code weights from `ui.weig
 An article with a Hacker News discussion offers **Show comments** below its body. Press **C** or follow an inline link to the article's own thread to jump there. The client calls `entries.discussion` on demand, then shows returned blocks in a virtualized list inside the reader's scroll area. Readers can collapse a comment and its replies, retry a failed load, and open the full thread in their browser. Other discussion addresses open in the browser. Changing articles clears discussion state and cancels an in-flight request.
 
 Opening an article marks it read after its body loads. The reader toolbar and the **M** and **S** shortcuts change read and star state through `entries.mark`. The daemon publishes the changes to the timeline and sidebar counts. Removing a star while viewing Starred removes the row and keeps the article open. The toolbar shows the confirmed state and reports a failed change alongside the actions.
+
+**Mark all read** is available for All, folders, and feeds from the timeline, the sidebar context menu, or Ctrl+Shift+K. It collects up to 20,000 unread IDs through the scope's cursor, then writes atomic batches through `entries.mark_many`. The notification offers Undo for acknowledged changes, including when later batches fail. Undo restores only the articles that were unread at the time of the write and keeps its remaining batches after an interrupted restore. The window keeps the last 100 undo actions available through Ctrl+Z after the notification closes.
 
 ## Search
 
@@ -141,7 +143,8 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W1b.5 | On-demand discussion, reply disclosure, and the C shortcut | Windows smoke test for a failed load, retry, nested replies, and another provider's link. Manual keyboard, Narrator, and scrolling checks |
 | W1c.1 | Search, unread filtering, and opening a result without leaving the current destination | API and snippet tests, Windows smoke test for filtering and opening a result, manual keyboard and focus checks |
 | W1c.2 | Read and star marks, including mark-on-open | API tests for preserving the untouched flag, plus Windows smoke coverage for marking, filtering, and retaining the open article |
-| W1c.3 | Bulk actions, undo, command palette, and reader focus | Same task outcomes as macOS, including reconnect and missing selection |
+| W1c.3 | Bulk mark-as-read and Undo | View-model tests for scope paging and interrupted batches, and Windows smoke coverage for restoring the affected unread article |
+| W1c.4 | Command palette and reader focus | Same task outcomes as macOS, including reconnect and missing selection |
 | W2 | Subscription discovery, OPML, settings, weight editing, persistent folder disclosure, themes, agent setup, storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
 | W3 | Saved views, Today, recipes, briefs, Ask, catch-up, routines, Activity, and citation navigation | One module per flow with fixture-driven API and desktop checks, including failed or partial work |
 | W4 | Restart supervision, notifications and activation | Close the window, crash and restart the daemon, sign out/in, deny notification access, reopen the right result |

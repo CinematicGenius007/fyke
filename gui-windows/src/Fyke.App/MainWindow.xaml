@@ -28,6 +28,8 @@
                 <KeyboardAccelerator Key="F" Modifiers="Control" Invoked="SearchShortcut" />
                 <KeyboardAccelerator Key="M" Invoked="ArticleMarkShortcut" />
                 <KeyboardAccelerator Key="S" Invoked="ArticleMarkShortcut" />
+                <KeyboardAccelerator Key="K" Modifiers="Control,Shift" Invoked="MarkAllReadShortcut" />
+                <KeyboardAccelerator Key="Z" Modifiers="Control" Invoked="UndoBulkShortcut" />
             </Grid.KeyboardAccelerators>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="SidebarColumn" Width="232" />
@@ -105,12 +107,20 @@
                                FontFamily="{StaticResource FontReading}" FontWeight="{Binding Title, Source={StaticResource ReaderFonts}}"
                                TextTrimming="CharacterEllipsis" Foreground="{ThemeResource InkBrush}"
                                AutomationProperties.AutomationId="TimelineHeading" />
-                    <Button Grid.Column="1" x:Name="SearchButton" Width="32" Height="32" Padding="0"
-                            Click="SearchClicked" CornerRadius="{StaticResource RadiusControl}"
-                            AutomationProperties.AutomationId="SearchButton" AutomationProperties.Name="Search feeds"
-                            AutomationProperties.AcceleratorKey="Ctrl+F" ToolTipService.ToolTip="Search (Ctrl+F)">
-                        <FontIcon Glyph="&#xE721;" FontSize="14" />
-                    </Button>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                        <Button x:Name="BulkReadButton" Width="32" Height="32" Padding="0" Visibility="Collapsed"
+                                Click="MarkAllReadClicked" CornerRadius="{StaticResource RadiusControl}"
+                                AutomationProperties.AutomationId="BulkReadButton" AutomationProperties.Name="Mark all read"
+                                AutomationProperties.AcceleratorKey="Ctrl+Shift+K" ToolTipService.ToolTip="Mark all read (Ctrl+Shift+K)">
+                            <FontIcon Glyph="&#xE8FB;" FontSize="14" />
+                        </Button>
+                        <Button x:Name="SearchButton" Width="32" Height="32" Padding="0"
+                                Click="SearchClicked" CornerRadius="{StaticResource RadiusControl}"
+                                AutomationProperties.AutomationId="SearchButton" AutomationProperties.Name="Search feeds"
+                                AutomationProperties.AcceleratorKey="Ctrl+F" ToolTipService.ToolTip="Search (Ctrl+F)">
+                            <FontIcon Glyph="&#xE721;" FontSize="14" />
+                        </Button>
+                    </StackPanel>
                 </Grid>
                 <ListView Grid.Row="2" x:Name="Timeline" Margin="8,0" SelectionChanged="ArticleChanged"
                           AutomationProperties.Name="Articles" AutomationProperties.AutomationId="ReaderTimeline">
@@ -249,6 +259,24 @@
             <Button x:Name="RetryButton" AutomationProperties.AutomationId="ConnectionRetry" Content="Try again" Command="{Binding RetryCommand}" Height="32"
                     CornerRadius="{StaticResource RadiusControl}" />
         </StackPanel>
+        <Border Grid.Row="1" x:Name="BulkNotice" Visibility="Collapsed" MaxWidth="480" Margin="16"
+                HorizontalAlignment="Left" VerticalAlignment="Bottom" Padding="16,8,8,8"
+                Background="{ThemeResource InkBrush}" CornerRadius="{StaticResource RadiusPanel}">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="BulkNoticeText" VerticalAlignment="Center" TextWrapping="Wrap"
+                           FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                           Foreground="{ThemeResource GroundBrush}" AutomationProperties.LiveSetting="Polite" />
+                <Button Grid.Column="1" x:Name="BulkNoticeUndo" Content="Undo" Height="32" VerticalAlignment="Center"
+                        Click="UndoBulkClicked" CornerRadius="{StaticResource RadiusControl}"
+                        AutomationProperties.AutomationId="BulkNoticeUndo" AutomationProperties.AcceleratorKey="Ctrl+Z"
+                        ToolTipService.ToolTip="Undo (Ctrl+Z)"
+                        FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}" />
+            </Grid>
+        </Border>
         <Grid Grid.RowSpan="2" x:Name="SearchOverlay" Visibility="Collapsed" TabFocusNavigation="Cycle">
             <Border Background="{ThemeResource ScrimBrush}" PointerPressed="SearchBackdropPressed" />
             <Border MaxWidth="640" Margin="16,96,16,16" VerticalAlignment="Top"

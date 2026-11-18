@@ -75,6 +75,7 @@ public sealed partial class MainWindow : Window
     private async void OnClosed(object sender, WindowEventArgs args)
     {
         readerReloadTimer.Stop();
+        bulkNoticeTimer.Stop();
         await lifetime.CancelAsync();
         await connection;
         ViewModel.Dispose();

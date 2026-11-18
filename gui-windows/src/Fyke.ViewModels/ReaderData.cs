@@ -85,16 +85,67 @@ public sealed class ReaderData(IDaemonClient client)
 
     public async Task<TimelinePage> TimelineAsync(ReaderDestination destination, string? before, CancellationToken ct, int limit = PageSize)
     {
+        var response = await EntryPageAsync(destination, before, unreadOnly: false, limit, ct).ConfigureAwait(false);
+        return new TimelinePage(response.Items.Select(ToTimelineArticle).ToArray(), response.NextCursor);
+    }
+
+    private async Task<EntryPage> EntryPageAsync(ReaderDestination destination, string? before, bool unreadOnly,
+        int limit, CancellationToken ct)
+    {
         var filter = new
         {
             FeedId = destination.Scope == ReaderScope.Feed ? (long?)destination.Id : null,
             FolderId = destination.Scope == ReaderScope.Folder ? (long?)destination.Id : null,
             StarredOnly = destination.Scope == ReaderScope.Starred ? (bool?)true : null,
+            UnreadOnly = unreadOnly,
             Limit = Math.Clamp(limit, PageSize, 1000),
             Before = before,
         };
-        var response = Read<EntryPage>(await client.CallAsync("entries.list", filter, ct).ConfigureAwait(false));
-        return new TimelinePage(response.Items.Select(ToTimelineArticle).ToArray(), response.NextCursor);
+        return Read<EntryPage>(await client.CallAsync("entries.list", filter, ct).ConfigureAwait(false));
+    }
+
+    internal async Task<(IReadOnlyCollection<long> Ids, bool ReachedLimit)> UnreadScopeAsync(
+        ReaderDestination destination, CancellationToken ct)
+    {
+        const int maxEntries = 20_000;
+        var ids = new HashSet<long>();
+        string? before = null;
+        for (var offset = 0; offset < maxEntries; offset += BulkReadChange.BatchSize)
+        {
+            var page = await EntryPageAsync(destination, before, unreadOnly: true, BulkReadChange.BatchSize, ct)
+                .ConfigureAwait(false);
+            foreach (var entry in page.Items)
+            {
+                ids.Add(entry.Id);
+            }
+
+            if (page.NextCursor is null)
+            {
+                return (ids, false);
+            }
+
+            if (page.NextCursor == before)
+            {
+                throw new DaemonProtocolException("The unread article cursor did not advance.");
+            }
+
+            before = page.NextCursor;
+        }
+
+        return (ids, true);
+    }
+
+    internal async Task<long[]> SetReadBatchAsync(long[] ids, bool read, CancellationToken ct)
+    {
+        var result = Read<BulkMarkReply>(await client.CallAsync("entries.mark_many", new { Ids = ids, Read = read }, ct)
+            .ConfigureAwait(false));
+        var previous = result.Previous;
+        if (previous is null || previous.Any(entry => entry is null) || !previous.Select(entry => entry.Id).SequenceEqual(ids))
+        {
+            throw new DaemonProtocolException("The daemon returned incomplete bulk article marks.");
+        }
+
+        return previous.Where(entry => !entry.Read).Select(entry => entry.Id).ToArray();
     }
 
     public async Task<IReadOnlyList<SearchHit>> SearchAsync(string query, bool unreadOnly, CancellationToken ct)
@@ -161,5 +212,7 @@ public sealed class ReaderData(IDaemonClient client)
     private sealed record ArticleBody(string? Title, string? FeedTitle, string? Author, string? DiscussionUrl, string Body, bool Read, bool Starred);
     private sealed record MarkReply(MarkState? Previous);
     private sealed record MarkState(bool Read, bool Starred);
+    private sealed record BulkMarkReply(PreviousRead[]? Previous);
+    private sealed record PreviousRead(long Id, bool Read);
     private sealed record EntryPage(Entry[] Items, string? NextCursor);
 }

@@ -289,9 +289,34 @@ try {
         throw 'Unstarring the article closed the reader.'
     }
 
+    $markUnread = Wait-ForArticleAction 'ReadArticle' 'Mark as unread'
+    $markUnread.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-ForArticleAction 'ReadArticle' 'Mark as read' | Out-Null
+    Select-ReaderItem $items 'Fixture folder'
+    Wait-For 'the folder timeline before marking all read' {
+        $heading = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $headingId)
+        if ($heading -and $heading.Current.Name -eq 'Fixture folder') { $true }
+    } | Out-Null
+    $markAll = Wait-ForArticleAction 'BulkReadButton' 'Mark all read'
+    $markAll.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'the result of marking the folder read' {
+        Find-ByName $root 'Marked 1 article in Fixture folder as read.'
+    } | Out-Null
+    $undo = Wait-ForArticleAction 'BulkNoticeUndo' 'Undo'
+    $undo.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'the result of undoing the bulk mark' {
+        Find-ByName $root 'Restored 1 article in Fixture folder to unread.'
+    } | Out-Null
+    $entriesAfterUndo = (& $daemonPath list --json | Out-String | ConvertFrom-Json).items
+    $previouslyRead = $entriesAfterUndo | Where-Object { $_.title -eq 'Native reader fixture' }
+    $restoredUnread = $entriesAfterUndo | Where-Object { $_.title -eq 'Live reader update' }
+    if (!$previouslyRead.read -or !$restoredUnread -or $restoredUnread.read) {
+        throw 'Undo changed an article outside the bulk read action or failed to restore the affected article.'
+    }
+
     & $daemonPath status
     if ($LASTEXITCODE -ne 0) { throw 'The companion daemon did not answer status' }
-    Write-Host 'WinUI recovered the daemon and verified reading, discussion, search, and article marks.'
+    Write-Host 'WinUI recovered the daemon and verified reading, discussion, search, article marks, and bulk undo.'
 } catch {
     Write-Host $_.ScriptStackTrace
     throw
