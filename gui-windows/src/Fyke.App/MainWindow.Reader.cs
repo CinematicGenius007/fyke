@@ -60,6 +60,7 @@ public sealed partial class MainWindow
         InitializeDiscussion(reading, ui, code);
         InitializeSearch();
         ShowArticle(null);
+        UpdateMarkControls();
     }
 
     private void ShowReaderConnection()
@@ -72,6 +73,7 @@ public sealed partial class MainWindow
         }
 
         readerConnected = connected;
+        UpdateMarkControls();
         if (connected)
         {
             _ = LoadReaderAsync(refreshCatalog: true);
@@ -329,16 +331,21 @@ public sealed partial class MainWindow
         try
         {
             ReaderRows.Reconcile(articles, updated, row => row.Id);
-            if (selected is not null)
+            if (openArticle is { } opened)
             {
-                var current = articles.FirstOrDefault(row => row.Id == selected.Id);
-                if (current is null)
+                var current = articles.FirstOrDefault(row => row.Id == opened.Id);
+                if (current is null && selected is not null && destination?.Scope != ReaderScope.Starred)
                 {
                     _ = OpenArticleAsync(null);
                 }
                 else if (!ReferenceEquals(Timeline.SelectedItem, current))
                 {
                     Timeline.SelectedItem = current;
+                }
+
+                if (current is not null && articleReady && !pendingMarks.Contains(opened.Id))
+                {
+                    ApplyArticleMarks(opened.Id, new ArticleMarks(current.Read, current.Starred));
                 }
             }
         }
@@ -370,6 +377,9 @@ public sealed partial class MainWindow
     {
         articleRequest?.Cancel();
         openArticle = article;
+        articleReady = false;
+        MarkStatus.Visibility = Visibility.Collapsed;
+        UpdateMarkControls();
         ResetDiscussion();
         ShowArticle(article);
         ArticleBody.Children.Clear();
@@ -396,6 +406,12 @@ public sealed partial class MainWindow
             articleRenderer.Append(ArticleBody, result.Blocks);
             ArticleStatus.Text = "This article has no text.";
             ArticleStatus.Visibility = ArticleBody.Children.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            articleReady = true;
+            ApplyArticleMarks(article.Id, new ArticleMarks(result.Read, result.Starred));
+            if (!result.Read)
+            {
+                _ = MarkArticleAsync(article.Id, read: true, starred: null);
+            }
         }
         catch (OperationCanceledException) when (request.IsCancellationRequested)
         {

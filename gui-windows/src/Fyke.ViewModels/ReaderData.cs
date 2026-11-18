@@ -29,14 +29,14 @@ public sealed record ReaderDestination(ReaderScope Scope, long Id, string Title,
         : Title;
 }
 
-public sealed record TimelineArticle(long Id, string Title, string? FeedTitle, bool Read)
+public sealed record TimelineArticle(long Id, string Title, string? FeedTitle, bool Read, bool Starred = false)
 {
     public string AccessibleName => Read ? Title : $"{Title}, unread";
 }
 
 public sealed record TimelinePage(IReadOnlyList<TimelineArticle> Articles, string? NextCursor);
 
-/// <summary>Reads the shared catalog and timeline without owning any daemon state.</summary>
+/// <summary>Uses the daemon's reader operations without owning stored state.</summary>
 public sealed class ReaderData(IDaemonClient client)
 {
     private static readonly JsonSerializerOptions Wire = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
@@ -123,7 +123,16 @@ public sealed class ReaderData(IDaemonClient client)
         var blocks = JsonSerializer.Deserialize<ArticleBlock[]>(response.Body, Wire)
             ?? throw new DaemonProtocolException("The daemon returned an empty article response.");
         return new ReaderArticle(response.Title, response.FeedTitle, response.Author, blocks,
-            DiscussionLink.FromAddress(response.DiscussionUrl));
+            DiscussionLink.FromAddress(response.DiscussionUrl), response.Read, response.Starred);
+    }
+
+    public async Task<ArticleMarks> MarkAsync(long id, bool? read, bool? starred, CancellationToken ct)
+    {
+        var response = Read<MarkReply>(await client.CallAsync("entries.mark",
+            new { Id = id, Read = read, Starred = starred }, ct).ConfigureAwait(false));
+        var previous = response.Previous
+            ?? throw new DaemonProtocolException("The daemon returned incomplete article marks.");
+        return new ArticleMarks(read ?? previous.Read, starred ?? previous.Starred);
     }
 
     public async Task<DiscussionThread> DiscussionAsync(long id, CancellationToken ct)
@@ -142,13 +151,15 @@ public sealed class ReaderData(IDaemonClient client)
         result.Deserialize<T>(Wire) ?? throw new DaemonProtocolException("The daemon returned an empty reader response.");
 
     private static TimelineArticle ToTimelineArticle(Entry entry) => new(entry.Id,
-        string.IsNullOrWhiteSpace(entry.Title) ? "Untitled article" : entry.Title, entry.FeedTitle, entry.Read);
+        string.IsNullOrWhiteSpace(entry.Title) ? "Untitled article" : entry.Title, entry.FeedTitle, entry.Read, entry.Starred);
 
     private sealed record CatalogItems<T>(T[] Items);
     private sealed record Feed(long Id, long? FolderId, string? Title, string Url, long Unread, long Starred);
     private sealed record Folder(long Id, long? ParentId, string Name);
-    private sealed record Entry(long Id, string? Title, string? FeedTitle, bool Read,
+    private sealed record Entry(long Id, string? Title, string? FeedTitle, bool Read, bool Starred,
         string? Snippet, string? Summary, long SortAt);
-    private sealed record ArticleBody(string? Title, string? FeedTitle, string? Author, string? DiscussionUrl, string Body);
+    private sealed record ArticleBody(string? Title, string? FeedTitle, string? Author, string? DiscussionUrl, string Body, bool Read, bool Starred);
+    private sealed record MarkReply(MarkState? Previous);
+    private sealed record MarkState(bool Read, bool Starred);
     private sealed record EntryPage(Entry[] Items, string? NextCursor);
 }

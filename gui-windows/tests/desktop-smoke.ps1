@@ -213,9 +213,20 @@ try {
 
     $fixtureEntries = (& $daemonPath list --json | Out-String | ConvertFrom-Json).items
     $readEntry = $fixtureEntries | Where-Object { $_.title -eq 'Native reader fixture' }
-    if (!$readEntry) { throw 'The reader fixture entry was missing from the daemon.' }
-    & $daemonPath mark $readEntry.id --read
-    if ($LASTEXITCODE -ne 0) { throw 'Could not mark the search fixture read.' }
+    if (!$readEntry.read) { throw 'Opening the article did not mark it read in the daemon.' }
+
+    function Wait-ForArticleAction([string]$id, [string]$name) {
+        $condition = [Windows.Automation.PropertyCondition]::new(
+            [Windows.Automation.AutomationElement]::AutomationIdProperty, $id)
+        Wait-For $name {
+            $control = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $condition)
+            if ($control -and $control.Current.IsEnabled -and $control.Current.Name -eq $name) { $control }
+        }
+    }
+
+    $markUnread = Wait-ForArticleAction 'ReadArticle' 'Mark as unread'
+    $markUnread.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-ForArticleAction 'ReadArticle' 'Mark as read' | Out-Null
     Select-ReaderItem $items 'Starred'
     Wait-For 'the Starred destination before searching' {
         $heading = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $headingId)
@@ -265,9 +276,22 @@ try {
     $heading = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $headingId)
     if ($heading.Current.Name -ne 'Starred') { throw 'Opening the search result changed the current destination.' }
 
+    Wait-ForArticleAction 'ReadArticle' 'Mark as unread' | Out-Null
+    $star = Wait-ForArticleAction 'StarArticle' 'Star article'
+    $star.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'the newly starred article in the timeline' { Find-ByName $timeline 'Live reader update' } | Out-Null
+    $unstar = Wait-ForArticleAction 'StarArticle' 'Remove star'
+    $unstar.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'the unstarred article to leave the timeline' {
+        if (!(Find-ByName $timeline 'Live reader update')) { $true }
+    } | Out-Null
+    if (!(Find-ByName $root 'Arrives while the first article is open.')) {
+        throw 'Unstarring the article closed the reader.'
+    }
+
     & $daemonPath status
     if ($LASTEXITCODE -ne 0) { throw 'The companion daemon did not answer status' }
-    Write-Host 'WinUI recovered the daemon and verified reading, discussion, and search.'
+    Write-Host 'WinUI recovered the daemon and verified reading, discussion, search, and article marks.'
 } catch {
     Write-Host $_.ScriptStackTrace
     throw
