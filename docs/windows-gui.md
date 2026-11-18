@@ -95,6 +95,10 @@ The sidebar's add button, Ctrl+N, and the palette open the add-feed sheet. Pausi
 
 `feeds.add` creates each selected subscription. `feeds.update` places it in the chosen folder. If adding or placing a feed fails partway through a group, Retry resumes at the first unconfirmed step. The sheet reports any confirmed subscriptions and lets the reader choose another folder for the remaining placements. Opening the sheet from a folder's context menu preselects that folder.
 
+## Organizing subscriptions
+
+The sidebar context menus create top-level or nested folders and open a compact editor to rename or move a feed or folder. The palette can create a top-level folder and edit the current feed or folder. The move picker shows full folder paths and omits a moving folder and its descendants. Clearing a feed's custom name restores the feed's own title. The daemon validates names and moves, and the sidebar reloads by ID after a save so the active destination remains open.
+
 ## Background running and notifications
 
 Today `fyke service install` registers the daemon in the per-user Run key. The GUI keeps that: closing the window leaves the daemon running. Supervision after a crash, and notifications with every window closed, are planned slices (W4 below) with their own design.
@@ -156,7 +160,8 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W1c.3 | Bulk mark-as-read and Undo | View-model tests for scope paging and interrupted batches, and Windows smoke coverage for restoring the affected unread article |
 | W1c.4 | Command palette and reader focus | Matching tests, Windows smoke coverage for navigating to a hidden feed and opening an article, manual keyboard and focus checks |
 | W2a | Feed discovery, preview, and subscription with folder placement | API tests for selections and retry, and Windows smoke coverage for discovering two feeds and subscribing to one |
-| W2b | Subscription and folder management, OPML, settings, weight editing, persistent folder disclosure, themes, agent setup, storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
+| W2b | Create, rename, and move feeds and folders | Folder-path and operation tests, plus Windows smoke coverage for creation and rename with an open article |
+| W2c | Subscription refresh and removal, OPML, settings, weight editing, persistent folder disclosure, themes, agent setup, storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
 | W3 | Saved views, Today, recipes, briefs, Ask, catch-up, routines, Activity, and citation navigation | One module per flow with fixture-driven API and desktop checks, including failed or partial work |
 | W4 | Restart supervision, notifications and activation | Close the window, crash and restart the daemon, sign out/in, deny notification access, reopen the right result |
 | W5 | Versioned GUI/core bundle, runtime dependencies, signing, installer, upgrades, uninstall and release notes | Clean Windows 11 x64 standard-user install, upgrade from a prior build, rollback and uninstall with data retention, verified published checksums |

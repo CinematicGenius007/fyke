@@ -12,14 +12,14 @@ public sealed partial class MainWindow
 {
     private Control? focusBeforeOverlay;
 
-    private bool IsReaderOverlayOpen => IsSearchOpen || IsPaletteOpen || IsAddFeedOpen;
+    private bool IsReaderOverlayOpen => IsSearchOpen || IsPaletteOpen || IsAddFeedOpen || IsCatalogEditOpen;
 
-    private void ShowReaderOverlay(Grid overlay, TextBox query)
+    private void ShowReaderOverlay(Grid overlay, Control initialFocus)
     {
         focusBeforeOverlay = FocusManager.GetFocusedElement(Root.XamlRoot) as Control;
         ReaderShell.IsHitTestVisible = false;
         overlay.Visibility = Visibility.Visible;
-        query.Focus(FocusState.Programmatic);
+        initialFocus.Focus(FocusState.Programmatic);
     }
 
     private void HideReaderOverlay(Grid overlay, Button opener, bool restoreFocus)

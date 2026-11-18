@@ -42,7 +42,7 @@ public sealed partial class MainWindow
 
     private void OpenPalette()
     {
-        if (!readerConnected || !CloseAddFeed())
+        if (!readerConnected || !CloseAddFeed() || !CloseCatalogEdit())
         {
             return;
         }
@@ -162,6 +162,14 @@ public sealed partial class MainWindow
     {
         yield return new("search", "Search articles", null, "Ctrl+F", OpenSearch);
         yield return new("add-feed", "Add feed", null, "Ctrl+N", () => OpenAddFeed());
+        yield return new("new-folder", "New folder", null, null, () => OpenCatalogEdit(CatalogEditKind.CreateFolder));
+        if (destination is { Scope: ReaderScope.Feed or ReaderScope.Folder } editable)
+        {
+            yield return new("rename-destination", $"Rename {editable.Title}", null, null,
+                () => OpenCatalogEdit(CatalogEditKind.Rename, editable));
+            yield return new("move-destination", $"Move {editable.Title}", null, null,
+                () => OpenCatalogEdit(CatalogEditKind.Move, editable));
+        }
         if (CanChangeBulkMarks && destination is { Scope: not ReaderScope.Starred } selected)
         {
             yield return new("mark-all", $"Mark all read in {selected.Title}", null,

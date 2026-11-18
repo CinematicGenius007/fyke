@@ -32,6 +32,7 @@ public sealed partial class MainWindow
     private CancellationTokenSource? readerRequest;
     private CancellationTokenSource? articleRequest;
     private TimelineArticle? openArticle;
+    private string? articleAuthor;
     private ArticleBlockRenderer articleRenderer = null!;
     private ReaderDestination? destination;
     private string? nextCursor;
@@ -61,6 +62,7 @@ public sealed partial class MainWindow
         InitializeSearch();
         InitializePalette();
         InitializeAddFeed();
+        InitializeCatalogEditing();
         InitializeBulkMarks();
         ShowArticle(null);
         UpdateMarkControls();
@@ -87,6 +89,7 @@ public sealed partial class MainWindow
             CloseSearch(restoreFocus: false);
             ClosePalette(restoreFocus: false);
             CloseAddFeed(restoreFocus: false);
+            CloseCatalogEdit(restoreFocus: false);
             HideBulkNotice();
             readerReloadTimer.Stop();
             readerRequest?.Cancel();
@@ -267,7 +270,7 @@ public sealed partial class MainWindow
                 catalog = rows;
                 if (IsAddFeedOpen && !addingFeeds)
                 {
-                    PopulateAddFeedFolders((AddFeedFolder.SelectedItem as FeedFolderChoice)?.Id);
+                    PopulateAddFeedFolders((AddFeedFolder.SelectedItem as FolderChoice)?.Id);
                 }
                 destination = current;
                 UpdateBulkButton();
@@ -348,6 +351,19 @@ public sealed partial class MainWindow
 
     private void MoreArticlesClicked(object sender, RoutedEventArgs args) => _ = LoadReaderAsync(append: true);
 
+    private void SetTimelineSelection(TimelineArticle? article)
+    {
+        applyingTimeline = true;
+        try
+        {
+            Timeline.SelectedItem = article;
+        }
+        finally
+        {
+            applyingTimeline = false;
+        }
+    }
+
     private void ApplyTimeline(IReadOnlyList<TimelineArticle> updated)
     {
         var selected = Timeline.SelectedItem as TimelineArticle;
@@ -369,6 +385,12 @@ public sealed partial class MainWindow
 
                 if (current is not null && articleReady && !pendingMarks.Contains(opened.Id))
                 {
+                    if (opened.FeedTitle != current.FeedTitle)
+                    {
+                        openArticle = opened with { FeedTitle = current.FeedTitle };
+                        UpdateArticleSource(current.FeedTitle);
+                    }
+
                     ApplyArticleMarks(opened.Id, new ArticleMarks(current.Read, current.Starred));
                 }
             }
@@ -401,6 +423,7 @@ public sealed partial class MainWindow
     {
         articleRequest?.Cancel();
         openArticle = article;
+        articleAuthor = null;
         articleReady = false;
         MarkStatus.Visibility = Visibility.Collapsed;
         UpdateMarkControls();
@@ -424,8 +447,10 @@ public sealed partial class MainWindow
             var result = await reader.ArticleAsync(article.Id, request.Token);
             request.Token.ThrowIfCancellationRequested();
             ArticleHeading.Text = result.Title ?? article.Title;
-            ArticleSource.Text = string.Join(" · ", new[] { result.FeedTitle ?? article.FeedTitle, result.Author }
-                .Where(value => !string.IsNullOrWhiteSpace(value)));
+            var source = result.FeedTitle ?? article.FeedTitle;
+            openArticle = article with { FeedTitle = source };
+            articleAuthor = result.Author;
+            UpdateArticleSource(source);
             SetDiscussion(article.Id, result.Discussion);
             articleRenderer.Append(ArticleBody, result.Blocks);
             ArticleStatus.Text = "This article has no text.";
@@ -460,8 +485,12 @@ public sealed partial class MainWindow
     private void ShowArticle(TimelineArticle? article)
     {
         ArticleHeading.Text = article?.Title ?? "Select an article";
-        ArticleSource.Text = article?.FeedTitle ?? string.Empty;
+        UpdateArticleSource(article?.FeedTitle);
     }
+
+    private void UpdateArticleSource(string? feedTitle) =>
+        ArticleSource.Text = string.Join(" · ", new[] { feedTitle, articleAuthor }
+            .Where(value => !string.IsNullOrWhiteSpace(value)));
 
     private void ApplyDestinationIndent(FrameworkElement sender, DataContextChangedEventArgs args)
     {

@@ -12,7 +12,7 @@ public enum ReaderScope
     Feed,
 }
 
-public sealed record ReaderDestination(ReaderScope Scope, long Id, string Title, int Depth, long Count)
+public sealed record ReaderDestination(ReaderScope Scope, long Id, string Title, int Depth, long Count, long? ParentId = null)
 {
     public string Glyph => Scope switch
     {
@@ -67,7 +67,7 @@ public sealed class ReaderData(IDaemonClient client)
             foreach (var folder in foldersByParent[parent])
             {
                 var index = rows.Count;
-                rows.Add(new(ReaderScope.Folder, folder.Id, folder.Name, depth, 0));
+                rows.Add(new(ReaderScope.Folder, folder.Id, folder.Name, depth, 0, folder.ParentId));
                 var childrenUnread = AddChildren(folder.Id, depth + 1);
                 rows[index] = rows[index] with { Count = childrenUnread };
                 unread += childrenUnread;
@@ -75,7 +75,8 @@ public sealed class ReaderData(IDaemonClient client)
 
             foreach (var feed in feedsByFolder[parent])
             {
-                rows.Add(new(ReaderScope.Feed, feed.Id, string.IsNullOrWhiteSpace(feed.Title) ? feed.Url : feed.Title, depth, feed.Unread));
+                rows.Add(new(ReaderScope.Feed, feed.Id, string.IsNullOrWhiteSpace(feed.Title) ? feed.Url : feed.Title,
+                    depth, feed.Unread, feed.FolderId));
                 unread += feed.Unread;
             }
 

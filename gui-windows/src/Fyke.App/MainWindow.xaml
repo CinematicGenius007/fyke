@@ -231,6 +231,7 @@
                                    AutomationProperties.AutomationId="ArticleHeading"
                                    Foreground="{ThemeResource InkBrush}" />
                         <TextBlock x:Name="ArticleSource" TextWrapping="Wrap" Foreground="{ThemeResource MutedBrush}"
+                                   AutomationProperties.AutomationId="ArticleSource"
                                    FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}" />
                         <TextBlock x:Name="ArticleStatus" TextWrapping="Wrap" Foreground="{ThemeResource InkSoftBrush}"
                                    FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
@@ -559,6 +560,38 @@
                                 CornerRadius="{StaticResource RadiusControl}" FontFamily="{StaticResource FontUi}" />
                     </StackPanel>
                 </Grid>
+            </Border>
+        </Grid>
+        <Grid Grid.RowSpan="2" x:Name="CatalogEditOverlay" Visibility="Collapsed" TabFocusNavigation="Cycle">
+            <Border Background="{ThemeResource ScrimBrush}" PointerPressed="CatalogEditBackdropPressed" />
+            <Border MaxWidth="420" Margin="16,120,16,16" VerticalAlignment="Top" Padding="24"
+                    CornerRadius="{StaticResource RadiusSheet}" BorderThickness="1"
+                    BorderBrush="{ThemeResource HairlineBrush}" Background="{ThemeResource SurfaceBrush}">
+                <StackPanel Spacing="12">
+                    <TextBlock x:Name="CatalogEditHeading" FontSize="24" TextWrapping="Wrap"
+                               FontFamily="{StaticResource FontReading}" FontWeight="{Binding Title, Source={StaticResource ReaderFonts}}"
+                               Foreground="{ThemeResource InkBrush}" />
+                    <TextBox x:Name="CatalogEditName" PlaceholderText="Name" MinHeight="32" TextChanged="CatalogEditNameChanged"
+                             FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                             AutomationProperties.Name="Name" AutomationProperties.AutomationId="CatalogEditName" />
+                    <ComboBox x:Name="CatalogMoveTarget" DisplayMemberPath="Name" HorizontalAlignment="Stretch" MinHeight="32"
+                              FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                              SelectionChanged="CatalogEditTargetChanged" AutomationProperties.Name="Destination folder"
+                              AutomationProperties.AutomationId="CatalogMoveTarget" />
+                    <TextBlock x:Name="CatalogEditHint" FontSize="13" TextWrapping="Wrap"
+                               FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                               Foreground="{ThemeResource MutedBrush}" />
+                    <TextBlock x:Name="CatalogEditStatus" FontSize="13" TextWrapping="Wrap" Visibility="Collapsed"
+                               FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                               Foreground="{ThemeResource InkSoftBrush}" AutomationProperties.LiveSetting="Polite" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
+                        <Button x:Name="CatalogEditCancel" Content="Cancel" Height="32" Click="CatalogEditCancelClicked"
+                                FontFamily="{StaticResource FontUi}" CornerRadius="{StaticResource RadiusControl}" />
+                        <Button x:Name="CatalogEditConfirm" Height="32" Click="CatalogEditConfirmClicked"
+                                Style="{StaticResource AccentButtonStyle}" AutomationProperties.AutomationId="CatalogEditConfirm"
+                                FontFamily="{StaticResource FontUi}" CornerRadius="{StaticResource RadiusControl}" />
+                    </StackPanel>
+                </StackPanel>
             </Border>
         </Grid>
     </Grid>

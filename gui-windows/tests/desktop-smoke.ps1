@@ -380,9 +380,43 @@ try {
     Wait-For 'the new subscription in the sidebar' { Find-ByName $items 'Renamed discovery feed' } | Out-Null
     if (Find-ByName $items 'Other discovered feed') { throw 'The unselected candidate was subscribed.' }
 
+    function Save-CatalogName([string]$name, [string]$action) {
+        $catalogNameId = [Windows.Automation.PropertyCondition]::new(
+            [Windows.Automation.AutomationElement]::AutomationIdProperty, 'CatalogEditName')
+        $field = Wait-For 'the catalog name field' {
+            $element = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $catalogNameId)
+            if ($element -and !$element.Current.IsOffscreen) { $element }
+        }
+        $field.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($name)
+        $save = Wait-ForArticleAction 'CatalogEditConfirm' $action
+        $save.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    }
+
+    Invoke-PaletteResult 'New folder' 'New folder'
+    Save-CatalogName 'Reading list' 'Create folder'
+    Wait-For 'the new folder in the sidebar' { Find-ByName $items 'Reading list' } | Out-Null
+
+    Select-ReaderItem $items 'Renamed discovery feed'
+    Select-ReaderItem $timeline 'First discovered article'
+    Wait-ForArticleAction 'ReadArticle' 'Mark as unread' | Out-Null
+    Invoke-PaletteResult 'Rename' 'Rename Renamed discovery feed'
+    Save-CatalogName 'Reviewed discovery feed' 'Save name'
+    Wait-For 'the renamed feed in the timeline' {
+        $heading = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $headingId)
+        if ($heading -and $heading.Current.Name -eq 'Reviewed discovery feed') { $true }
+    } | Out-Null
+    $articleSourceId = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::AutomationIdProperty, 'ArticleSource')
+    Wait-For 'the renamed source of the open article' {
+        $source = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $articleSourceId)
+        if ($source -and $source.Current.Name -eq 'Reviewed discovery feed') { $true }
+    } | Out-Null
+    $openHeading = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $articleHeadingId)
+    if ($openHeading.Current.Name -ne 'First discovered article') { throw 'Renaming the feed closed the article.' }
+
     & $daemonPath status
     if ($LASTEXITCODE -ne 0) { throw 'The companion daemon did not answer status' }
-    Write-Host 'WinUI verified daemon recovery, the reader, search and palette, bulk undo, and feed discovery.'
+    Write-Host 'WinUI verified daemon recovery, the reader, search and palette, bulk undo, and subscription editing.'
 } catch {
     Write-Host $_.ScriptStackTrace
     throw

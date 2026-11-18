@@ -8,8 +8,6 @@ public sealed record FeedCandidate(string Url, string? Title, string[] Latest)
     public string DisplayTitle => string.IsNullOrWhiteSpace(Title) ? "Untitled feed" : Title;
 }
 
-public sealed record FeedFolderChoice(long? Id, string Name);
-
 public sealed record FeedSubscriptionRequest(FeedCandidate Candidate, string? Title);
 
 /// <summary>Resumes a group of subscriptions at the first unconfirmed step.</summary>
@@ -90,10 +88,7 @@ public sealed class FeedSubscriptions(IDaemonClient client)
         return added is { Id: > 0 } ? added : throw new DaemonProtocolException("The daemon did not return the subscription ID.");
     }
 
-    internal async Task PlaceAsync(long id, long folderId, CancellationToken ct)
-    {
-        _ = await client.CallAsync("feeds.update", new { Id = id, FolderId = folderId }, ct).ConfigureAwait(false);
-    }
+    internal Task PlaceAsync(long id, long folderId, CancellationToken ct) => CatalogEdits.MoveFeedAsync(client, id, folderId, ct);
 
     internal sealed record AddedFeed(long Id, string Status);
     private sealed record FeedPreview(FeedCandidate[]? Items);

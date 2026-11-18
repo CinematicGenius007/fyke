@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -43,7 +42,7 @@ public sealed partial class MainWindow
 
     private void OpenAddFeed(long? folderId = null)
     {
-        if (!readerConnected || IsAddFeedOpen)
+        if (!readerConnected || IsAddFeedOpen || !CloseCatalogEdit())
         {
             return;
         }
@@ -59,19 +58,7 @@ public sealed partial class MainWindow
 
     private void PopulateAddFeedFolders(long? selected)
     {
-        var choices = new List<FeedFolderChoice> { new(null, "No folder") };
-        var path = new List<string>();
-        foreach (var folder in catalog.Where(row => row.Scope == ReaderScope.Folder))
-        {
-            if (path.Count > folder.Depth)
-            {
-                path.RemoveRange(folder.Depth, path.Count - folder.Depth);
-            }
-
-            path.Add(folder.Title);
-            choices.Add(new FeedFolderChoice(folder.Id, string.Join(" / ", path)));
-        }
-
+        var choices = FolderChoice.FromCatalog(catalog, "No folder");
         AddFeedFolder.ItemsSource = choices;
         AddFeedFolder.SelectedItem = choices.FirstOrDefault(choice => choice.Id == selected) ?? choices[0];
     }
@@ -267,7 +254,7 @@ public sealed partial class MainWindow
     private async Task SubscribeToFeedsAsync(FeedSubscriptionBatch batch)
     {
         addingFeeds = true;
-        var folder = (AddFeedFolder.SelectedItem as FeedFolderChoice)?.Id;
+        var folder = (AddFeedFolder.SelectedItem as FolderChoice)?.Id;
         AddFeedStatus.Text = "Saving subscriptions…";
         UpdateAddFeedControls();
         try

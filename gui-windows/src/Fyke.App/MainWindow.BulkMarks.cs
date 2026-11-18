@@ -7,7 +7,6 @@ using Fyke.Client;
 using Fyke.ViewModels;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 
 namespace Fyke.App;
@@ -27,37 +26,6 @@ public sealed partial class MainWindow
         bulkNoticeTimer.Interval = TimeSpan.FromSeconds(6);
         bulkNoticeTimer.IsRepeating = false;
         bulkNoticeTimer.Tick += (_, _) => HideBulkNotice();
-    }
-
-    private void PrepareDestinationActions(Grid row, ReaderDestination item)
-    {
-        if (item.Scope == ReaderScope.Starred)
-        {
-            row.ContextFlyout = null;
-        }
-        else if (row.ContextFlyout is null)
-        {
-            var flyout = new MenuFlyout();
-            var mark = new MenuFlyoutItem { Text = "Mark all read" };
-            var add = new MenuFlyoutItem { Text = "Add feed here" };
-            mark.Click += (_, _) => StartBulkMark(row.DataContext as ReaderDestination);
-            add.Click += (_, _) =>
-            {
-                if (row.DataContext is ReaderDestination { Scope: ReaderScope.Folder } folder)
-                {
-                    OpenAddFeed(folder.Id);
-                }
-            };
-            flyout.Items.Add(mark);
-            flyout.Items.Add(add);
-            flyout.Opening += (_, _) =>
-            {
-                mark.IsEnabled = CanChangeBulkMarks;
-                add.Visibility = row.DataContext is ReaderDestination { Scope: ReaderScope.Folder }
-                    ? Visibility.Visible : Visibility.Collapsed;
-            };
-            row.ContextFlyout = flyout;
-        }
     }
 
     private void UpdateBulkButton()

@@ -39,7 +39,7 @@ public sealed partial class MainWindow
 
     private void OpenSearch()
     {
-        if (!readerConnected || !CloseAddFeed())
+        if (!readerConnected || !CloseAddFeed() || !CloseCatalogEdit())
         {
             return;
         }
@@ -182,16 +182,7 @@ public sealed partial class MainWindow
     private void OpenResultArticle(TimelineArticle article)
     {
         var row = articles.FirstOrDefault(candidate => candidate.Id == article.Id);
-        applyingTimeline = true;
-        try
-        {
-            Timeline.SelectedItem = row;
-        }
-        finally
-        {
-            applyingTimeline = false;
-        }
-
+        SetTimelineSelection(row);
         if (row is not null)
         {
             Timeline.ScrollIntoView(row);
