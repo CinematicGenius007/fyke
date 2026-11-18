@@ -1,6 +1,6 @@
 # Windows GUI
 
-Status: W0 only. The solution, protocol client, view-model library, token generation and an empty window are the first slice; the reading screens and the feature flows in [reader-features.md](reader-features.md) come slice by slice, as the table at the end records. Nothing here has run on Windows yet. The macOS GUI in `gui/` is the reference client.
+Status: W0 only. The solution, protocol client, view-model library, token generation and an empty window are the first slice; the reading screens and the feature flows in [reader-features.md](reader-features.md) come slice by slice, as the table at the end records. Windows CI compiles the app and runs the client and view-model tests. Desktop launch, rendering, and interaction remain unverified. The macOS GUI in `gui/` is the reference client.
 
 ## Goals
 
@@ -43,6 +43,7 @@ Only `Fyke.App` depends on Windows. Everything a test can reach without a window
 - **Discovery.** The data folder is `%LOCALAPPDATA%\Fyke`, or the folder named in its `location` pointer file, or `FYKE_HOME`; the socket is `fyked.sock` inside it, exactly as `src/main.zig` resolves it.
 - **Transport.** `System.Net.Sockets.Socket` with `AddressFamily.Unix` and `UnixDomainSocketEndPoint`, which Windows 10 1803 and later support. No named pipe or TCP port is added.
 - **Connections.** One for requests, one for the event stream, so a long call never delays events.
+- **Lost replies.** The client reconnects and only replays operations explicitly known to read. For other operations it reports an unknown outcome so the caller can refresh before retrying.
 - **Limits.** Lines over 16 MiB are refused; every call takes a `CancellationToken` and a timeout.
 - **Starting the daemon.** If the socket does not answer, the app starts `fyke.exe daemon` from its own folder (or `PATH`) without a console window and retries with backoff. The daemon's lock keeps a second copy from starting.
 - **Versions.** The app reads `api_version` from `stats.get` and shows an inline state if it is older than the app needs.
@@ -53,7 +54,7 @@ Only `Fyke.App` depends on Windows. Everything a test can reach without a window
 
 `tools/gen_tokens.py` also writes `gui-windows/src/Fyke.App/Themes/Tokens.xaml`: colors as `Color` and `SolidColorBrush` resources in `Light` and `Dark` theme dictionaries, radii as `CornerRadius`, and font families. As with Swift, the XAML is generated and never edited. Inter, Newsreader and JetBrains Mono come from `gui/Fonts` and are bundled with the app.
 
-## Layout on Windows
+## Planned layout on Windows
 
 The structure and measurements follow the design rules; the chrome is Windows:
 
@@ -64,9 +65,9 @@ The structure and measurements follow the design rules; the chrome is Windows:
 - Focus visuals use the system focus ring. High contrast themes replace the token colors with system colors.
 - Popovers are `Flyout`s styled with the popover radius and shadow.
 
-## Reading articles
+## Planned article reader
 
-Articles are blocks, rendered with native controls: `RichTextBlock` paragraphs with inline links, lists, quotes, code in JetBrains Mono, tables in a `Grid`, and images that load on request. Feed HTML never reaches a web view, as [decision 0002](decisions/0002-web-viewer.md) requires. Links open in the default browser.
+The reader will render article blocks with native controls: `RichTextBlock` paragraphs with inline links, lists, quotes, code in JetBrains Mono, tables in a `Grid`, and images that load on request. Feed HTML never reaches a web view, as [decision 0002](decisions/0002-web-viewer.md) requires. Links open in the default browser.
 
 ## Background running and notifications
 
@@ -78,7 +79,7 @@ Today `fyke service install` registers the daemon in the per-user Run key. The G
 |---|---|
 | Protocol client | xUnit against an in-process fake daemon on a temporary Unix socket, on every OS in CI |
 | View models | xUnit, no window: indent, sentence editing, undo stack, palette matching, state messages |
-| App | Built on `windows-latest` in CI; UI Automation smoke test that launches the app with `FYKE_HOME` and a real `fyke.exe` |
+| App | Built on `windows-latest` in CI. Planned UI Automation smoke test launches the app with `FYKE_HOME` and a real `fyke.exe`. |
 | Manual | Narrator, keyboard only, 100/150/200% scaling, light/dark/high contrast, non-Latin text, data move |
 
 ## Delivery

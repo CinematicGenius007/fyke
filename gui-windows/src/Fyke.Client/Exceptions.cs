@@ -22,6 +22,15 @@ public class DaemonUnavailableException : DaemonException
     public string Reason { get; }
 }
 
+/// <summary>The connection was lost before the client could confirm the request's outcome.</summary>
+public sealed class DaemonOutcomeUnknownException : DaemonException
+{
+    public DaemonOutcomeUnknownException(string method, Exception inner)
+        : base($"The connection was lost during {method}. Refresh to check whether it completed.", inner)
+    {
+    }
+}
+
 /// <summary>The daemon speaks an older <c>api_version</c> than the app needs.</summary>
 public sealed class DaemonTooOldException : DaemonUnavailableException
 {

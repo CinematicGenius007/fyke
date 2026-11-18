@@ -488,6 +488,32 @@ public sealed class DaemonClientTests
     }
 
     [Fact]
+    public async Task LostWriteReplyDoesNotReplayTheRequest()
+    {
+        await using var fake = new FakeDaemon();
+        var writes = 0;
+        fake.On("views.put", _ =>
+        {
+            if (Interlocked.Increment(ref writes) == 1)
+            {
+                fake.Kill();
+            }
+
+            return new { ok = true };
+        });
+        fake.Start();
+        var starter = new RecordingStarter(_ => fake.Restart());
+        await using var client = new DaemonClient(TestSupport.Options(fake, starter));
+        await client.StartAsync(CancellationToken.None);
+
+        await Assert.ThrowsAsync<DaemonOutcomeUnknownException>(
+            () => client.CallAsync("views.put", null, CancellationToken.None));
+
+        Assert.Equal(1, writes);
+        Assert.Equal(ConnectionState.Connected, client.State);
+    }
+
+    [Fact]
     public async Task CallsThatFailTogetherShareOneReconnect()
     {
         await using var fake = new FakeDaemon();

@@ -130,7 +130,13 @@ public sealed class DaemonClient : IDaemonClient
             }
             catch (Exception e) when (IsTransportFailure(e))
             {
-                // The daemon may have restarted since the last call. Reconnect, and try once more.
+                // A lost reply can follow a committed write. Only replay operations known to read.
+                if (method is not ("ping" or "stats.get" or "entries.list" or "entries.get"
+                    or "entries.search" or "feeds.list" or "folders.list"))
+                {
+                    await TryReconnectAsync(epoch, ct).ConfigureAwait(false);
+                    throw new DaemonOutcomeUnknownException(method, e);
+                }
                 await ReconnectAsync(epoch, ct).ConfigureAwait(false);
                 if (attempt >= 1)
                 {
@@ -142,6 +148,7 @@ public sealed class DaemonClient : IDaemonClient
 
     public async IAsyncEnumerable<DaemonEvent> EventsAsync([EnumeratorCancellation] CancellationToken ct)
     {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _lifetime.Token);
         LineConnection? connection = null;
         var epoch = 0;
         var failures = 0;
@@ -152,7 +159,15 @@ public sealed class DaemonClient : IDaemonClient
                 ct.ThrowIfCancellationRequested();
                 if (connection is null)
                 {
-                    (connection, epoch) = await OpenSubscriptionAsync(failures, ct).ConfigureAwait(false);
+                    try
+                    {
+                        (connection, epoch) = await OpenSubscriptionAsync(failures, linked.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (_disposed && !ct.IsCancellationRequested)
+                    {
+                        yield break;
+                    }
+
                     if (connection is null)
                     {
                         failures++;
@@ -165,14 +180,30 @@ public sealed class DaemonClient : IDaemonClient
                     yield return new DaemonEvent(gapSeq, DaemonEvent.GapType, null);
                 }
 
-                var next = await ReadEventAsync(connection, ct).ConfigureAwait(false);
+                DaemonEvent? next;
+                try
+                {
+                    next = await ReadEventAsync(connection, linked.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (_disposed && !ct.IsCancellationRequested)
+                {
+                    yield break;
+                }
                 if (next is null)
                 {
                     // The stream dropped: the daemon went away or restarted. Get a connection back, then resume.
                     connection.Dispose();
                     connection = null;
                     failures++;
-                    await TryReconnectAsync(epoch, ct).ConfigureAwait(false);
+                    try
+                    {
+                        await TryReconnectAsync(epoch, linked.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (_disposed && !ct.IsCancellationRequested)
+                    {
+                        yield break;
+                    }
+
                     continue;
                 }
 
@@ -771,7 +802,8 @@ public sealed class DaemonClient : IDaemonClient
                 if (root.ValueKind == JsonValueKind.Object
                     && root.TryGetProperty("method", out var method) && method.ValueKind == JsonValueKind.String && method.GetString() == "event"
                     && root.TryGetProperty("params", out var parameters) && parameters.ValueKind == JsonValueKind.Object
-                    && parameters.TryGetProperty("seq", out var seq) && seq.TryGetInt64(out var number)
+                    && parameters.TryGetProperty("seq", out var seq) && seq.ValueKind == JsonValueKind.Number
+                    && seq.TryGetInt64(out var number)
                     && parameters.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String)
                 {
                     long? subject = parameters.TryGetProperty("subject_id", out var id) && id.ValueKind == JsonValueKind.Number && id.TryGetInt64(out var parsed) ? parsed : null;

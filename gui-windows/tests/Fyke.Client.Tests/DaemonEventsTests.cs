@@ -217,8 +217,10 @@ public sealed class DaemonEventsTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => next);
     }
 
-    [Fact]
-    public async Task DisposingTheClientEndsTheSequenceQuietly()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DisposingTheClientEndsTheSequenceQuietly(bool daemonDisconnects)
     {
         await using var fake = new FakeDaemon();
         fake.Start();
@@ -227,8 +229,11 @@ public sealed class DaemonEventsTests
         await using var events = client.EventsAsync(CancellationToken.None).GetAsyncEnumerator();
         var next = events.MoveNextAsync().AsTask();
         await Task.Delay(50);
+        if (daemonDisconnects)
+        {
+            fake.Kill();
+        }
 
-        fake.Kill();
         await client.DisposeAsync();
 
         var finished = await next.WaitAsync(TestSupport.Patience);
