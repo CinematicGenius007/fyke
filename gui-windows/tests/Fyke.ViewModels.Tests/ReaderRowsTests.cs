@@ -7,6 +7,31 @@ namespace Fyke.ViewModels.Tests;
 public sealed class ReaderRowsTests
 {
     [Fact]
+    public void CollapsingAnAncestorKeepsCountsAndRestoresTheNestedCollapse()
+    {
+        var all = new ReaderDestination(ReaderScope.All, 0, "All", 0, 8);
+        var folder = new ReaderDestination(ReaderScope.Folder, 1, "News", 0, 7);
+        var nested = new ReaderDestination(ReaderScope.Folder, 2, "Local", 1, 5);
+        var nestedFeed = new ReaderDestination(ReaderScope.Feed, 1, "City", 2, 5);
+        var sibling = new ReaderDestination(ReaderScope.Feed, 2, "National", 1, 2);
+        var unfiled = new ReaderDestination(ReaderScope.Feed, 3, "Radio", 0, 1);
+        ReaderDestination[] catalog = [all, folder, nested, nestedFeed, sibling, unfiled];
+        var collapsed = new HashSet<long> { nested.Id, folder.Id };
+
+        var closed = ReaderRows.VisibleDestinations(catalog, collapsed);
+
+        Assert.Equal([all, folder, unfiled], closed);
+        Assert.Same(folder, closed[1]);
+        Assert.Equal(7, closed[1].Count);
+
+        collapsed.Remove(folder.Id);
+
+        Assert.Equal([all, folder, nested, sibling, unfiled], ReaderRows.VisibleDestinations(catalog, collapsed));
+        collapsed.Clear();
+        Assert.Equal(catalog, ReaderRows.VisibleDestinations(catalog, collapsed));
+    }
+
+    [Fact]
     public void InsertingAHeadlineKeepsExistingRowsAndAvoidsReset()
     {
         var open = new TimelineArticle(2, "Open article", "News", false);

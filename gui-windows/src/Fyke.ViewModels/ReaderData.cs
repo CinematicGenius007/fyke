@@ -18,7 +18,7 @@ public sealed record ReaderDestination(ReaderScope Scope, long Id, string Title,
     {
         ReaderScope.All => "\uE8B7",
         ReaderScope.Starred => "\uE734",
-        ReaderScope.Folder => "\uE8B7",
+        ReaderScope.Folder => string.Empty,
         _ => "\uE8A1",
     };
 

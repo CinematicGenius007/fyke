@@ -9,6 +9,7 @@ using Fyke.Client;
 using Fyke.ViewModels;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
@@ -21,6 +22,8 @@ public sealed partial class MainWindow
 {
     private readonly ObservableCollection<TimelineArticle> articles = [];
     private readonly ObservableCollection<ReaderDestination> destinations = [];
+    private readonly HashSet<long> collapsedFolders = [];
+    private IReadOnlyList<ReaderDestination> catalog = [];
     private DispatcherQueueTimer readerReloadTimer = null!;
     private int readerChangesPending;
     private ReaderData reader = null!;
@@ -108,6 +111,77 @@ public sealed partial class MainWindow
         }
     }
 
+    private void ApplyVisibleDestinations()
+    {
+        var visible = ReaderRows.VisibleDestinations(catalog, collapsedFolders);
+        restoringDestination = true;
+        try
+        {
+            ReaderRows.Reconcile(destinations, visible, row => (row.Scope, row.Id));
+            // A collapsed ancestor can hide the selection while its timeline stays active.
+            var active = destination;
+            var selected = destinations.FirstOrDefault(row => active is not null
+                && row.Scope == active.Scope && row.Id == active.Id);
+            if (!ReferenceEquals(Destinations.SelectedItem, selected))
+            {
+                Destinations.SelectedItem = selected;
+            }
+        }
+        finally
+        {
+            restoringDestination = false;
+        }
+    }
+
+    private void FolderDisclosureChanged(FrameworkElement sender, DataContextChangedEventArgs args)
+    {
+        if (sender is Button button)
+        {
+            UpdateFolderDisclosure(button);
+        }
+    }
+
+    private void FolderDisclosureLoaded(object sender, RoutedEventArgs args)
+    {
+        if (sender is Button button)
+        {
+            UpdateFolderDisclosure(button);
+        }
+    }
+
+    private void FolderDisclosureClicked(object sender, RoutedEventArgs args)
+    {
+        if (sender is Button button && button.DataContext is ReaderDestination { Scope: ReaderScope.Folder } folder)
+        {
+            if (!collapsedFolders.Remove(folder.Id))
+            {
+                collapsedFolders.Add(folder.Id);
+            }
+
+            ApplyVisibleDestinations();
+            UpdateFolderDisclosure(button);
+        }
+    }
+
+    private void UpdateFolderDisclosure(Button button)
+    {
+        if (button.DataContext is not ReaderDestination { Scope: ReaderScope.Folder } folder)
+        {
+            button.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var collapsed = collapsedFolders.Contains(folder.Id);
+        button.Visibility = Visibility.Visible;
+        if (button.Content is FontIcon icon)
+        {
+            icon.Glyph = collapsed ? "\uE76C" : "\uE70D";
+        }
+        var name = collapsed ? $"Expand {folder.Title}" : $"Collapse {folder.Title}";
+        AutomationProperties.SetName(button, name);
+        ToolTipService.SetToolTip(button, name);
+    }
+
     private void DestinationChanged(object sender, SelectionChangedEventArgs args)
     {
         if (restoringDestination || Destinations.SelectedItem is not ReaderDestination selected)
@@ -158,20 +232,9 @@ public sealed partial class MainWindow
                 var current = rows.FirstOrDefault(row => previous is not null
                     && row.Scope == previous.Scope && row.Id == previous.Id) ?? rows[0];
 
-                restoringDestination = true;
-                try
-                {
-                    ReaderRows.Reconcile(destinations, rows, row => (row.Scope, row.Id));
-                    if (!Equals(Destinations.SelectedItem, current))
-                    {
-                        Destinations.SelectedItem = destinations.First(row => row.Scope == current.Scope && row.Id == current.Id);
-                    }
-                    destination = current;
-                }
-                finally
-                {
-                    restoringDestination = false;
-                }
+                catalog = rows;
+                destination = current;
+                ApplyVisibleDestinations();
             }
 
             if (destination is null)

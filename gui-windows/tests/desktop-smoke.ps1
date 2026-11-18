@@ -78,6 +78,12 @@ try {
         $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $destinationsId)
     }
 
+    function Find-ByName($parent, [string]$name) {
+        $condition = [Windows.Automation.PropertyCondition]::new(
+            [Windows.Automation.AutomationElement]::NameProperty, $name)
+        $parent.FindFirst([Windows.Automation.TreeScope]::Descendants, $condition)
+    }
+
     function Select-ReaderItem($list, [string]$name) {
         $condition = [Windows.Automation.PropertyCondition]::new(
             [Windows.Automation.AutomationElement]::NameProperty, $name)
@@ -103,9 +109,16 @@ try {
         if ($heading -and $heading.Current.Name -eq 'Starred') { $true }
     } | Out-Null
 
-    & $daemonPath add $FeedUrl --allow-private
-    if ($LASTEXITCODE -ne 0) { throw 'Could not add the reader fixture feed' }
-    Select-ReaderItem $items 'All'
+    $opml = Join-Path $testHome 'fixture.opml'
+    $urlAttribute = [Security.SecurityElement]::Escape($FeedUrl)
+    [IO.File]::WriteAllText($opml, @"
+<opml version="2.0"><body><outline text="Fixture folder">
+<outline type="rss" text="Desktop fixture" xmlUrl="$urlAttribute"/>
+</outline></body></opml>
+"@)
+    & $daemonPath import $opml --allow-private
+    if ($LASTEXITCODE -ne 0) { throw 'Could not import the reader fixture feed' }
+    Select-ReaderItem $items 'Desktop fixture'
     $timelineId = [Windows.Automation.PropertyCondition]::new(
         [Windows.Automation.AutomationElement]::AutomationIdProperty, 'ReaderTimeline')
     $timeline = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $timelineId)
@@ -121,6 +134,16 @@ try {
         $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $imageButton)
     } | Out-Null
 
+    $collapse = Wait-For 'the folder collapse control' { Find-ByName $items 'Collapse Fixture folder' }
+    $collapse.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'the folder to hide its feed' {
+        $control = Find-ByName $items 'Expand Fixture folder'
+        if ($control -and !(Find-ByName $items 'Desktop fixture')) { $true }
+    } | Out-Null
+    $heading = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $headingId)
+    if ($heading.Current.Name -ne 'Desktop fixture' -or !$root.FindFirst([Windows.Automation.TreeScope]::Descendants, $paragraph)) {
+        throw 'Collapsing a folder changed the active feed or article.'
+    }
     $advance = [Uri]::new([Uri]$FeedUrl, '/advance')
     Invoke-WebRequest -Uri $advance -Method Post -UseBasicParsing | Out-Null
     & $daemonPath refresh
@@ -133,10 +156,16 @@ try {
     if (!$root.FindFirst([Windows.Automation.TreeScope]::Descendants, $paragraph)) {
         throw 'The live update displaced the article being read.'
     }
+    $expand = Find-ByName $items 'Expand Fixture folder'
+    if (!$expand -or (Find-ByName $items 'Desktop fixture')) {
+        throw 'The live update expanded a collapsed folder.'
+    }
+    $expand.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'the feed to return after expanding the folder' { Find-ByName $items 'Desktop fixture' } | Out-Null
 
     & $daemonPath status
     if ($LASTEXITCODE -ne 0) { throw 'The companion daemon did not answer status' }
-    Write-Host 'WinUI recovered the daemon and kept the article open through a live feed update.'
+    Write-Host 'WinUI recovered the daemon and kept the article open through folder disclosure and a live feed update.'
 } finally {
     try {
         if ($window) {

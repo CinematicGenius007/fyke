@@ -67,6 +67,8 @@ The structure and measurements follow the design rules; the chrome is Windows:
 
 The sidebar and timeline use native lists. The catalog groups feeds by folder and aggregates unread counts. Selecting a destination requests a 100-article page using the daemon’s feed, folder, or starred filter. Load more passes the returned keyset cursor back to the daemon. Navigation cancels stale requests. Entry events, catalog events, and replay gaps trigger a batched reload. Reconnect refreshes the catalog and timeline. The lists apply changes by row identity so unchanged rows and the open article stay in place while they are still in the result. The reader pane displays the selected article’s title, source, and stored body. Changing selection cancels the previous body request.
 
+The folder row opens its timeline. Its disclosure button expands or collapses descendants without changing the active feed or article. Folder unread counts include collapsed descendants. Collapse state lasts for the window session. Saving it across launches is part of the planned settings work.
+
 ## Article reader
 
 The reader requests `entries.get` in blocks format and renders the stored nodes with native controls. Paragraphs use selectable text and inline links. Lists, quotes, headings, code, tables, and separators keep their structure. Images have an explicit load control. Feed HTML never reaches a web view, as [decision 0002](decisions/0002-web-viewer.md) requires. Links open in the default browser.
@@ -124,9 +126,10 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W1a | Reader shell, feed and folder destinations, Starred, timeline paging and a resizable list divider | API parameter tests, native selection smoke test, and visual checks at narrow and wide widths |
 | W1b.1 | Native block rendering with on-demand images and article selection | Shared content fixture, Windows desktop smoke test, and URL handling tests |
 | W1b.2 | Live timeline updates and stable article selection | Native smoke test receives an article while the previous one stays open. Unit tests check that unchanged rows retain their identity |
-| W1b.3 | Folder collapse, reading weights, and discussion | Keyboard, Narrator, DPI, and scrolling checks |
+| W1b.3 | Folder disclosure and stable navigation when descendants are hidden | View-model tests check nested collapse and unread totals. The desktop smoke test checks collapse and expand with an open article |
+| W1b.4 | Reading weights and discussion | Keyboard, Narrator, DPI, and scrolling checks |
 | W1c | Search, marks, undo, command palette and focus | Same task outcomes as macOS, including reconnect and missing selection |
-| W2 | Subscription discovery, OPML, settings, themes, agent setup, storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
+| W2 | Subscription discovery, OPML, settings, persistent folder disclosure, themes, agent setup, storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
 | W3 | Saved views, Today, recipes, briefs, Ask, catch-up, routines, Activity, and citation navigation | One module per flow with fixture-driven API and desktop checks, including failed or partial work |
 | W4 | Restart supervision, notifications and activation | Close the window, crash and restart the daemon, sign out/in, deny notification access, reopen the right result |
 | W5 | Versioned GUI/core bundle, runtime dependencies, signing, installer, upgrades, uninstall and release notes | Clean Windows 11 x64 standard-user install, upgrade from a prior build, rollback and uninstall with data retention, verified published checksums |

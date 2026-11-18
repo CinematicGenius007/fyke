@@ -46,6 +46,14 @@
                                 </Grid.ColumnDefinitions>
                                 <FontIcon Glyph="{Binding Glyph}" FontSize="14"
                                           Foreground="{ThemeResource InkSoftBrush}" />
+                                <Button Width="24" Height="24" Padding="0" Margin="-5,0,0,0"
+                                        HorizontalAlignment="Left" VerticalAlignment="Center" Visibility="Collapsed"
+                                        Background="Transparent" BorderThickness="0" Foreground="{ThemeResource MutedBrush}"
+                                        Loaded="FolderDisclosureLoaded" DataContextChanged="FolderDisclosureChanged"
+                                        Click="FolderDisclosureClicked"
+                                        CornerRadius="{StaticResource RadiusControl}">
+                                    <FontIcon FontSize="10" />
+                                </Button>
                                 <TextBlock Grid.Column="1" Text="{Binding Title}" TextTrimming="CharacterEllipsis"
                                            VerticalAlignment="Center" Foreground="{ThemeResource InkBrush}" />
                                 <TextBlock Grid.Column="2" Text="{Binding CountText}" VerticalAlignment="Center"

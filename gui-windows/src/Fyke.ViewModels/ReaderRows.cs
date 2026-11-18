@@ -2,9 +2,29 @@ using System.Collections.ObjectModel;
 
 namespace Fyke.ViewModels;
 
-/// <summary>Applies a fresh page while retaining unchanged rows and their native list containers.</summary>
+/// <summary>Projects visible reader rows and applies collection changes without resetting the lists.</summary>
 public static class ReaderRows
 {
+    /// <summary>Hides descendants in the depth-first catalog while retaining its aggregate counts.</summary>
+    public static IReadOnlyList<ReaderDestination> VisibleDestinations(
+        IReadOnlyList<ReaderDestination> catalog, IReadOnlySet<long> collapsedFolders)
+    {
+        var visible = new List<ReaderDestination>(catalog.Count);
+        int? hiddenBelow = null;
+        foreach (var row in catalog)
+        {
+            if (hiddenBelow is int depth && row.Depth > depth)
+            {
+                continue;
+            }
+
+            visible.Add(row);
+            hiddenBelow = row.Scope == ReaderScope.Folder && collapsedFolders.Contains(row.Id) ? row.Depth : null;
+        }
+
+        return visible;
+    }
+
     public static void Reconcile<T, TKey>(
         ObservableCollection<T> current, IReadOnlyList<T> updated, Func<T, TKey> key)
         where TKey : notnull
