@@ -12,7 +12,8 @@ public enum ReaderScope
     Feed,
 }
 
-public sealed record ReaderDestination(ReaderScope Scope, long Id, string Title, int Depth, long Count, long? ParentId = null)
+public sealed record ReaderDestination(ReaderScope Scope, long Id, string Title, int Depth, long Count,
+    long? ParentId = null, long Entries = 0, long Starred = 0)
 {
     public string Glyph => Scope switch
     {
@@ -29,7 +30,7 @@ public sealed record ReaderDestination(ReaderScope Scope, long Id, string Title,
         : Title;
 }
 
-public sealed record TimelineArticle(long Id, string Title, string? FeedTitle, bool Read, bool Starred = false)
+public sealed record TimelineArticle(long Id, string Title, string? FeedTitle, bool Read, bool Starred = false, long? FeedId = null)
 {
     public string AccessibleName => Read ? Title : $"{Title}, unread";
 }
@@ -76,7 +77,7 @@ public sealed class ReaderData(IDaemonClient client)
             foreach (var feed in feedsByFolder[parent])
             {
                 rows.Add(new(ReaderScope.Feed, feed.Id, string.IsNullOrWhiteSpace(feed.Title) ? feed.Url : feed.Title,
-                    depth, feed.Unread, feed.FolderId));
+                    depth, feed.Unread, feed.FolderId, feed.Entries, feed.Starred));
                 unread += feed.Unread;
             }
 
@@ -204,13 +205,14 @@ public sealed class ReaderData(IDaemonClient client)
         result.Deserialize<T>(Wire) ?? throw new DaemonProtocolException("The daemon returned an empty reader response.");
 
     private static TimelineArticle ToTimelineArticle(Entry entry) => new(entry.Id,
-        string.IsNullOrWhiteSpace(entry.Title) ? "Untitled article" : entry.Title, entry.FeedTitle, entry.Read, entry.Starred);
+        string.IsNullOrWhiteSpace(entry.Title) ? "Untitled article" : entry.Title, entry.FeedTitle,
+        entry.Read, entry.Starred, entry.FeedId);
 
     private sealed record CatalogItems<T>(T[] Items);
-    private sealed record Feed(long Id, long? FolderId, string? Title, string Url, long Unread, long Starred);
+    private sealed record Feed(long Id, long? FolderId, string? Title, string Url, long Unread, long Starred, long Entries);
     private sealed record Folder(long Id, long? ParentId, string Name);
     private sealed record Entry(long Id, string? Title, string? FeedTitle, bool Read, bool Starred,
-        string? Snippet, string? Summary, long SortAt);
+        string? Snippet, string? Summary, long SortAt, long? FeedId);
     private sealed record ArticleBody(string? Title, string? FeedTitle, string? Author, string? DiscussionUrl, string Body, bool Read, bool Starred);
     private sealed record MarkReply(MarkState? Previous);
     private sealed record MarkState(bool Read, bool Starred);

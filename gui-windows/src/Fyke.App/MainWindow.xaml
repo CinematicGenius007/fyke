@@ -32,6 +32,7 @@
                 <KeyboardAccelerator Key="F6" Modifiers="Shift" Invoked="PaneFocusShortcut" />
                 <KeyboardAccelerator Key="M" Invoked="ArticleMarkShortcut" />
                 <KeyboardAccelerator Key="S" Invoked="ArticleMarkShortcut" />
+                <KeyboardAccelerator Key="R" Invoked="RefreshSubscriptionsShortcut" />
                 <KeyboardAccelerator Key="K" Modifiers="Control,Shift" Invoked="MarkAllReadShortcut" />
                 <KeyboardAccelerator Key="Z" Modifiers="Control" Invoked="UndoBulkShortcut" />
             </Grid.KeyboardAccelerators>
@@ -46,6 +47,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid Margin="10,0,0,8" ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
@@ -113,6 +115,10 @@
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
+                <TextBlock Grid.Row="2" x:Name="SubscriptionStatus" Visibility="Collapsed" Margin="10,6,8,4"
+                           FontSize="12" TextWrapping="Wrap" FontFamily="{StaticResource FontUi}"
+                           FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                           Foreground="{ThemeResource MutedBrush}" AutomationProperties.LiveSetting="Polite" />
             </Grid>
             <Border Grid.Column="1" Background="{ThemeResource HairlineBrush}" />
             <Grid Grid.Column="2" x:Name="TimelinePane" Background="{ThemeResource GroundBrush}">
@@ -581,11 +587,16 @@
                     <TextBlock x:Name="CatalogEditHint" FontSize="13" TextWrapping="Wrap"
                                FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
                                Foreground="{ThemeResource MutedBrush}" />
+                    <CheckBox x:Name="CatalogDeleteContents" Content="Also delete everything inside" Visibility="Collapsed"
+                              Checked="CatalogDeleteContentsChanged" Unchecked="CatalogDeleteContentsChanged"
+                              FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                              AutomationProperties.AutomationId="CatalogDeleteContents" />
                     <TextBlock x:Name="CatalogEditStatus" FontSize="13" TextWrapping="Wrap" Visibility="Collapsed"
                                FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
                                Foreground="{ThemeResource InkSoftBrush}" AutomationProperties.LiveSetting="Polite" />
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
                         <Button x:Name="CatalogEditCancel" Content="Cancel" Height="32" Click="CatalogEditCancelClicked"
+                                AutomationProperties.AutomationId="CatalogEditCancel"
                                 FontFamily="{StaticResource FontUi}" CornerRadius="{StaticResource RadiusControl}" />
                         <Button x:Name="CatalogEditConfirm" Height="32" Click="CatalogEditConfirmClicked"
                                 Style="{StaticResource AccentButtonStyle}" AutomationProperties.AutomationId="CatalogEditConfirm"

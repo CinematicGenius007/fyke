@@ -13,7 +13,7 @@ namespace Fyke.App;
 
 public sealed partial class MainWindow
 {
-    private enum CatalogEditKind { CreateFolder, Rename, Move }
+    private enum CatalogEditKind { CreateFolder, Rename, Move, Remove }
 
     private sealed record CatalogEditDraft(CatalogEditKind Kind, ReaderDestination? Item);
 
@@ -46,7 +46,9 @@ public sealed partial class MainWindow
         var move = Add("Move to…", target => OpenCatalogEdit(CatalogEditKind.Move, target));
         var create = Add("New folder", target => OpenCatalogEdit(CatalogEditKind.CreateFolder, target));
         var addFeed = Add("Add feed here", target => OpenAddFeed(target.Id));
+        var refresh = Add("Refresh", target => _ = RefreshSubscriptionsAsync(target.Scope == ReaderScope.Feed ? target : null));
         var mark = Add("Mark all read", target => StartBulkMark(target));
+        var remove = Add("Remove…", target => OpenCatalogEdit(CatalogEditKind.Remove, target));
         flyout.Opening += (_, _) =>
         {
             var scope = (row.DataContext as ReaderDestination)?.Scope;
@@ -55,7 +57,12 @@ public sealed partial class MainWindow
             create.Visibility = scope is ReaderScope.All or ReaderScope.Folder ? Visibility.Visible : Visibility.Collapsed;
             create.Text = scope == ReaderScope.Folder ? "New folder inside" : "New folder";
             addFeed.Visibility = scope == ReaderScope.Folder ? Visibility.Visible : Visibility.Collapsed;
+            refresh.Visibility = scope is ReaderScope.All or ReaderScope.Feed ? Visibility.Visible : Visibility.Collapsed;
+            refresh.Text = scope == ReaderScope.Feed ? "Refresh feed" : "Refresh all feeds";
+            refresh.IsEnabled = !refreshingSubscriptions;
             mark.IsEnabled = CanChangeBulkMarks;
+            remove.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
+            remove.Text = scope == ReaderScope.Folder ? "Delete folder…" : "Remove feed…";
         };
         row.ContextFlyout = flyout;
 
@@ -98,15 +105,23 @@ public sealed partial class MainWindow
         {
             CatalogEditKind.Rename => $"Rename {item!.Title}",
             CatalogEditKind.Move => $"Move {item!.Title}",
+            CatalogEditKind.Remove => item!.Scope == ReaderScope.Folder ? $"Delete {item.Title}?" : $"Remove {item.Title}?",
             _ => item is { Scope: ReaderScope.Folder } ? $"New folder in {item.Title}" : "New folder",
         };
         var moving = kind == CatalogEditKind.Move;
-        CatalogEditName.Visibility = moving ? Visibility.Collapsed : Visibility.Visible;
+        var removing = kind == CatalogEditKind.Remove;
+        CatalogEditName.Visibility = moving || removing ? Visibility.Collapsed : Visibility.Visible;
         CatalogMoveTarget.Visibility = moving ? Visibility.Visible : Visibility.Collapsed;
+        CatalogDeleteContents.Visibility = Visibility.Collapsed;
+        CatalogDeleteContents.IsChecked = false;
         CatalogEditName.Text = kind == CatalogEditKind.Rename ? item!.Title : string.Empty;
         CatalogEditHint.Text = kind == CatalogEditKind.Rename && item!.Scope == ReaderScope.Feed
             ? "Clear the name to use the feed’s own title." : string.Empty;
         CatalogEditHint.Visibility = CatalogEditHint.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (removing)
+        {
+            UpdateRemovalHint(item!);
+        }
         if (moving)
         {
             var choices = FolderChoice.FromCatalog(catalog, "Top level",
@@ -116,8 +131,9 @@ public sealed partial class MainWindow
         }
 
         CatalogEditStatus.Visibility = Visibility.Collapsed;
-        ShowReaderOverlay(CatalogEditOverlay, moving ? CatalogMoveTarget : CatalogEditName);
-        if (!moving)
+        Control focus = removing ? CatalogEditCancel : moving ? CatalogMoveTarget : CatalogEditName;
+        ShowReaderOverlay(CatalogEditOverlay, focus);
+        if (!moving && !removing)
         {
             CatalogEditName.SelectAll();
         }
@@ -157,7 +173,8 @@ public sealed partial class MainWindow
             args.Handled = true;
             CloseCatalogEdit();
         }
-        else if (args.Key == VirtualKey.Enter && CatalogEditName.FocusState != FocusState.Unfocused
+        else if (args.Key == VirtualKey.Enter && catalogDraft?.Kind != CatalogEditKind.Remove
+            && CatalogEditName.FocusState != FocusState.Unfocused
             && CatalogEditConfirm.IsEnabled)
         {
             args.Handled = true;
@@ -177,17 +194,20 @@ public sealed partial class MainWindow
         }
 
         CatalogEditName.IsEnabled = CatalogMoveTarget.IsEnabled = CatalogEditCancel.IsEnabled = !savingCatalogEdit;
+        CatalogDeleteContents.IsEnabled = !savingCatalogEdit;
         CatalogEditConfirm.IsEnabled = readerConnected && !savingCatalogEdit && (draft.Kind switch
         {
             CatalogEditKind.Move => CatalogMoveTarget.SelectedItem is FolderChoice choice && choice.Id != draft.Item!.ParentId,
             CatalogEditKind.Rename when draft.Item!.Scope == ReaderScope.Feed => CatalogEditName.Text.Trim() != draft.Item.Title,
             CatalogEditKind.Rename => !string.IsNullOrWhiteSpace(CatalogEditName.Text) && CatalogEditName.Text.Trim() != draft.Item!.Title,
+            CatalogEditKind.Remove => true,
             _ => !string.IsNullOrWhiteSpace(CatalogEditName.Text),
         });
         CatalogEditConfirm.Content = draft.Kind switch
         {
             CatalogEditKind.Move => "Move",
             CatalogEditKind.Rename => "Save name",
+            CatalogEditKind.Remove => draft.Item!.Scope == ReaderScope.Folder ? "Delete folder" : "Remove feed",
             _ => "Create folder",
         };
     }
@@ -203,6 +223,8 @@ public sealed partial class MainWindow
 
         var name = CatalogEditName.Text;
         var parent = (CatalogMoveTarget.SelectedItem as FolderChoice)?.Id;
+        var deleteContents = CatalogDeleteContents.IsChecked == true;
+        var removal = draft.Kind == CatalogEditKind.Remove ? CatalogRemoval.FromCatalog(draft.Item!, catalog) : null;
         savingCatalogEdit = true;
         CatalogEditStatus.Text = "Saving…";
         CatalogEditStatus.Visibility = Visibility.Visible;
@@ -215,6 +237,7 @@ public sealed partial class MainWindow
             {
                 CatalogEditKind.Rename => catalogEdits.RenameAsync(draft.Item!, name, ct),
                 CatalogEditKind.Move => catalogEdits.MoveAsync(draft.Item!, parent, ct),
+                CatalogEditKind.Remove => catalogEdits.RemoveAsync(draft.Item!, deleteContents, ct),
                 _ => catalogEdits.CreateFolderAsync(name, draft.Item is { Scope: ReaderScope.Folder } folder ? folder.Id : null, ct),
             });
             saved = true;
@@ -246,6 +269,10 @@ public sealed partial class MainWindow
                 {
                     // An article can leave the current timeline when its feed moves to another folder.
                     SetTimelineSelection(null);
+                }
+                else if (removal is not null)
+                {
+                    ApplyCatalogRemoval(removal, deleteContents);
                 }
 
                 CloseCatalogEdit();

@@ -58,4 +58,54 @@ public sealed class CatalogEditsTests
         Assert.Equal(string.Empty, calls[3].Parameters.GetProperty("Title").GetString());
         Assert.True(calls[4].Parameters.GetProperty("TopLevel").GetBoolean());
     }
+
+    [Fact]
+    public void RemovalKeepsFolderContentsUnlessTheyWereExplicitlySelected()
+    {
+        var folder = new ReaderDestination(ReaderScope.Folder, 1, "News", 0, 0);
+        var child = new ReaderDestination(ReaderScope.Folder, 2, "Local", 1, 0, 1);
+        var feed = new ReaderDestination(ReaderScope.Feed, 1, "Local feed", 2, 0, 2);
+        var other = new ReaderDestination(ReaderScope.Feed, 3, "Other feed", 0, 0);
+        var removal = CatalogRemoval.FromCatalog(folder, [folder, child, feed, other]);
+
+        Assert.Equal([folder], removal.Removed(false));
+        Assert.Equal([folder, child, feed], removal.Removed(true));
+        Assert.Equal([other], CatalogRemoval.FromCatalog(other, [folder, child, feed, other]).Removed(true));
+    }
+
+    [Fact]
+    public async Task RefreshAndRemovalUseTheirOwnOperationsAndDecodeRefreshCounts()
+    {
+        var calls = new List<(string Method, JsonElement Parameters)>();
+        var client = new FakeClient
+        {
+            OnCall = (method, parameters) =>
+            {
+                calls.Add((method, JsonSerializer.SerializeToElement(parameters)));
+                return method switch
+                {
+                    "feeds.refresh" => JsonSerializer.SerializeToElement(new { id = 2, status = "updated", @new = 3, updated = 1 }),
+                    "feeds.refresh_all" => JsonSerializer.SerializeToElement(new { queued = 5 }),
+                    _ => JsonSerializer.SerializeToElement(new { ok = true }),
+                };
+            },
+        };
+        var edits = new CatalogEdits(client);
+        var ct = CancellationToken.None;
+        var folder = new ReaderDestination(ReaderScope.Folder, 1, "News", 0, 0);
+        var feed = new ReaderDestination(ReaderScope.Feed, 2, "Feed", 1, 0, 1);
+
+        Assert.Equal(new FeedRefresh(2, "updated", 3, 1), await edits.RefreshFeedAsync(feed.Id, ct));
+        Assert.Equal(5, await edits.RefreshAllAsync(ct));
+        await edits.RemoveAsync(feed, false, ct);
+        await edits.RemoveAsync(folder, false, ct);
+        await edits.RemoveAsync(folder, true, ct);
+
+        Assert.Equal(["feeds.refresh", "feeds.refresh_all", "feeds.remove", "folders.remove", "folders.remove"],
+            calls.Select(call => call.Method));
+        Assert.Equal(2, calls[0].Parameters.GetProperty("Id").GetInt64());
+        Assert.Equal(2, calls[2].Parameters.GetProperty("Id").GetInt64());
+        Assert.False(calls[3].Parameters.GetProperty("DeleteContents").GetBoolean());
+        Assert.True(calls[4].Parameters.GetProperty("DeleteContents").GetBoolean());
+    }
 }

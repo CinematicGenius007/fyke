@@ -80,16 +80,14 @@ public sealed class FeedSubscriptions(IDaemonClient client)
             .DistinctBy(candidate => candidate.Url, StringComparer.Ordinal).ToArray();
     }
 
-    internal async Task<AddedFeed> SubscribeAsync(FeedSubscriptionRequest request, bool allowPrivateNetwork, CancellationToken ct)
+    internal async Task<FeedRefresh> SubscribeAsync(FeedSubscriptionRequest request, bool allowPrivateNetwork, CancellationToken ct)
     {
         var parameters = new { request.Candidate.Url, request.Title, AllowPrivateNetwork = allowPrivateNetwork };
         var reply = await client.CallAsync("feeds.add", parameters, ct).ConfigureAwait(false);
-        var added = reply.Deserialize<AddedFeed>(Wire);
-        return added is { Id: > 0 } ? added : throw new DaemonProtocolException("The daemon did not return the subscription ID.");
+        return CatalogEdits.ReadRefresh(reply);
     }
 
     internal Task PlaceAsync(long id, long folderId, CancellationToken ct) => CatalogEdits.MoveFeedAsync(client, id, folderId, ct);
 
-    internal sealed record AddedFeed(long Id, string Status);
     private sealed record FeedPreview(FeedCandidate[]? Items);
 }

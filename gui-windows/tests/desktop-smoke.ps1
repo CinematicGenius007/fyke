@@ -414,9 +414,56 @@ try {
     $openHeading = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $articleHeadingId)
     if ($openHeading.Current.Name -ne 'First discovered article') { throw 'Renaming the feed closed the article.' }
 
+    $advanceDiscovery = [Uri]::new([Uri]$FeedUrl, '/advance-discovery')
+    Invoke-WebRequest -Uri $advanceDiscovery -Method Post -UseBasicParsing | Out-Null
+    Invoke-PaletteResult 'Refresh Reviewed' 'Refresh Reviewed discovery feed'
+    Wait-For 'the refreshed article in the current feed' {
+        Find-ByName $timeline 'Updated discovery article'
+    } | Out-Null
+
+    Invoke-PaletteResult 'Remove Reviewed' 'Remove Reviewed discovery feed'
+    $cancelRemove = Wait-ForArticleAction 'CatalogEditCancel' 'Cancel'
+    $cancelRemove.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'the canceled removal to leave the feed in the sidebar' {
+        Find-ByName $items 'Reviewed discovery feed'
+    } | Out-Null
+    Invoke-PaletteResult 'Remove Reviewed' 'Remove Reviewed discovery feed'
+    $removeFeed = Wait-ForArticleAction 'CatalogEditConfirm' 'Remove feed'
+    $removeFeed.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'All to replace the removed active feed' {
+        $heading = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $headingId)
+        $open = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $articleHeadingId)
+        if ($heading -and $heading.Current.Name -eq 'All' -and $open.Current.Name -eq 'Select an article') { $true }
+    } | Out-Null
+    if (Find-ByName $items 'Reviewed discovery feed') { throw 'The removed feed is still in the sidebar.' }
+
+    Select-ReaderItem $items 'Fixture folder'
+    Wait-For 'the folder destination before removal' {
+        $heading = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $headingId)
+        if ($heading -and $heading.Current.Name -eq 'Fixture folder') { $true }
+    } | Out-Null
+    Invoke-PaletteResult 'Delete Fixture folder' 'Delete Fixture folder'
+    $keepContentsId = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::AutomationIdProperty, 'CatalogDeleteContents')
+    $contents = Wait-For 'the delete contents choice' {
+        $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $keepContentsId)
+    }
+    $contentsChoice = $contents.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern)
+    if ($contentsChoice.Current.ToggleState -ne [Windows.Automation.ToggleState]::Off) {
+        throw 'Deleting a folder must keep its contents by default.'
+    }
+    $deleteFolder = Wait-ForArticleAction 'CatalogEditConfirm' 'Delete folder'
+    $deleteFolder.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'the folder feed to move to the top level' { Find-ByName $items 'Desktop fixture' } | Out-Null
+    if (Find-ByName $items 'Fixture folder') { throw 'The removed folder is still in the sidebar.' }
+    $remaining = (& $daemonPath list --json | Out-String | ConvertFrom-Json).items
+    if (!($remaining | Where-Object { $_.title -eq 'Native reader fixture' })) {
+        throw 'Deleting the folder also deleted its articles.'
+    }
+
     & $daemonPath status
     if ($LASTEXITCODE -ne 0) { throw 'The companion daemon did not answer status' }
-    Write-Host 'WinUI verified daemon recovery, the reader, search and palette, bulk undo, and subscription editing.'
+    Write-Host 'WinUI verified daemon recovery, the reader, search and palette, bulk undo, and subscription management.'
 } catch {
     Write-Host $_.ScriptStackTrace
     throw

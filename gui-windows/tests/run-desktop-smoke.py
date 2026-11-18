@@ -10,6 +10,7 @@ from threading import Event, Thread
 
 image_requested = Event()
 feed_updated = Event()
+discovery_updated = Event()
 discussion_enabled = Event()
 discussion_too_early = Event()
 discussion_failed_once = Event()
@@ -19,6 +20,8 @@ class Fixture(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == "/advance":
             feed_updated.set()
+        elif self.path == "/advance-discovery":
+            discovery_updated.set()
         elif self.path == "/enable-discussion":
             discussion_enabled.set()
         else:
@@ -44,9 +47,14 @@ class Fixture(BaseHTTPRequestHandler):
             first = self.path.endswith("/first")
             name = "Discovery feed" if first else "Other discovered feed"
             title = "First discovered article" if first else "Other discovered article"
+            update = (
+                '<item><title>Updated discovery article</title><guid>discovery-update</guid></item>'
+                if first and discovery_updated.is_set()
+                else ""
+            )
             self.send_body(
                 f'<rss version="2.0"><channel><title>{name}</title>'
-                f'<item><title>{title}</title><guid>{self.path}</guid></item></channel></rss>'.encode(),
+                f'<item><title>{title}</title><guid>{self.path}</guid></item>{update}</channel></rss>'.encode(),
                 "application/rss+xml",
             )
             return

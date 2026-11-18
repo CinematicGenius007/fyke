@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Fyke.Client;
 
 namespace Fyke.ViewModels;
@@ -38,9 +40,28 @@ public sealed record FolderChoice(long? Id, string Name)
     }
 }
 
+public sealed record CatalogRemoval(ReaderDestination Item, IReadOnlyList<ReaderDestination> Contents)
+{
+    public static CatalogRemoval FromCatalog(ReaderDestination item, IReadOnlyList<ReaderDestination> catalog)
+    {
+        var contents = item.Scope == ReaderScope.Folder
+            ? catalog.SkipWhile(row => row.Scope != ReaderScope.Folder || row.Id != item.Id).Skip(1)
+                .TakeWhile(row => row.Depth > item.Depth).ToArray()
+            : [];
+        return new(item, contents);
+    }
+
+    public IReadOnlyList<ReaderDestination> Removed(bool deleteContents) =>
+        deleteContents ? [Item, .. Contents] : [Item];
+}
+
+public sealed record FeedRefresh(long Id, string Status, [property: JsonPropertyName("new")] int NewCount, int Updated);
+
 /// <summary>Edits subscriptions and folders through the daemon's management operations.</summary>
 public sealed class CatalogEdits(IDaemonClient client)
 {
+    private static readonly JsonSerializerOptions Wire = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+
     public Task CreateFolderAsync(string name, long? parentId, CancellationToken ct) =>
         client.CallAsync("folders.add", new { Name = name.Trim(), ParentId = parentId }, ct);
 
@@ -60,4 +81,33 @@ public sealed class CatalogEdits(IDaemonClient client)
 
     internal static Task MoveFeedAsync(IDaemonClient client, long id, long? folderId, CancellationToken ct) =>
         client.CallAsync("feeds.update", new { Id = id, FolderId = folderId, TopLevel = folderId is null }, ct);
+
+    public Task RemoveAsync(ReaderDestination item, bool deleteContents, CancellationToken ct) => item.Scope switch
+    {
+        ReaderScope.Feed => client.CallAsync("feeds.remove", new { item.Id }, ct),
+        ReaderScope.Folder => client.CallAsync("folders.remove", new { item.Id, DeleteContents = deleteContents }, ct),
+        _ => throw new ArgumentException("Select a folder or feed to remove.", nameof(item)),
+    };
+
+    public async Task<FeedRefresh> RefreshFeedAsync(long id, CancellationToken ct)
+    {
+        var reply = await client.CallAsync("feeds.refresh", new { Id = id }, ct).ConfigureAwait(false);
+        return ReadRefresh(reply);
+    }
+
+    public async Task<int> RefreshAllAsync(CancellationToken ct)
+    {
+        var reply = await client.CallAsync("feeds.refresh_all", null, ct).ConfigureAwait(false);
+        return reply.Deserialize<RefreshQueue>(Wire)?.Queued
+            ?? throw new DaemonProtocolException("The daemon did not report how many feeds were queued.");
+    }
+
+    internal static FeedRefresh ReadRefresh(JsonElement reply)
+    {
+        var result = reply.Deserialize<FeedRefresh>(Wire);
+        return result is { Id: > 0, Status.Length: > 0 } ? result
+            : throw new DaemonProtocolException("The daemon returned an incomplete feed result.");
+    }
+
+    private sealed record RefreshQueue(int? Queued);
 }

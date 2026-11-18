@@ -163,12 +163,22 @@ public sealed partial class MainWindow
         yield return new("search", "Search articles", null, "Ctrl+F", OpenSearch);
         yield return new("add-feed", "Add feed", null, "Ctrl+N", () => OpenAddFeed());
         yield return new("new-folder", "New folder", null, null, () => OpenCatalogEdit(CatalogEditKind.CreateFolder));
+        if (!refreshingSubscriptions)
+        {
+            var feed = destination is { Scope: ReaderScope.Feed } currentFeed ? currentFeed : null;
+            yield return new("refresh", feed is null ? "Refresh all feeds" : $"Refresh {feed.Title}", null, "R",
+                () => _ = RefreshSubscriptionsAsync(feed));
+        }
+
         if (destination is { Scope: ReaderScope.Feed or ReaderScope.Folder } editable)
         {
             yield return new("rename-destination", $"Rename {editable.Title}", null, null,
                 () => OpenCatalogEdit(CatalogEditKind.Rename, editable));
             yield return new("move-destination", $"Move {editable.Title}", null, null,
                 () => OpenCatalogEdit(CatalogEditKind.Move, editable));
+            var removal = editable.Scope == ReaderScope.Folder ? "Delete" : "Remove";
+            yield return new("remove-destination", $"{removal} {editable.Title}", null, null,
+                () => OpenCatalogEdit(CatalogEditKind.Remove, editable));
         }
         if (CanChangeBulkMarks && destination is { Scope: not ReaderScope.Starred } selected)
         {
