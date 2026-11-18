@@ -10,7 +10,8 @@ $socketPath = Join-Path $testHome 'fyked.sock'
 $previousHome = $env:FYKE_HOME
 $password = ConvertTo-SecureString ("Fyke!9" + [Guid]::NewGuid().ToString('N')) -AsPlainText -Force
 $created = $false
-$child = $null
+$taskName = "Fyke isolation $tag"
+$registered = $false
 
 try {
     $env:FYKE_HOME = $testHome
@@ -26,7 +27,7 @@ try {
         Add-LocalGroupMember -SID $usersGroup -Member $user
     }
 
-    # Encode only the probe and scratch paths. The password stays in the process credentials.
+    # Verify the task identity before probing the owner’s files and socket.
     $probe = @'
 $ErrorActionPreference = 'Stop'
 if ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -ne '__SID__') { exit 10 }
@@ -53,45 +54,49 @@ try {
 } finally {
     $socket.Dispose()
 }
-exit 0
+exit 42
 '@
     $probe = $probe.Replace('__SID__', $user.SID.Value)
     $probe = $probe.Replace('__DATABASE__', $database.Replace("'", "''"))
     $probe = $probe.Replace('__SOCKET__', $socketPath.Replace("'", "''"))
     $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($probe))
-    $start = [Diagnostics.ProcessStartInfo]::new((Get-Process -Id $PID).Path)
-    $start.UseShellExecute = $false
-    # A process started with other credentials needs valid standard handles of its own.
-    $start.RedirectStandardInput = $true
-    $start.RedirectStandardOutput = $true
-    $start.RedirectStandardError = $true
-    $start.UserName = $account
-    $start.Domain = $env:COMPUTERNAME
-    $start.Password = $password
-    $start.WorkingDirectory = $env:SystemRoot
-    $start.Arguments = "-NoProfile -NonInteractive -EncodedCommand $encoded"
-    $child = [Diagnostics.Process]::Start($start)
-    $child.StandardInput.Close()
-    $stdout = $child.StandardOutput.ReadToEndAsync()
-    $stderr = $child.StandardError.ReadToEndAsync()
-    if (!$child.WaitForExit(15000)) { throw 'The second-account probe timed out.' }
+    # Task Scheduler launches the probe outside the runner's process tree under the test account.
+    $action = New-ScheduledTaskAction -Execute (Get-Process -Id $PID).Path `
+        -Argument "-NoProfile -NonInteractive -EncodedCommand $encoded" -WorkingDirectory $env:SystemRoot
+    $principal = New-ScheduledTaskPrincipal -UserId "$env:COMPUTERNAME\$account" -LogonType S4U -RunLevel Limited
+    Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal | Out-Null
+    $registered = $true
+    $previousRun = (Get-ScheduledTaskInfo -TaskName $taskName).LastRunTime
+    Start-ScheduledTask -TaskName $taskName
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    do {
+        Start-Sleep -Milliseconds 200
+        $run = Get-ScheduledTaskInfo -TaskName $taskName
+        $state = (Get-ScheduledTask -TaskName $taskName).State
+        if ($run.LastRunTime -ne $previousRun -and $state -eq 'Ready') { break }
+    } while ($timer.Elapsed.TotalSeconds -lt 30)
+    if ($run.LastRunTime -eq $previousRun -or $state -ne 'Ready') {
+        throw "The second-account task did not complete. State: $state. Result: $($run.LastTaskResult)."
+    }
 
     # Confirm the socket still answers for the owner before interpreting the negative probe.
     if (!(Test-Path $socketPath)) { throw 'The daemon socket disappeared during the probe.' }
     & $daemonPath status
     if ($LASTEXITCODE -ne 0) { throw 'The owner could no longer reach the daemon.' }
-    switch ($child.ExitCode) {
-        0 { Write-Host 'A separate standard account could not read or write the database or connect to the socket.' }
+    switch ($run.LastTaskResult) {
+        42 { Write-Host 'A separate standard account could not read or write the database or connect to the socket.' }
         12 { throw 'A separate account could read the database.' }
         13 { throw 'A separate account could open the database for writing.' }
         14 { throw 'A separate account could connect to the daemon socket.' }
-        default { throw "The separate-account probe failed with exit code $($child.ExitCode). $($stdout.GetAwaiter().GetResult()) $($stderr.GetAwaiter().GetResult())" }
+        default { throw "The separate-account probe failed with task result $($run.LastTaskResult)." }
     }
 } finally {
     try {
-        if ($child) {
-            if (!$child.HasExited) { $child.Kill(); $child.WaitForExit() }
-            $child.Dispose()
+        if ($registered) {
+            if ((Get-ScheduledTask -TaskName $taskName).State -in @('Running', 'Queued')) {
+                Stop-ScheduledTask -TaskName $taskName
+            }
+            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
         }
         if (Test-Path $socketPath) {
             & $daemonPath daemon stop
