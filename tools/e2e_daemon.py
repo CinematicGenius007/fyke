@@ -563,6 +563,11 @@ check("config.set keeps the ui object", "result" in op("config.set", ui={"theme"
 saved = json.load(open(ops_home + "/config.json"))
 check("and the owner's own keys", saved["owner_key"] == 7 and saved["ui"]["theme"] == "dark", saved)
 check("config.get returns it", op("config.get")["result"]["ui"]["tokens"]["light"]["ground"] == "#000000")
+check("a UI patch is accepted", "result" in op("config.set", ui_patch={"loadImages": True}))
+got = op("config.get")["result"]["ui"]
+check("a UI patch preserves other settings", got == dict(saved["ui"], loadImages=True), got)
+check("a patch and replacement cannot be combined", "error" in op("config.set", ui={}, ui_patch={"loadImages": False}))
+check("an invalid patch changes no settings", "error" in op("config.set", ui_patch=[]) and op("config.get")["result"]["ui"] == got)
 text = open(ops_home + "/config.json").read().replace('"dark"', '"terminal"').replace('"full_text"', '"x"')
 open(ops_home + "/config.json", "w").write(text.rstrip()[:-1] + ',"full_text": false,"remove_read_after_days": 60}')
 got = op("config.get")["result"]

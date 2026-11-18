@@ -16,7 +16,7 @@ public sealed partial class MainWindow
 
     private void RefreshSubscriptionsShortcut(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        if (readerConnected && !IsReaderOverlayOpen)
+        if (readerConnected && !IsReaderCovered)
         {
             args.Handled = true;
             _ = RefreshSubscriptionsAsync(destination is { Scope: ReaderScope.Feed } feed ? feed : null);

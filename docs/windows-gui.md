@@ -71,7 +71,7 @@ The folder row opens its timeline. Its disclosure button expands or collapses de
 
 ## Article reader
 
-The reader requests `entries.get` in blocks format and renders the stored nodes with native controls. Paragraphs use selectable text and inline links. Lists, quotes, headings, code, tables, and separators keep their structure. Images have an explicit load control. Feed HTML never reaches a web view, as [decision 0002](decisions/0002-web-viewer.md) requires. Links open in the default browser.
+The reader requests `entries.get` in blocks format and renders the stored nodes with native controls. Paragraphs use selectable text and inline links. Lists, quotes, headings, code, tables, and separators keep their structure. Images have an explicit load control by default. Feed HTML never reaches a web view, as [decision 0002](decisions/0002-web-viewer.md) requires. Links open in the default browser.
 
 The reader loads saved reading, title, interface, and code weights from `ui.weights` through `config.get` when the window first connects. Each preference shifts its baseline weight by up to two steps, using the same profile fields and steps as macOS. Missing or invalid fields use the role's default. Emphasized body text starts at semibold before applying the reading preference. The Windows weight controls are planned with Settings.
 
@@ -105,9 +105,15 @@ Removing a subscription confirms the permanent loss of its saved articles and ma
 
 ## Importing and exporting OPML
 
-The All context menu and command palette offer import and export. Import is also available in the add-feed sheet. The Windows file picker accepts `.opml` and `.xml`. The app passes the chosen path to `opml.import`, then refreshes the catalog and reports how many subscriptions were added and how many already existed. The daemon imports the folder structure and fetches new feeds in the background using its default network rules.
+Settings, the All context menu, and the command palette offer import and export. Import is also available in the add-feed sheet. The Windows file picker accepts `.opml` and `.xml`. The app passes the chosen path to `opml.import`, then refreshes the catalog and reports how many subscriptions were added and how many already existed. The daemon imports the folder structure and fetches new feeds in the background using its default network rules.
 
 Export requests the document through `opml.export`. The save picker suggests `feeds.opml` and confirms overwrites. The app writes UTF-8 to a temporary file beside the destination and replaces the destination only after writing succeeds. Windows App SDK 1.8 can create an empty file at a newly selected path before Fyke saves the document. Canceling either picker leaves the current screen and files intact.
+
+## Settings
+
+The gear at the foot of the sidebar, Ctrl+, and the command palette open General settings over the timeline and reader. The sidebar stays visible. Escape or the close button returns to the same article and timeline. Selecting a destination closes Settings and opens that destination. F6 moves between Settings and the sidebar.
+
+General settings offer full-article fetching, automatic article image loading, OPML, and the shortcut list. Automatic image loading is off by default. The saved preference also applies to the current article, and images explicitly opened by the reader stay visible when automatic loading is disabled. The full-text setting uses `config.set`. Image loading updates `ui.loadImages` through a field-level `ui_patch`. Fyke reads back the stored value after a write and reports unreadable settings inline.
 
 ## Background running and notifications
 
@@ -173,7 +179,11 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W2b | Create, rename, and move feeds and folders | Folder-path and operation tests, plus Windows smoke coverage for creation and rename with an open article |
 | W2c | Subscription refresh and removal | Operation and removal-scope tests, plus Windows smoke coverage for refresh, canceled removal, subscription removal, and keeping folder contents |
 | W2d | OPML import and export | Operation and file-write tests, daemon round-trip with nested folders, manual Windows checks for picker cancellation and overwrite confirmation |
-| W2e | Settings, weight editing, persistent folder disclosure, themes, agent setup, storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
+| W2e.1 | Settings navigation and General preferences | Profile and daemon patch tests, Windows smoke coverage for changing settings and returning to the open article |
+| W2e.2 | Planned appearance, reading preferences, and persistent folder disclosure | Reopen a profile with saved themes, font weights, and collapsed folders. Compare narrow and wide layouts with macOS |
+| W2e.3 | Planned Agents settings and MCP configuration | Detect installed Codex, exercise missing and signed-out states, and paste a working MCP configuration |
+| W2e.4 | Planned storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
+| W2e.5 | Planned General background updating and link destination controls | Runtime and login behavior with W4, plus safe native link routing and browser fallback |
 | W3 | Saved views, Today, recipes, briefs, Ask, catch-up, routines, Activity, and citation navigation | One module per flow with fixture-driven API and desktop checks, including failed or partial work |
 | W4 | Restart supervision, notifications and activation | Close the window, crash and restart the daemon, sign out/in, deny notification access, reopen the right result |
 | W5 | Versioned GUI/core bundle, runtime dependencies, signing, installer, upgrades, uninstall and release notes | Clean Windows 11 x64 standard-user install, upgrade from a prior build, rollback and uninstall with data retention, verified published checksums |

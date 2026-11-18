@@ -152,6 +152,61 @@ try {
         $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $imageButton)
     } | Out-Null
 
+    function Find-ById([string]$id) {
+        $condition = [Windows.Automation.PropertyCondition]::new(
+            [Windows.Automation.AutomationElement]::AutomationIdProperty, $id)
+        $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $condition)
+    }
+
+    function Invoke-Button([string]$id) {
+        $button = Wait-For "$id to be available" {
+            $control = Find-ById $id
+            if ($control -and $control.Current.IsEnabled -and !$control.Current.IsOffscreen) { $control }
+        }
+        $button.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    }
+
+    function Toggle-Setting([string]$id) {
+        $toggle = Wait-For "$id to be ready" {
+            $control = Find-ById $id
+            if ($control -and $control.Current.IsEnabled -and !$control.Current.IsOffscreen) { $control }
+        }
+        $toggle.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
+    }
+
+    $configPath = Join-Path $testHome 'config.json'
+    Invoke-Button 'SettingsButton'
+    $coveredHeading = Find-ById 'ArticleHeading'
+    if ($coveredHeading -and !$coveredHeading.Current.IsOffscreen) { throw 'Settings did not cover the article.' }
+    Toggle-Setting 'FullTextToggle'
+    Wait-For 'the changed full-text setting' {
+        $config = Get-Content $configPath -Raw | ConvertFrom-Json
+        if ($config.full_text -eq $false -and $config.ui.weights.title -eq 2) { $true }
+    } | Out-Null
+    Toggle-Setting 'FullTextToggle'
+    Wait-For 'the restored full-text setting' {
+        if ((Get-Content $configPath -Raw | ConvertFrom-Json).full_text -eq $true) { $true }
+    } | Out-Null
+
+    Invoke-WebRequest -Uri ([Uri]::new([Uri]$FeedUrl, '/enable-automatic-images')) -Method Post -UseBasicParsing | Out-Null
+    Toggle-Setting 'LoadImagesToggle'
+    Wait-For 'automatic images to be saved with existing preferences' {
+        $config = Get-Content $configPath -Raw | ConvertFrom-Json
+        if ($config.ui.loadImages -eq $true -and $config.ui.weights.title -eq 2) { $true }
+    } | Out-Null
+    Invoke-Button 'CloseSettingsButton'
+    Wait-For 'Settings to return to the open article and its feed' {
+        $heading = Find-ById 'ArticleHeading'
+        $scope = Find-ById 'TimelineHeading'
+        if ($heading -and !$heading.Current.IsOffscreen -and $heading.Current.Name -eq 'Native reader fixture' -and
+            $scope.Current.Name -eq 'Desktop fixture') { $true }
+    } | Out-Null
+    $timeline = Find-ById 'ReaderTimeline'
+    Wait-For 'an automatic image request from the open article' {
+        $probe = Invoke-WebRequest -Uri ([Uri]::new([Uri]$FeedUrl, '/image-status')) -UseBasicParsing
+        if ($probe.Content -eq 'requested') { $true }
+    } | Out-Null
+
     $collapse = Wait-For 'the folder collapse control' { Find-ByName $items 'Collapse Fixture folder' }
     $collapse.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
     Wait-For 'the folder to hide its feed' {

@@ -162,6 +162,7 @@ public sealed partial class MainWindow
     {
         yield return new("search", "Search articles", null, "Ctrl+F", OpenSearch);
         yield return new("add-feed", "Add feed", null, "Ctrl+N", () => OpenAddFeed());
+        yield return new("settings", "Settings", null, "Ctrl+,", OpenSettings);
         yield return new("new-folder", "New folder", null, null, () => OpenCatalogEdit(CatalogEditKind.CreateFolder));
         if (!refreshingSubscriptions)
         {

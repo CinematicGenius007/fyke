@@ -44,9 +44,6 @@ public sealed class ReaderData(IDaemonClient client)
     public const int PageSize = 100;
     public const int SearchLimit = 100;
 
-    public async Task<ReaderTypography> TypographyAsync(CancellationToken ct) =>
-        ReaderTypography.FromConfig(await client.CallAsync("config.get", null, ct).ConfigureAwait(false));
-
     public async Task<IReadOnlyList<ReaderDestination>> DestinationsAsync(CancellationToken ct)
     {
         var feeds = Read<CatalogItems<Feed>>(await client.CallAsync("feeds.list", null, ct).ConfigureAwait(false)).Items;

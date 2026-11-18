@@ -39,7 +39,7 @@ public sealed partial class MainWindow
 
     private void MarkAllReadShortcut(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        if (!IsReaderOverlayOpen && StartBulkMark(destination))
+        if (!IsReaderCovered && StartBulkMark(destination))
         {
             args.Handled = true;
         }
@@ -121,7 +121,7 @@ public sealed partial class MainWindow
 
     private void UndoBulkShortcut(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        if (!IsReaderOverlayOpen && StartBulkUndo())
+        if (!IsReaderCovered && StartBulkUndo())
         {
             args.Handled = true;
         }

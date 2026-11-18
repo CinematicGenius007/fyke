@@ -9,7 +9,7 @@ public sealed class ReaderTypographyTests
     public async Task LoadsIndependentWeightStepsFromTheDaemonProfile()
     {
         using var config = JsonDocument.Parse("""
-            {"ui":{"weights":{"reading":-2,"title":2,"ui":1,"code":-1}},"config_error":null}
+            {"full_text":true,"ui":{"weights":{"reading":-2,"title":2,"ui":1,"code":-1}},"config_error":null}
             """);
         var client = new FakeClient
         {
@@ -20,9 +20,9 @@ public sealed class ReaderTypographyTests
             },
         };
 
-        var typography = await new ReaderData(client).TypographyAsync(CancellationToken.None);
+        var preferences = await new ReaderSettings(client).ReadAsync(CancellationToken.None);
 
-        Assert.Equal(new ReaderTypography(-2, 2, 1, -1), typography);
+        Assert.Equal(new ReaderTypography(-2, 2, 1, -1), preferences.Typography);
     }
 
     [Fact]

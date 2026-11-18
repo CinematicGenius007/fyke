@@ -12,10 +12,29 @@ using Windows.UI.Text;
 
 namespace Fyke.App;
 
-/// <summary>Turns the daemon's article nodes into native controls. Images load only on request.</summary>
+/// <summary>Turns the daemon's article nodes into native controls.</summary>
 internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, FontFamily code,
-    ReaderFontWeights weights, double textSize = 20, Func<Uri, Action?>? linkAction = null)
+    ReaderFontWeights weights, double textSize = 20, Func<Uri, Action?>? linkAction = null, bool trackImages = false)
 {
+    private readonly List<Action<bool>> imagePreferences = [];
+    private bool loadImages;
+
+    public void ResetImages() => imagePreferences.Clear();
+
+    public void SetAutomaticImages(bool enabled)
+    {
+        if (loadImages == enabled)
+        {
+            return;
+        }
+
+        loadImages = enabled;
+        foreach (var apply in imagePreferences)
+        {
+            apply(enabled);
+        }
+    }
+
     public void Append(StackPanel panel, IEnumerable<ArticleBlock> nodes)
     {
         var inline = new List<ArticleBlock>();
@@ -212,12 +231,25 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
 
         var panel = new StackPanel { Spacing = 8 };
         var label = string.IsNullOrWhiteSpace(node.Alt) ? "Image" : node.Alt;
-        var button = new Button { Content = $"Load image · {label}", FontFamily = ui, FontWeight = weights.Ui, Height = 32 };
+        var loadLabel = $"Load image · {label}";
+        var button = new Button { Content = loadLabel, FontFamily = ui, FontWeight = weights.Ui, Height = 32 };
         var image = new Image { Visibility = Visibility.Collapsed, Stretch = Stretch.Uniform, MaxHeight = 720 };
+        var requested = false;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(image, label);
-        image.ImageOpened += (_, _) => button.Visibility = Visibility.Collapsed;
+        image.ImageOpened += (_, _) =>
+        {
+            if (image.Source is not null)
+            {
+                button.Visibility = Visibility.Collapsed;
+            }
+        };
         image.ImageFailed += (_, _) =>
         {
+            if (image.Source is null)
+            {
+                return;
+            }
+
             image.Source = null;
             image.Visibility = Visibility.Collapsed;
             button.Content = "Image couldn’t load. Try again";
@@ -225,13 +257,46 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
         };
         button.Click += (_, _) =>
         {
+            requested = true;
+            Load();
+        };
+        panel.Children.Add(button);
+        panel.Children.Add(image);
+        if (trackImages)
+        {
+            imagePreferences.Add(ApplyPreference);
+            ApplyPreference(loadImages);
+        }
+
+        return panel;
+
+        void Load()
+        {
             button.Content = "Loading image…";
             button.IsEnabled = false;
             image.Visibility = Visibility.Visible;
             image.Source = new BitmapImage(address);
-        };
-        panel.Children.Add(button);
-        panel.Children.Add(image);
-        return panel;
+        }
+
+        void ApplyPreference(bool enabled)
+        {
+            if (requested)
+            {
+                return;
+            }
+
+            if (enabled)
+            {
+                Load();
+            }
+            else
+            {
+                image.Source = null;
+                image.Visibility = Visibility.Collapsed;
+                button.Content = loadLabel;
+                button.IsEnabled = true;
+                button.Visibility = Visibility.Visible;
+            }
+        }
     }
 }

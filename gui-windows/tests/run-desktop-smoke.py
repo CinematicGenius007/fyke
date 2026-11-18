@@ -8,7 +8,9 @@ import subprocess
 import sys
 from threading import Event, Thread
 
-image_requested = Event()
+early_image_request = Event()
+automatic_images_enabled = Event()
+automatic_image_request = Event()
 feed_updated = Event()
 discovery_updated = Event()
 discussion_enabled = Event()
@@ -24,6 +26,8 @@ class Fixture(BaseHTTPRequestHandler):
             discovery_updated.set()
         elif self.path == "/enable-discussion":
             discussion_enabled.set()
+        elif self.path == "/enable-automatic-images":
+            automatic_images_enabled.set()
         else:
             self.send_error(404)
             return
@@ -32,7 +36,15 @@ class Fixture(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/fixture.png":
-            image_requested.set()
+            if automatic_images_enabled.is_set():
+                automatic_image_request.set()
+            else:
+                early_image_request.set()
+            self.send_error(404)
+            return
+        if self.path == "/image-status":
+            self.send_body(b"requested" if automatic_image_request.is_set() else b"waiting", "text/plain")
+            return
         if self.path == "/items/46001":
             self.serve_discussion()
             return
@@ -123,8 +135,10 @@ def main():
                 timeout=240,
                 env=dict(os.environ, FYKE_HN_ITEMS_URL=base + "/items/"),
             )
-            if image_requested.is_set():
-                raise RuntimeError("The reader fetched a remote image before the user requested it.")
+            if early_image_request.is_set():
+                raise RuntimeError("The reader fetched an image before automatic loading was enabled.")
+            if not automatic_image_request.is_set():
+                raise RuntimeError("The reader did not fetch the image after automatic loading was enabled.")
             if discussion_too_early.is_set():
                 raise RuntimeError("The reader fetched a discussion before the user requested it.")
         finally:

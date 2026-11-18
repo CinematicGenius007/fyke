@@ -28,7 +28,7 @@ public sealed partial class MainWindow
     private int readerChangesPending;
     private ReaderData reader = null!;
     private ReaderFontWeights readerFonts = null!;
-    private bool typographyRead;
+    private bool preferencesRead;
     private CancellationTokenSource? readerRequest;
     private CancellationTokenSource? articleRequest;
     private TimelineArticle? openArticle;
@@ -57,7 +57,8 @@ public sealed partial class MainWindow
         var reading = (FontFamily)resources["FontReading"];
         var code = (FontFamily)resources["FontCode"];
         readerFonts = (ReaderFontWeights)Root.Resources["ReaderFonts"];
-        articleRenderer = new ArticleBlockRenderer(reading, ui, code, readerFonts, linkAction: DiscussionLinkAction);
+        articleRenderer = new ArticleBlockRenderer(reading, ui, code, readerFonts, linkAction: DiscussionLinkAction, trackImages: true);
+        InitializeSettings();
         InitializeDiscussion(reading, ui, code);
         InitializeSearch();
         InitializePalette();
@@ -90,6 +91,8 @@ public sealed partial class MainWindow
             ClosePalette(restoreFocus: false);
             CloseAddFeed(restoreFocus: false);
             CloseCatalogEdit(restoreFocus: false);
+            CloseSettings(restoreFocus: false);
+            preferencesRead = false;
             HideBulkNotice();
             readerReloadTimer.Stop();
             readerRequest?.Cancel();
@@ -212,6 +215,7 @@ public sealed partial class MainWindow
 
     private void NavigateToDestination(ReaderDestination selected)
     {
+        CloseSettings(restoreFocus: false);
         if (destination is { } current && current.Scope == selected.Scope && current.Id == selected.Id)
         {
             return;
@@ -256,9 +260,9 @@ public sealed partial class MainWindow
         {
             if (refreshCatalog)
             {
-                if (!typographyRead)
+                if (!preferencesRead)
                 {
-                    await LoadTypographyAsync(request.Token);
+                    await LoadInitialPreferencesAsync(request.Token);
                 }
 
                 var rows = await reader.DestinationsAsync(request.Token);
@@ -329,22 +333,6 @@ public sealed partial class MainWindow
                 ScheduleReaderReload();
             }
         }
-    }
-
-    private async Task LoadTypographyAsync(CancellationToken ct)
-    {
-        try
-        {
-            var typography = await reader.TypographyAsync(ct);
-            ct.ThrowIfCancellationRequested();
-            readerFonts.Apply(typography);
-        }
-        catch (Exception error) when (!ct.IsCancellationRequested && error is DaemonException or TimeoutException)
-        {
-            // Reading remains available with the built-in typography if settings are unavailable.
-        }
-
-        typographyRead = true;
     }
 
     private void RetryTimelineClicked(object sender, RoutedEventArgs args) => _ = LoadReaderAsync(refreshCatalog: true);
@@ -429,6 +417,7 @@ public sealed partial class MainWindow
         UpdateMarkControls();
         ResetDiscussion();
         ShowArticle(article);
+        articleRenderer.ResetImages();
         ArticleBody.Children.Clear();
         ArticleStatus.Visibility = Visibility.Collapsed;
         RetryArticle.Visibility = Visibility.Collapsed;

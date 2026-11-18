@@ -181,6 +181,7 @@ public sealed partial class MainWindow
 
     private void OpenResultArticle(TimelineArticle article)
     {
+        CloseSettings(restoreFocus: false);
         var row = articles.FirstOrDefault(candidate => candidate.Id == article.Id);
         SetTimelineSelection(row);
         if (row is not null)

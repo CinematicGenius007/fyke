@@ -13,6 +13,7 @@ public sealed partial class MainWindow
     private Control? focusBeforeOverlay;
 
     private bool IsReaderOverlayOpen => IsSearchOpen || IsPaletteOpen || IsAddFeedOpen || IsCatalogEditOpen;
+    private bool IsReaderCovered => IsReaderOverlayOpen || IsSettingsOpen;
 
     private void ShowReaderOverlay(Grid overlay, Control initialFocus)
     {
@@ -66,12 +67,23 @@ public sealed partial class MainWindow
 
         var reverse = sender.Modifiers == VirtualKeyModifiers.Shift;
         var pane = FocusManager.GetFocusedElement(Root.XamlRoot) as DependencyObject;
-        while (pane is UIElement && pane != SidebarPane && pane != TimelinePane && pane != ArticlePane)
+        while (pane is UIElement && pane != SidebarPane && pane != TimelinePane && pane != ArticlePane && pane != SettingsPane)
         {
             pane = VisualTreeHelper.GetParent(pane);
         }
 
-        if ((pane == SidebarPane && !reverse) || (pane == ArticlePane && reverse))
+        if (IsSettingsOpen)
+        {
+            if (pane == SidebarPane)
+            {
+                CloseSettingsButton.Focus(FocusState.Keyboard);
+            }
+            else
+            {
+                FocusSidebar();
+            }
+        }
+        else if ((pane == SidebarPane && !reverse) || (pane == ArticlePane && reverse))
         {
             FocusTimeline();
         }

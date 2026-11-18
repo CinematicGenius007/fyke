@@ -71,6 +71,8 @@ Planned: `entries.tag`, to add or remove tags recorded with their source. `notes
 
 Built: `feeds.add`, `feeds.preview`, `feeds.update`, `feeds.remove`, `feeds.refresh`, `feeds.refresh_all`, `feeds.queue`, `folders.add`, `folders.rename`, `folders.move`, `folders.remove`, `config.set`, `storage.free`, `opml.import`, `daemon.stop`, `daemon.housekeep`.
 
+`config.set` accepts `ui` to replace the interface settings or `ui_patch` to update named fields under `ui`. A patch replaces each field it supplies and preserves other fields under the daemon's config lock. Send one form per request. A malformed configuration file remains on disk for repair.
+
 `folders.remove` hands a folder's subfolders and feeds to its parent. With `delete_contents` it deletes them, with their entries. `storage.free` trims articles read long ago, drops all but the newest copy of each feed, and compacts the database.
 
 Planned: `lenses.put`, `lenses.run`, `runners.put`.
