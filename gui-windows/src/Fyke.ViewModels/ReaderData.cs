@@ -41,6 +41,7 @@ public sealed class ReaderData(IDaemonClient client)
 {
     private static readonly JsonSerializerOptions Wire = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
     public const int PageSize = 100;
+    public const int SearchLimit = 100;
 
     public async Task<ReaderTypography> TypographyAsync(CancellationToken ct) =>
         ReaderTypography.FromConfig(await client.CallAsync("config.get", null, ct).ConfigureAwait(false));
@@ -93,10 +94,26 @@ public sealed class ReaderData(IDaemonClient client)
             Before = before,
         };
         var response = Read<EntryPage>(await client.CallAsync("entries.list", filter, ct).ConfigureAwait(false));
-        return new TimelinePage(
-            response.Items.Select(entry => new TimelineArticle(entry.Id,
-                string.IsNullOrWhiteSpace(entry.Title) ? "Untitled article" : entry.Title, entry.FeedTitle, entry.Read)).ToArray(),
-            response.NextCursor);
+        return new TimelinePage(response.Items.Select(ToTimelineArticle).ToArray(), response.NextCursor);
+    }
+
+    public async Task<IReadOnlyList<SearchHit>> SearchAsync(string query, bool unreadOnly, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return [];
+        }
+
+        var parameters = new { Query = query.Trim(), Limit = SearchLimit, UnreadOnly = unreadOnly };
+        var result = Read<CatalogItems<Entry>>(
+            await client.CallAsync("entries.search", parameters, ct).ConfigureAwait(false));
+        if (result.Items is null)
+        {
+            throw new DaemonProtocolException("The daemon returned an incomplete search response.");
+        }
+
+        return result.Items.Select(entry => new SearchHit(ToTimelineArticle(entry),
+            SearchSnippet.Split(entry.Snippet ?? entry.Summary, parameters.Query), entry.SortAt)).ToArray();
     }
 
     public async Task<ReaderArticle> ArticleAsync(long id, CancellationToken ct)
@@ -124,10 +141,14 @@ public sealed class ReaderData(IDaemonClient client)
     private static T Read<T>(JsonElement result) =>
         result.Deserialize<T>(Wire) ?? throw new DaemonProtocolException("The daemon returned an empty reader response.");
 
+    private static TimelineArticle ToTimelineArticle(Entry entry) => new(entry.Id,
+        string.IsNullOrWhiteSpace(entry.Title) ? "Untitled article" : entry.Title, entry.FeedTitle, entry.Read);
+
     private sealed record CatalogItems<T>(T[] Items);
     private sealed record Feed(long Id, long? FolderId, string? Title, string Url, long Unread, long Starred);
     private sealed record Folder(long Id, long? ParentId, string Name);
-    private sealed record Entry(long Id, string? Title, string? FeedTitle, bool Read);
+    private sealed record Entry(long Id, string? Title, string? FeedTitle, bool Read,
+        string? Snippet, string? Summary, long SortAt);
     private sealed record ArticleBody(string? Title, string? FeedTitle, string? Author, string? DiscussionUrl, string Body);
     private sealed record EntryPage(Entry[] Items, string? NextCursor);
 }

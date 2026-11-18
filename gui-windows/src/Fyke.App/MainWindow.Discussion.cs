@@ -96,7 +96,7 @@ public sealed partial class MainWindow
 
     private async void DiscussionShortcut(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        if (!readerConnected || discussionLink is not { } link)
+        if (!readerConnected || IsSearchOpen || discussionLink is not { } link)
         {
             return;
         }

@@ -6,6 +6,12 @@
     <Grid x:Name="Root">
         <Grid.Resources>
             <local:ReaderFontWeights x:Key="ReaderFonts" />
+            <Style x:Key="ReadSearchTitle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource ReadBrush}" />
+            </Style>
+            <Style x:Key="UnreadSearchTitle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource UnreadBrush}" />
+            </Style>
         </Grid.Resources>
         <Grid.RowDefinitions><RowDefinition Height="32" /><RowDefinition Height="*" /></Grid.RowDefinitions>
         <Grid x:Name="TitleBar" />
@@ -13,6 +19,7 @@
               AutomationProperties.AutomationId="ReaderShell">
             <Grid.KeyboardAccelerators>
                 <KeyboardAccelerator Key="C" Invoked="DiscussionShortcut" />
+                <KeyboardAccelerator Key="F" Modifiers="Control" Invoked="SearchShortcut" />
             </Grid.KeyboardAccelerators>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="SidebarColumn" Width="232" />
@@ -81,10 +88,22 @@
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
-                <TextBlock x:Name="TimelineHeading" Margin="20,16,20,12" FontSize="24"
-                           FontFamily="{StaticResource FontReading}" FontWeight="{Binding Title, Source={StaticResource ReaderFonts}}"
-                           TextTrimming="CharacterEllipsis" Foreground="{ThemeResource InkBrush}"
-                           AutomationProperties.AutomationId="TimelineHeading" />
+                <Grid Margin="20,16,20,12" ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="TimelineHeading" FontSize="24" VerticalAlignment="Center"
+                               FontFamily="{StaticResource FontReading}" FontWeight="{Binding Title, Source={StaticResource ReaderFonts}}"
+                               TextTrimming="CharacterEllipsis" Foreground="{ThemeResource InkBrush}"
+                               AutomationProperties.AutomationId="TimelineHeading" />
+                    <Button Grid.Column="1" x:Name="SearchButton" Width="32" Height="32" Padding="0"
+                            Click="SearchClicked" CornerRadius="{StaticResource RadiusControl}"
+                            AutomationProperties.AutomationId="SearchButton" AutomationProperties.Name="Search feeds"
+                            AutomationProperties.AcceleratorKey="Ctrl+F" ToolTipService.ToolTip="Search (Ctrl+F)">
+                        <FontIcon Glyph="&#xE721;" FontSize="14" />
+                    </Button>
+                </Grid>
                 <ListView Grid.Row="2" x:Name="Timeline" Margin="8,0" SelectionChanged="ArticleChanged"
                           AutomationProperties.Name="Articles" AutomationProperties.AutomationId="ReaderTimeline">
                     <ListView.ItemsPanel>
@@ -194,5 +213,102 @@
             <Button x:Name="RetryButton" AutomationProperties.AutomationId="ConnectionRetry" Content="Try again" Command="{Binding RetryCommand}" Height="32"
                     CornerRadius="{StaticResource RadiusControl}" />
         </StackPanel>
+        <Grid Grid.RowSpan="2" x:Name="SearchOverlay" Visibility="Collapsed" TabFocusNavigation="Cycle">
+            <Border Background="{ThemeResource ScrimBrush}" PointerPressed="SearchBackdropPressed" />
+            <Border MaxWidth="640" Margin="16,96,16,16" VerticalAlignment="Top"
+                    CornerRadius="{StaticResource RadiusSheet}" BorderThickness="1"
+                    BorderBrush="{ThemeResource HairlineBrush}" Background="{ThemeResource SurfaceBrush}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid Margin="20,16,20,16" ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="SearchQuery" PlaceholderText="Search your feeds" FontSize="20"
+                                 FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                 TextChanged="SearchQueryChanged" AutomationProperties.Name="Search your feeds"
+                                 AutomationProperties.AutomationId="SearchQuery" />
+                        <TextBlock Grid.Column="1" x:Name="SearchCount" FontSize="13" VerticalAlignment="Center"
+                                   FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                   Foreground="{ThemeResource MutedBrush}" AutomationProperties.LiveSetting="Polite" />
+                    </Grid>
+                    <Border Grid.Row="1" BorderThickness="0,1,0,1" BorderBrush="{ThemeResource HairlineBrush}">
+                        <Grid>
+                            <StackPanel x:Name="SearchState" Margin="20,16" Spacing="8">
+                                <TextBlock x:Name="SearchStatus" TextWrapping="Wrap" FontSize="14"
+                                           FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                           Foreground="{ThemeResource InkSoftBrush}" AutomationProperties.LiveSetting="Polite" />
+                                <Button x:Name="RetrySearch" Content="Try again" Height="32" Click="RetrySearchClicked"
+                                        FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                        Visibility="Collapsed" CornerRadius="{StaticResource RadiusControl}" />
+                            </StackPanel>
+                            <ListView x:Name="SearchResults" Margin="8" MaxHeight="512" Visibility="Collapsed"
+                                      AutomationProperties.Name="Search results" AutomationProperties.AutomationId="SearchResults">
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="Padding" Value="0" />
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Height="64" Padding="12,8" HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Stretch" Background="Transparent" BorderThickness="0"
+                                                CornerRadius="{StaticResource RadiusControl}" Click="SearchResultClicked"
+                                                AutomationProperties.Name="{Binding AccessibleName}">
+                                            <Grid ColumnSpacing="20">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="104" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Spacing="3">
+                                                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis"
+                                                               FontSize="18" FontFamily="{StaticResource FontReading}"
+                                                               FontWeight="{Binding TimelineTitle, Source={StaticResource ReaderFonts}}"
+                                                               DataContextChanged="PrepareSearchTitle" />
+                                                    <TextBlock TextTrimming="CharacterEllipsis" FontSize="13"
+                                                               FontFamily="{StaticResource FontUi}"
+                                                               FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                                               Foreground="{ThemeResource InkSoftBrush}"
+                                                               DataContextChanged="PrepareSearchSnippet" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Spacing="3" Margin="0,4,0,0">
+                                                    <TextBlock Text="{Binding FeedTitle}" TextTrimming="CharacterEllipsis"
+                                                               TextAlignment="Right" FontSize="13" FontFamily="{StaticResource FontUi}"
+                                                               FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                                               Foreground="{ThemeResource MutedBrush}" />
+                                                    <TextBlock TextAlignment="Right" FontSize="13" FontFamily="{StaticResource FontUi}"
+                                                               Foreground="{ThemeResource MutedBrush}"
+                                                               DataContextChanged="PrepareSearchDate" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Grid>
+                    </Border>
+                    <Grid Grid.Row="2" Margin="20,12" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ToggleButton x:Name="SearchUnread" Content="All articles" Height="32"
+                                      Checked="SearchUnreadChanged" Unchecked="SearchUnreadChanged"
+                                      FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                      CornerRadius="{StaticResource RadiusControl}" AutomationProperties.Name="Unread only"
+                                      AutomationProperties.AutomationId="SearchUnread" />
+                        <Button Grid.Column="1" Content="Close" Height="32" Click="CloseSearchClicked"
+                                FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                CornerRadius="{StaticResource RadiusControl}" AutomationProperties.AcceleratorKey="Esc" />
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

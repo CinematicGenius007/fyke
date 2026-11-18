@@ -31,6 +31,7 @@ public sealed partial class MainWindow
     private bool typographyRead;
     private CancellationTokenSource? readerRequest;
     private CancellationTokenSource? articleRequest;
+    private TimelineArticle? openArticle;
     private ArticleBlockRenderer articleRenderer = null!;
     private ReaderDestination? destination;
     private string? nextCursor;
@@ -57,6 +58,7 @@ public sealed partial class MainWindow
         readerFonts = (ReaderFontWeights)Root.Resources["ReaderFonts"];
         articleRenderer = new ArticleBlockRenderer(reading, ui, code, readerFonts, linkAction: DiscussionLinkAction);
         InitializeDiscussion(reading, ui, code);
+        InitializeSearch();
         ShowArticle(null);
     }
 
@@ -76,6 +78,7 @@ public sealed partial class MainWindow
         }
         else
         {
+            CloseSearch(restoreFocus: false);
             readerReloadTimer.Stop();
             readerRequest?.Cancel();
             articleInterrupted |= articleRequest is not null;
@@ -344,7 +347,7 @@ public sealed partial class MainWindow
             applyingTimeline = false;
         }
 
-        if (articleInterrupted && Timeline.SelectedItem is TimelineArticle interrupted)
+        if (articleInterrupted && openArticle is { } interrupted)
         {
             articleInterrupted = false;
             _ = OpenArticleAsync(interrupted);
@@ -361,11 +364,12 @@ public sealed partial class MainWindow
     }
 
     private void RetryArticleClicked(object sender, RoutedEventArgs args) =>
-        _ = OpenArticleAsync(Timeline.SelectedItem as TimelineArticle);
+        _ = OpenArticleAsync(openArticle);
 
     private async Task OpenArticleAsync(TimelineArticle? article)
     {
         articleRequest?.Cancel();
+        openArticle = article;
         ResetDiscussion();
         ShowArticle(article);
         ArticleBody.Children.Clear();

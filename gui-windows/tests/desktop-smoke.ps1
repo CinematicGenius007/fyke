@@ -211,9 +211,63 @@ try {
         if ($link -and !(Find-ByName $root 'A nested reply.')) { $link }
     } | Out-Null
 
+    $fixtureEntries = (& $daemonPath list --json | Out-String | ConvertFrom-Json).items
+    $readEntry = $fixtureEntries | Where-Object { $_.title -eq 'Native reader fixture' }
+    if (!$readEntry) { throw 'The reader fixture entry was missing from the daemon.' }
+    & $daemonPath mark $readEntry.id --read
+    if ($LASTEXITCODE -ne 0) { throw 'Could not mark the search fixture read.' }
+    Select-ReaderItem $items 'Starred'
+    Wait-For 'the Starred destination before searching' {
+        $heading = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $headingId)
+        if ($heading -and $heading.Current.Name -eq 'Starred') { $true }
+    } | Out-Null
+
+    $searchButtonId = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::AutomationIdProperty, 'SearchButton')
+    $searchButton = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $searchButtonId)
+    $searchButton.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    $searchQueryId = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::AutomationIdProperty, 'SearchQuery')
+    $searchQuery = Wait-For 'the search field' {
+        $element = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $searchQueryId)
+        if ($element -and !$element.Current.IsOffscreen) { $element }
+    }
+    $queryValue = $searchQuery.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern)
+    $queryValue.SetValue('Native reader')
+    $searchResultsId = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::AutomationIdProperty, 'SearchResults')
+    Wait-For 'the read article in search results' {
+        $results = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $searchResultsId)
+        if ($results) { Find-ByName $results 'Native reader fixture' }
+    } | Out-Null
+
+    $unreadId = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::AutomationIdProperty, 'SearchUnread')
+    $unread = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $unreadId)
+    $unread.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
+    $emptyMessage = 'Nothing matches ' + [char]0x201c + 'Native reader' + [char]0x201d + '. Try fewer or related words.'
+    Wait-For 'the unread filter to exclude the read article' { Find-ByName $root $emptyMessage } | Out-Null
+
+    $queryValue.SetValue('Live reader')
+    $liveHitName = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::NameProperty, 'Live reader update, unread')
+    $buttonType = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::ControlTypeProperty, [Windows.Automation.ControlType]::Button)
+    $liveHit = [Windows.Automation.AndCondition]::new($liveHitName, $buttonType)
+    $searchHit = Wait-For 'the unread article in search results' {
+        $results = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $searchResultsId)
+        if ($results) { $results.FindFirst([Windows.Automation.TreeScope]::Descendants, $liveHit) }
+    }
+    $searchHit.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'the search result to open outside its destination' {
+        Find-ByName $root 'Arrives while the first article is open.'
+    } | Out-Null
+    $heading = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $headingId)
+    if ($heading.Current.Name -ne 'Starred') { throw 'Opening the search result changed the current destination.' }
+
     & $daemonPath status
     if ($LASTEXITCODE -ne 0) { throw 'The companion daemon did not answer status' }
-    Write-Host 'WinUI recovered the daemon and kept the article open through folder disclosure and a live feed update.'
+    Write-Host 'WinUI recovered the daemon and verified reading, discussion, and search.'
 } catch {
     Write-Host $_.ScriptStackTrace
     throw
