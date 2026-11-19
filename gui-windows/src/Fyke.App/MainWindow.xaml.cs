@@ -11,9 +11,11 @@ using Microsoft.UI.Xaml.Media;
 
 namespace Fyke.App;
 
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001",
+    Justification = "A WinUI window is not disposable; OnClosed disposes what it owns.")]
 public sealed partial class MainWindow : Window
 {
-    private readonly IDaemonClient client = new DaemonClient(new DaemonClientOptions
+    private readonly DaemonClient client = new(new DaemonClientOptions
     {
         ReplaceOlderDaemon = string.IsNullOrEmpty(Environment.GetEnvironmentVariable("FYKE_BIN"))
             && File.Exists(Path.Combine(AppContext.BaseDirectory, "fyke.exe")),

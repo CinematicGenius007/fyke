@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using Fyke.ViewModels;
@@ -50,7 +51,7 @@ internal sealed class ViewEditor
         excludedPaths = Field("Exclude paths", "ViewExcludedPaths", string.Join('\n', rule.ExcludePathPrefix));
         excludedPaths.AcceptsReturn = true;
         excludedPaths.PlaceholderText = "One path per line";
-        days = Field("Published in the last (days)", "ViewWithinDays", rule.WithinDays?.ToString());
+        days = Field("Published in the last (days)", "ViewWithinDays", rule.WithinDays?.ToString(CultureInfo.CurrentCulture));
 
         var primary = new StackPanel { Spacing = 8 };
         primary.Children.Add(name);
@@ -117,7 +118,7 @@ internal sealed class ViewEditor
         long? within = null;
         if (Optional(days.Text) is { } entered)
         {
-            if (!long.TryParse(entered, out var value) || value is < 1 or > 3650)
+            if (!long.TryParse(entered, NumberStyles.Integer, CultureInfo.CurrentCulture, out var value) || value is < 1 or > 3650)
             {
                 ShowStatus("Enter a whole number from 1 to 3650 days.");
                 days.Focus(FocusState.Programmatic);

@@ -46,45 +46,42 @@ jobs:
           $env:FYKE_TEST_BIN = Join-Path $env:GITHUB_WORKSPACE "zig-out/bin/fyke.exe"
           dotnet test tests/Fyke.Client.Tests -c Release --filter FullyQualifiedName~RealDaemonTests
 
-      - name: Build and smoke test the WinUI app
+      # The smoke test runs the published copy, the one people download, compiled ahead of time.
+      - name: Publish and smoke test the WinUI app
         working-directory: gui-windows
         shell: pwsh
         run: |
-          dotnet build src/Fyke.App -c Release -p:Platform=x64 -o "$env:RUNNER_TEMP/fyke-desktop"
+          dotnet publish src/Fyke.App -c Release -r win-x64 -p:Platform=x64 -o "$env:RUNNER_TEMP/fyke-desktop"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python ./tests/run-desktop-smoke.py "$env:RUNNER_TEMP/fyke-desktop/Fyke.App.exe" "$env:GITHUB_WORKSPACE/zig-out/bin/fyke.exe"
 
-      # Reports what a user would download, so every change shows its cost in size.
-      - name: Measure the published app
+      # Every change shows its cost in size, and one that outgrows the budget fails. Raising a
+      # budget is a decision for the pull request that needs it, not a side effect.
+      - name: Check the published app's size
         if: ${{ !cancelled() }}
-        continue-on-error: true
-        working-directory: gui-windows
         shell: pwsh
+        env:
+          BUDGET_ON_DISK_MB: 70
+          BUDGET_ZIPPED_MB: 28
         run: |
-          $rows = @()
-          $ways = [ordered]@{
-            'Current settings'        = @()
-            'Trimmed, self-contained' = @('--self-contained', '-p:PublishTrimmed=true')
-            'Native AOT'              = @('-p:PublishAot=true')
+          $out = "$env:RUNNER_TEMP/fyke-desktop"
+          $shipped = Get-ChildItem $out -Recurse -File
+          $onDisk = ($shipped | Measure-Object Length -Sum).Sum / 1MB
+          $zip = "$out.zip"
+          Compress-Archive "$out/*" $zip -CompressionLevel Optimal
+          $zipped = (Get-Item $zip).Length / 1MB
+          $largest = $shipped | Sort-Object Length -Descending | Select-Object -First 12 |
+            ForEach-Object { "| {0} | {1:N1} MB |" -f $_.FullName.Substring($out.Length + 1), ($_.Length / 1MB) }
+          $report = @(
+            '| Published app | Size | Budget |', '|---|---|---|'
+            '| On disk ({0} files) | {1:N1} MB | {2} MB |' -f $shipped.Count, $onDisk, $env:BUDGET_ON_DISK_MB
+            '| Zipped | {0:N1} MB | {1} MB |' -f $zipped, $env:BUDGET_ZIPPED_MB
+            '', '| Largest files | Size |', '|---|---|'
+          ) + $largest
+          $report -join "`n" | Tee-Object -Append $env:GITHUB_STEP_SUMMARY
+          if ($onDisk -gt [double]$env:BUDGET_ON_DISK_MB -or $zipped -gt [double]$env:BUDGET_ZIPPED_MB) {
+            throw "The published app is over its size budget."
           }
-          foreach ($name in $ways.Keys) {
-            $out = Join-Path $env:RUNNER_TEMP ("publish-" + ($name -replace '\W', ''))
-            dotnet publish src/Fyke.App -c Release -r win-x64 -p:Platform=x64 -o $out @($ways[$name]) 2>&1 | Select-Object -Last 3
-            if ($LASTEXITCODE -ne 0) { $rows += "| $name | failed | | |"; continue }
-            $shipped = Get-ChildItem $out -Recurse -File | Where-Object Extension -ne '.pdb'
-            Get-ChildItem $out -Recurse -Filter *.pdb | Remove-Item
-            $bytes = ($shipped | Measure-Object Length -Sum).Sum
-            $files = $shipped.Count
-            "Largest files in '$name':"
-            $shipped | Sort-Object Length -Descending | Select-Object -First 12 |
-              ForEach-Object { "{0,8:N1} MB  {1}" -f ($_.Length / 1MB), $_.FullName.Substring($out.Length + 1) }
-            $zip = "$out.zip"
-            Compress-Archive "$out/*" $zip -CompressionLevel Optimal
-            $rows += "| $name | {0:N1} MB | {1:N1} MB | $files |" -f ($bytes / 1MB), ((Get-Item $zip).Length / 1MB)
-          }
-          $table = "| Publish | On disk | Zipped | Files |`n|---|---|---|---|`n" + ($rows -join "`n")
-          $table
-          $table | Out-File -Append $env:GITHUB_STEP_SUMMARY
 
       # Each script is its own step, so that one failure does not hide the others.
       - name: e2e
