@@ -179,7 +179,7 @@ public sealed partial class MainWindow
             loaded = loaded with
             {
                 LoadImages = previous.LoadImages, Typography = previous.Typography, TextLayout = previous.TextLayout,
-                Scrollbars = previous.Scrollbars, Appearance = previous.Appearance,
+                Scrollbars = previous.Scrollbars, Appearance = previous.Appearance, Themes = previous.Themes,
             };
         }
 
@@ -189,7 +189,7 @@ public sealed partial class MainWindow
         }
 
         preferences = loaded;
-        ApplyAppearance(loaded.Appearance);
+        ApplyAppearance(loaded);
         readerFonts.Apply(loaded.Typography);
         ApplyReaderTextLayout(loaded.TextLayout);
         articleRenderer.SetAutomaticImages(loaded.LoadImages);
@@ -200,7 +200,7 @@ public sealed partial class MainWindow
     {
         FullTextToggle.IsOn = loaded.FullText;
         LoadImagesToggle.IsOn = loaded.LoadImages;
-        ApplyAppearanceControls(loaded.Appearance);
+        ApplyAppearanceControls(loaded);
         ApplyTextLayoutControls(loaded.TextLayout);
         ScrollbarsPicker.SelectedIndex = (int)loaded.Scrollbars;
         foreach (var (picker, role) in weightPickers)

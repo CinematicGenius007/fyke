@@ -8,7 +8,14 @@ public enum ReaderScrollbarMode { WhileScrolling, Always, Never }
 
 public sealed record ReaderPreferences(bool FullText, bool LoadImages, ReaderTypography Typography,
     ReaderTextLayout TextLayout, ReaderScrollbarMode Scrollbars, IReadOnlyList<long> CollapsedFolderIds,
-    ReaderAppearance Appearance, bool InvalidConfig);
+    ReaderAppearance Appearance, bool InvalidConfig)
+{
+    /// <summary>The themes the user made, on this machine or on a Mac sharing the config.</summary>
+    public IReadOnlyList<ReaderCustomTheme> Themes { get; init; } = [];
+
+    /// <summary>The colours on screen now.</summary>
+    public ReaderPalette Palette(bool systemIsDark) => ReaderPalette.Resolve(Appearance.ActiveTheme(systemIsDark), Themes);
+}
 
 public sealed class ReaderSettings(IDaemonClient client)
 {
@@ -26,7 +33,10 @@ public sealed class ReaderSettings(IDaemonClient client)
         var autoImages = ui.ValueKind == JsonValueKind.Object
             && ui.TryGetProperty("loadImages", out var images) && images.ValueKind == JsonValueKind.True;
         return new ReaderPreferences(fullText.GetBoolean(), autoImages, ReaderTypography.FromConfig(config),
-            ReaderTextLayout.FromUi(ui), ReadScrollbars(ui), ReadCollapsedFolders(ui), ReaderAppearance.FromUi(ui), hasError);
+            ReaderTextLayout.FromUi(ui), ReadScrollbars(ui), ReadCollapsedFolders(ui), ReaderAppearance.FromUi(ui), hasError)
+        {
+            Themes = ReaderCustomTheme.FromUi(ui),
+        };
     }
 
     private static long[] ReadCollapsedFolders(JsonElement ui)
