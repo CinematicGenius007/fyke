@@ -53,6 +53,9 @@ jobs:
         run: |
           dotnet publish src/Fyke.App -c Release -r win-x64 -p:Platform=x64 -o "$env:RUNNER_TEMP/fyke-desktop"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($file in 'MainWindow.xbf', 'Fyke.App.pri') {
+            if (-not (Test-Path "$env:RUNNER_TEMP/fyke-desktop/$file")) { throw "The published app is missing $file." }
+          }
           python ./tests/run-desktop-smoke.py "$env:RUNNER_TEMP/fyke-desktop/Fyke.App.exe" "$env:GITHUB_WORKSPACE/zig-out/bin/fyke.exe"
 
       # Every change shows its cost in size, and one that outgrows the budget fails. Raising a

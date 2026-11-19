@@ -24,4 +24,15 @@
     <ProjectReference Include="..\Fyke.ViewModels\Fyke.ViewModels.csproj" />
     <Content Include="Fonts\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <!-- An AOT publish of an unpackaged app leaves out the compiled XAML and the resource index, so
+       loading MainWindow fails with "XAML parsing failed" (microsoft/WindowsAppSDK#6394, fixed in
+       the MSIX build tools but not yet for unpackaged apps). Copy them until that ships. -->
+  <Target Name="PublishCompiledXaml" AfterTargets="Publish" Condition="'$(PublishAot)' == 'true'">
+    <ItemGroup>
+      <CompiledXaml Include="$(OutDir)**\*.xbf" />
+      <CompiledXaml Include="$(OutDir)$(AssemblyName).pri" Condition="Exists('$(OutDir)$(AssemblyName).pri')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(CompiledXaml)" DestinationFiles="@(CompiledXaml->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
 </Project>
