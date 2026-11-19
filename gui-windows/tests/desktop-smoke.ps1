@@ -220,7 +220,13 @@ try {
         if ($picker -and $picker.Current.IsEnabled -and !$picker.Current.IsOffscreen) { $picker }
     }
     $weightPicker.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
-    Select-ReaderItem $root 'Much lighter'
+    $lighterWeight = Wait-For 'the enabled Much lighter option in the Reading picker' {
+        $option = Find-ByName $weightPicker 'Much lighter'
+        $selection = $null
+        if ($option -and $option.Current.IsEnabled -and !$option.Current.IsOffscreen -and
+            $option.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selection)) { $selection }
+    }
+    $lighterWeight.Select()
     Wait-For 'the changed Reading weight to preserve the other font roles' {
         $weights = (Read-ReaderConfig $configPath).ui.weights
         if ($weights.reading -eq -2 -and $weights.title -eq 2 -and $weights.ui -eq -1 -and $weights.code -eq -2) { $true }
