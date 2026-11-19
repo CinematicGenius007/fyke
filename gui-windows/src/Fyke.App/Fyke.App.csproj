@@ -12,6 +12,11 @@
     <!-- Debug symbols stay in the build folder; a published copy is what people download. -->
     <DebugType Condition="'$(_IsPublishing)' == 'true'">none</DebugType>
     <Platforms>x64</Platforms>
+    <!-- CsWinRT generates the WinRT interfaces of what crosses into XAML, which AOT cannot build
+         by reflection. Level 2 warns, so fails the build, for any type it would miss. Its
+         generated code needs unsafe blocks. -->
+    <CsWinRTAotWarningLevel>2</CsWinRTAotWarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <!-- The Windows App SDK's components, not its metapackage: the app is self-contained, so every
@@ -20,6 +25,9 @@
          InteractiveExperiences and WebView2 with it; Foundation holds the file pickers. -->
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="1.8.260204000" />
     <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="1.8.260203002" />
+    <!-- The same CsWinRT the Windows SDK projection bundles, referenced so its AOT source
+         generator runs in this project (microsoft/CsWinRT#1630). -->
+    <PackageReference Include="Microsoft.Windows.CsWinRT" Version="2.2.0" />
     <ProjectReference Include="..\Fyke.Client\Fyke.Client.csproj" />
     <ProjectReference Include="..\Fyke.ViewModels\Fyke.ViewModels.csproj" />
     <Content Include="Fonts\**\*" CopyToOutputDirectory="PreserveNewest" />

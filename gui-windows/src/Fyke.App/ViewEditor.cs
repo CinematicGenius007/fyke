@@ -182,7 +182,7 @@ internal sealed class ViewEditor
         return list;
     }
 
-    private sealed record Source(ReaderScope Scope, long Id, string Label)
+    internal sealed record Source(ReaderScope Scope, long Id, string Label)
     {
         public override string ToString() => Label;
     }
