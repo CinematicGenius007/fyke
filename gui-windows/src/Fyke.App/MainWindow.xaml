@@ -303,9 +303,11 @@
                         <Setter Property="Foreground" Value="{ThemeResource InkBrush}" />
                         <Setter Property="TextWrapping" Value="Wrap" />
                     </Style>
-                    <Style x:Key="SettingsDetail" TargetType="TextBlock" BasedOn="{StaticResource SettingsLabel}">
+                    <Style x:Key="SettingsDetail" TargetType="TextBlock">
+                        <Setter Property="FontFamily" Value="{StaticResource FontUi}" />
                         <Setter Property="FontSize" Value="12" />
                         <Setter Property="Foreground" Value="{ThemeResource MutedBrush}" />
+                        <Setter Property="TextWrapping" Value="Wrap" />
                     </Style>
                     <Style x:Key="SettingsAction" TargetType="Button">
                         <Setter Property="Height" Value="32" />
@@ -381,7 +383,20 @@
                                 </StackPanel>
                                 <Expander Header="Keyboard shortcuts" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                                           FontFamily="{StaticResource FontUi}">
-                                    <Grid x:Name="SettingsShortcutRows" RowSpacing="8" ColumnSpacing="16" />
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Command palette <Run Text="Ctrl+K" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Search articles <Run Text="Ctrl+F" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Add feed <Run Text="Ctrl+N" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Settings <Run Text="Ctrl+," Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Move between panes <Run Text="F6 / Shift+F6" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Refresh feeds <Run Text="R" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Mark read or unread <Run Text="M" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Star or unstar article <Run Text="S" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Show discussion <Run Text="C" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Mark all read <Run Text="Ctrl+Shift+K" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Undo mark all read <Run Text="Ctrl+Z" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Close panel <Run Text="Esc" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                    </StackPanel>
                                 </Expander>
                             </StackPanel>
                         </StackPanel>

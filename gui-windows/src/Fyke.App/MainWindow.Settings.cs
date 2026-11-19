@@ -27,29 +27,6 @@ public sealed partial class MainWindow
         readerSettings = new ReaderSettings(client);
         ReaderShell.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(SettingsKeyDown), true);
         Root.PreviewKeyDown += SettingsShortcutKeyDown;
-
-        SettingsShortcutRows.ColumnDefinitions.Add(new ColumnDefinition());
-        SettingsShortcutRows.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        (string Action, string Shortcut)[] shortcuts =
-        [
-            ("Command palette", "Ctrl+K"), ("Search articles", "Ctrl+F"), ("Add feed", "Ctrl+N"),
-            ("Settings", "Ctrl+,"), ("Move between panes", "F6 / Shift+F6"), ("Refresh feeds", "R"),
-            ("Mark read or unread", "M"), ("Star or unstar article", "S"), ("Show discussion", "C"),
-            ("Mark all read", "Ctrl+Shift+K"), ("Undo mark all read", "Ctrl+Z"), ("Close panel", "Esc"),
-        ];
-        foreach (var (action, key) in shortcuts)
-        {
-            var row = SettingsShortcutRows.RowDefinitions.Count;
-            SettingsShortcutRows.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            var label = new TextBlock { Text = action, Style = (Style)SettingsPane.Resources["SettingsLabel"] };
-            var keys = new TextBlock { Text = key, HorizontalAlignment = HorizontalAlignment.Right,
-                Style = (Style)SettingsPane.Resources["SettingsDetail"] };
-            Grid.SetRow(label, row);
-            Grid.SetRow(keys, row);
-            Grid.SetColumn(keys, 1);
-            SettingsShortcutRows.Children.Add(label);
-            SettingsShortcutRows.Children.Add(keys);
-        }
     }
 
     private void SettingsClicked(object sender, RoutedEventArgs args) => ToggleSettings();

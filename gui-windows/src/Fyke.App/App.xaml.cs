@@ -1,3 +1,4 @@
+using System;
 using Microsoft.UI.Xaml;
 
 namespace Fyke.App;
@@ -10,7 +11,15 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        window = new MainWindow();
-        window.Activate();
+        try
+        {
+            window = new MainWindow();
+            window.Activate();
+        }
+        catch (Exception error)
+        {
+            Console.Error.WriteLine(error);
+            throw;
+        }
     }
 }

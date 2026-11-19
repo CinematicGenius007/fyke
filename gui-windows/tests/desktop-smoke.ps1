@@ -16,6 +16,7 @@ $env:FYKE_HOME = $testHome
 $companion = Join-Path (Split-Path $appPath) 'fyke.exe'
 if (Test-Path $companion) { throw "Use a fresh app build without a bundled daemon: $companion" }
 $window = $null
+$appErrors = $null
 $copied = $false
 
 function Wait-For([string]$Description, [scriptblock]$Probe) {
@@ -40,8 +41,11 @@ try {
     $env:FYKE_BIN = $null
     $start = [Diagnostics.ProcessStartInfo]::new($appPath)
     $start.UseShellExecute = $false
+    $start.RedirectStandardError = $true
     $start.Environment.Remove('PATH') | Out-Null
+    $launchTime = Get-Date
     $window = [Diagnostics.Process]::Start($start)
+    $appErrors = $window.StandardError.ReadToEndAsync()
     $handle = Wait-For 'the main window' { if ($window.MainWindowHandle -ne [IntPtr]::Zero) { $window.MainWindowHandle } }
     $root = [Windows.Automation.AutomationElement]::FromHandle($handle)
     $retryCondition = [Windows.Automation.PropertyCondition]::new(
@@ -521,6 +525,13 @@ try {
     Write-Host 'WinUI verified daemon recovery, the reader, search and palette, bulk undo, and subscription management.'
 } catch {
     Write-Host $_.ScriptStackTrace
+    if ($window -and $window.HasExited) {
+        if ($appErrors -and $appErrors.Status -eq 'RanToCompletion') { Write-Host $appErrors.Result }
+        Get-WinEvent -FilterHashtable @{ LogName = 'Application'; Id = 1000, 1001, 1026; StartTime = $launchTime } `
+            -ErrorAction SilentlyContinue -MaxEvents 20 |
+            Where-Object { $_.Message -like '*Fyke.App.exe*' } |
+            ForEach-Object { Write-Host $_.Message }
+    }
     throw
 } finally {
     try {
