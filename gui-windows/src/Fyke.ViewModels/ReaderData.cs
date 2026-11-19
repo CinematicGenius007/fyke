@@ -89,9 +89,11 @@ public sealed class ReaderData(IDaemonClient client)
         }
     }
 
-    public async Task<TimelinePage> TimelineAsync(ReaderDestination destination, string? before, CancellationToken ct, int limit = PageSize)
+    /// <param name="unreadOnly">Leaves out read articles, except in a saved view, whose rule decides.</param>
+    public async Task<TimelinePage> TimelineAsync(ReaderDestination destination, string? before, CancellationToken ct,
+        int limit = PageSize, bool unreadOnly = false)
     {
-        var response = await EntryPageAsync(destination, before, unreadOnly: false, limit, ct).ConfigureAwait(false);
+        var response = await EntryPageAsync(destination, before, unreadOnly, limit, ct).ConfigureAwait(false);
         return new TimelinePage(response.Items.Select(ToTimelineArticle).ToArray(), response.NextCursor);
     }
 
@@ -191,7 +193,23 @@ public sealed class ReaderData(IDaemonClient client)
         var blocks = JsonSerializer.Deserialize(response.Body, WireJson.Default.ArticleBlockArray)
             ?? throw new DaemonProtocolException("The daemon returned an empty article response.");
         return new ReaderArticle(response.Title, response.FeedTitle, response.Author, blocks,
-            DiscussionLink.FromAddress(response.DiscussionUrl), response.Read, response.Starred);
+            DiscussionLink.FromAddress(response.DiscussionUrl), response.Read, response.Starred,
+            ArticleBlock.WebAddress(response.Url));
+    }
+
+    /// <summary>Fetches the article from its page now, whatever the full-text schedule says.</summary>
+    public async Task<FullTextOutcome> FetchFullAsync(long id, CancellationToken ct)
+    {
+        var reply = await ReadAsync("entries.fetch_full", new JsonObject { ["id"] = id },
+            WireJson.Default.FetchFullReply, ct).ConfigureAwait(false);
+        return reply.Status switch
+        {
+            "done" => FullTextOutcome.Done,
+            "skipped" => FullTextOutcome.Skipped,
+            "later" => FullTextOutcome.Later,
+            "failed" => FullTextOutcome.Failed,
+            _ => throw new DaemonProtocolException("The daemon returned an unknown full-text status."),
+        };
     }
 
     public async Task<ArticleMarks> MarkAsync(long id, bool? read, bool? starred, CancellationToken ct)
@@ -227,7 +245,9 @@ public sealed class ReaderData(IDaemonClient client)
     internal sealed record Folder(long Id, long? ParentId, string Name);
     internal sealed record Entry(long Id, string? Title, string? FeedTitle, bool Read, bool Starred,
         string? Snippet, string? Summary, long SortAt, long? FeedId);
-    internal sealed record ArticleBody(string? Title, string? FeedTitle, string? Author, string? DiscussionUrl, string Body, bool Read, bool Starred);
+    internal sealed record ArticleBody(string? Title, string? FeedTitle, string? Author, string? DiscussionUrl, string Body,
+        bool Read, bool Starred, string? Url = null);
+    internal sealed record FetchFullReply(string? Status);
     internal sealed record MarkReply(MarkState? Previous);
     internal sealed record MarkState(bool Read, bool Starred);
     internal sealed record BulkMarkReply(PreviousRead[]? Previous);

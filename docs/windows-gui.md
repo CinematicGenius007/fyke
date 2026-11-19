@@ -58,7 +58,7 @@ CI publishes the app once, runs the desktop smoke test against that copy, and fa
 
 ## Design tokens
 
-`tools/gen_tokens.py` also writes `gui-windows/src/Fyke.App/Themes/Tokens.xaml`: colors as `Color` and `SolidColorBrush` resources in `Light` and `Dark` theme dictionaries, radii as `CornerRadius`, and font families. As with Swift, the XAML is generated and never edited. Inter, Newsreader and JetBrains Mono come from `gui/Fonts` and are bundled with the app.
+`tools/gen_tokens.py` also writes `gui-windows/src/Fyke.App/Themes/Tokens.xaml`: colors as `Color` and `SolidColorBrush` resources in `Light` and `Dark` theme dictionaries, radii as `CornerRadius`, and font families. It also writes `gui-windows/src/Fyke.ViewModels/Tokens.g.cs`, the same colors as RGBA constants, from which `ReaderPalette` derives every theme. As with Swift, the generated files are never edited. Inter, Newsreader and JetBrains Mono come from `gui/Fonts` and are bundled with the app; the generator fails if a bundled copy differs from its original.
 
 `App.xaml` loads the standard WinUI control resources before the generated tokens so native templates can resolve their theme resources and Fyke's tokens take precedence.
 
@@ -86,6 +86,8 @@ The reader loads saved reading, title, interface, and code weights from `ui.weig
 An article with a Hacker News discussion offers **Show comments** below its body. Press **C** or follow an inline link to the article's own thread to jump there. The client calls `entries.discussion` on demand, then shows returned blocks in a virtualized list inside the reader's scroll area. Readers can collapse a comment and its replies, retry a failed load, and open the full thread in their browser. Other discussion addresses open in the browser. Changing articles clears discussion state and cancels an in-flight request.
 
 Opening an article marks it read after its body loads. The reader toolbar and the **M** and **S** shortcuts change read and star state through `entries.mark`. The daemon publishes the changes to the timeline and sidebar counts. Removing a star while viewing Starred removes the row and keeps the article open. The toolbar shows the confirmed state and reports a failed change alongside the actions.
+
+The single-key commands match macOS and the terminal app: **J** and **K** open the next and previous article, **N** the next unread one, **U** shows unread articles only (a saved view keeps its own rule) and keeps the open article while it is read, **O** opens the article's page in the browser (Shift+O too, as Windows has no in-app page view yet), **F** fetches the full article through `entries.fetch_full` and shows it again when that found more, **A** adds a feed, **T** opens text size and spacing, and **/** opens search. Each is ignored while an overlay or Settings covers the reader. The palette lists the same commands. **/** is read from key presses rather than a `KeyboardAccelerator`, which can fail fast formatting an OEM key, as with Ctrl+,.
 
 **Mark all read** is available for All, folders, feeds, and saved views from the timeline, the sidebar context menu, or Ctrl+Shift+K. It scans up to 20,000 articles through the scope's cursor, then writes atomic batches of unread IDs through `entries.mark_many`. The notification offers Undo for acknowledged changes, including when later batches fail. Undo restores only the articles that were unread at the time of the write and keeps its remaining batches after an interrupted restore. The window keeps the last 100 undo actions available through Ctrl+Z after the notification closes.
 
@@ -137,7 +139,7 @@ Reading also controls body text size (14–28), line spacing (1.2–2.0), and ar
 
 Show scrollbars offers While scrolling, Always, and Never under Reading. It saves `ui.scrollbars` and applies to vertical bars in the sidebar, timeline, article, search, palette, and Settings. While scrolling uses Windows' automatic indicator behavior. Never hides the bars and allows wheel, touch, and keyboard scrolling.
 
-Appearance offers Light and Dark for the fixed, day, and night slots. The fixed choice turns off system following. Follow system appearance uses the day or night slot when Windows changes its app appearance. The content and title bar follow the resolved theme, and Windows handles the system high contrast override. Profiles that name Terminal use the Dark fallback. Other theme IDs use Light until their palettes are available. Rendering Newsprint, Terminal, and custom themes is planned.
+Appearance offers Light, Dark, Newsprint, Terminal and the user's own themes from `ui.themes` for the fixed, day, and night slots. The fixed choice turns off system following. Follow system appearance uses the day or night slot when Windows changes its app appearance. `ReaderPalette` builds each theme as `gui/Sources/Reader/Theme.swift` does: Newsprint and Terminal from their three Paper colors, mixed toward black in Oklab like SwiftUI's `Color.mix`, and a custom theme as its built-in base with its saved colors on top. The window writes the active palette into the shared token brushes of the Light or Dark dictionary, so a change repaints without rebuilding anything. A theme that no longer exists shows as Light, as on macOS. Windows handles the system high contrast override. Not yet matched: Terminal's typeface (macOS sets reading and titles in JetBrains Mono) and a custom theme's own fonts and radii. Creating and editing themes is done on macOS for now.
 
 ## Background running and notifications
 
@@ -209,7 +211,7 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W2e.2c | Scrollbar visibility | Profile and patch tests. Windows smoke changes the saved mode and checks that overflowing Settings content still scrolls |
 | W2e.2d | Persistent folder disclosure | Profile tests and Windows smoke coverage for relaunch, keeping the open article, and pruning the saved folder after deletion |
 | W2e.2e | Light and Dark appearance with system following | Profile and patch tests. Windows smoke changes the fixed theme and checks the open article uses its colors |
-| W2e.2f | Planned Newsprint, Terminal, and custom appearance | Reopen a profile with saved themes. Compare palettes, fonts, and narrow and wide layouts with macOS |
+| W2e.2f | Newsprint, Terminal, and custom colors; typeface and radii planned | Reopen a profile with saved themes. Compare palettes, fonts, and narrow and wide layouts with macOS |
 | W2e.3 | Planned Agents settings and MCP configuration | Detect installed Codex, exercise missing and signed-out states, and paste a working MCP configuration |
 | W2e.4 | Planned storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
 | W2e.5 | Planned General background updating and link destination controls | Runtime and login behavior with W4, plus safe native link routing and browser fallback |

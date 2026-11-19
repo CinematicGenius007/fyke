@@ -19,6 +19,7 @@ namespace Fyke.ViewModels;
 [JsonSerializable(typeof(FeedRefresh))]
 [JsonSerializable(typeof(FeedSubscriptions.FeedPreview))]
 [JsonSerializable(typeof(ReaderData.ArticleBody))]
+[JsonSerializable(typeof(ReaderData.FetchFullReply))]
 [JsonSerializable(typeof(ReaderData.BulkMarkReply))]
 [JsonSerializable(typeof(ReaderData.CatalogItems<ReaderData.Entry>))]
 [JsonSerializable(typeof(ReaderData.CatalogItems<ReaderData.Feed>))]

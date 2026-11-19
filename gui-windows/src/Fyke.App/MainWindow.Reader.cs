@@ -66,6 +66,7 @@ public sealed partial class MainWindow
         InitializeAddFeed();
         InitializeCatalogEditing();
         InitializeBulkMarks();
+        InitializeKeys();
         ShowArticle(null);
         UpdateMarkControls();
     }
@@ -297,7 +298,7 @@ public sealed partial class MainWindow
             ViewSummary.Text = destination.RuleSummary ?? string.Empty;
             ViewSummary.Visibility = ViewSummary.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             EditViewButton.Visibility = destination.Scope == ReaderScope.View ? Visibility.Visible : Visibility.Collapsed;
-            var page = await reader.TimelineAsync(destination, cursor, request.Token, limit);
+            var page = await reader.TimelineAsync(destination, cursor, request.Token, limit, unreadOnly);
             request.Token.ThrowIfCancellationRequested();
             if (append)
             {
@@ -373,7 +374,8 @@ public sealed partial class MainWindow
             {
                 var current = articles.FirstOrDefault(row => row.Id == opened.Id);
                 // A mark can remove the selected row from a filtered list while it is being read.
-                if (current is null && selected is not null && destination?.Scope is not (ReaderScope.Starred or ReaderScope.View))
+                if (current is null && selected is not null && !unreadOnly
+                    && destination?.Scope is not (ReaderScope.Starred or ReaderScope.View))
                 {
                     _ = OpenArticleAsync(null);
                 }
@@ -423,6 +425,7 @@ public sealed partial class MainWindow
         articleRequest?.Cancel();
         openArticle = article;
         articleAuthor = null;
+        articlePage = null;
         articleReady = false;
         MarkStatus.Visibility = Visibility.Collapsed;
         UpdateMarkControls();
@@ -450,6 +453,7 @@ public sealed partial class MainWindow
             var source = result.FeedTitle ?? article.FeedTitle;
             openArticle = article with { FeedTitle = source };
             articleAuthor = result.Author;
+            articlePage = result.Page;
             UpdateArticleSource(source);
             SetDiscussion(article.Id, result.Discussion);
             articleRenderer.Append(ArticleBody, result.Blocks);

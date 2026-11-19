@@ -209,6 +209,24 @@ public sealed partial class MainWindow
                 () => ToggleArticleMark(VirtualKey.S));
         }
 
+        if (articleReady && articlePage is not null)
+        {
+            yield return new("open-page", "Open page in browser", null, "O", () => OpenArticlePage());
+        }
+
+        if (articleReady && fetchingFullText is null)
+        {
+            yield return new("fetch-full", "Fetch full article", null, "F", () => FetchFullText());
+        }
+
+        if (articles.Count > 0)
+        {
+            yield return new("next-unread", "Next unread article", null, "N", () => NextUnread());
+        }
+
+        yield return new("unread-only", unreadOnly ? "Show all articles" : "Show unread only", null, "U",
+            () => ToggleUnreadOnly());
+
         if (discussionLink is { } link)
         {
             yield return new("discussion", link.HackerNewsItem is null ? "Open discussion" : "Show comments",

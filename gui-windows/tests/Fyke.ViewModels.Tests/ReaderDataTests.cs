@@ -1,3 +1,4 @@
+using Fyke.Client;
 using System.Text.Json;
 using Fyke.ViewModels;
 
@@ -105,7 +106,7 @@ public sealed class ReaderDataTests
                 Assert.Equal("blocks", sent.GetProperty("format").GetString());
                 return JsonSerializer.SerializeToElement(new
                 {
-                    title = "Reader fixture", feed_title = "News", author = "Alex",
+                    title = "Reader fixture", feed_title = "News", author = "Alex", url = "https://example.com/post",
                     body = """
                         [
                           {"t":"h","level":2,"c":[{"t":"text","v":"Title"}]},
@@ -128,6 +129,69 @@ public sealed class ReaderDataTests
         Assert.Equal("Cell", article.Blocks[2].Rows![0][0][0].Text);
         Assert.Equal("Figure", article.Blocks[3].Alt);
         Assert.Equal("unknown", article.Blocks[4].Kind);
+        Assert.Equal(new Uri("https://example.com/post"), article.Page);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("javascript:alert(1)")]
+    public async Task AnArticleWithoutASafePageHasNone(string? url)
+    {
+        var fake = new FakeClient
+        {
+            OnCall = (_, _) => JsonSerializer.SerializeToElement(new { title = "T", url, body = "[]" }),
+        };
+
+        Assert.Null((await new ReaderData(fake).ArticleAsync(9, CancellationToken.None)).Page);
+    }
+
+    [Theory]
+    [InlineData(ReaderScope.All, true)]
+    [InlineData(ReaderScope.Feed, true)]
+    [InlineData(ReaderScope.View, false)]
+    public async Task UnreadOnlyTimelinesLeaveTheFilterToASavedView(ReaderScope scope, bool filtered)
+    {
+        JsonElement sent = default;
+        var fake = new FakeClient
+        {
+            OnCall = (_, parameters) =>
+            {
+                sent = parameters.GetValueOrDefault();
+                return Parse("""{"items":[]}""");
+            },
+        };
+
+        await new ReaderData(fake).TimelineAsync(new(scope, 42, "Selected", 0, 0), null, CancellationToken.None, unreadOnly: true);
+
+        Assert.Equal(filtered, sent.GetProperty("unread_only").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData("done", FullTextOutcome.Done)]
+    [InlineData("skipped", FullTextOutcome.Skipped)]
+    [InlineData("failed", FullTextOutcome.Failed)]
+    [InlineData("later", FullTextOutcome.Later)]
+    public async Task FetchesTheFullArticleAndReportsWhatHappened(string status, FullTextOutcome expected)
+    {
+        var fake = new FakeClient
+        {
+            OnCall = (method, parameters) =>
+            {
+                Assert.Equal("entries.fetch_full", method);
+                Assert.Equal(9, parameters.GetValueOrDefault().GetProperty("id").GetInt64());
+                return JsonSerializer.SerializeToElement(new { status });
+            },
+        };
+
+        Assert.Equal(expected, await new ReaderData(fake).FetchFullAsync(9, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task AnUnknownFullTextStatusIsAProtocolError()
+    {
+        var fake = new FakeClient { OnCall = (_, _) => JsonSerializer.SerializeToElement(new { status = "maybe" }) };
+
+        await Assert.ThrowsAsync<DaemonProtocolException>(() => new ReaderData(fake).FetchFullAsync(9, CancellationToken.None));
     }
 
     [Theory]

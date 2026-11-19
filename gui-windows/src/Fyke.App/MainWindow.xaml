@@ -38,6 +38,15 @@
                 <KeyboardAccelerator Key="R" Invoked="RefreshSubscriptionsShortcut" />
                 <KeyboardAccelerator Key="K" Modifiers="Control,Shift" Invoked="MarkAllReadShortcut" />
                 <KeyboardAccelerator Key="Z" Modifiers="Control" Invoked="UndoBulkShortcut" />
+                <KeyboardAccelerator Key="J" Invoked="NavigationShortcut" />
+                <KeyboardAccelerator Key="K" Invoked="NavigationShortcut" />
+                <KeyboardAccelerator Key="N" Invoked="NavigationShortcut" />
+                <KeyboardAccelerator Key="U" Invoked="NavigationShortcut" />
+                <KeyboardAccelerator Key="O" Invoked="NavigationShortcut" />
+                <KeyboardAccelerator Key="O" Modifiers="Shift" Invoked="NavigationShortcut" />
+                <KeyboardAccelerator Key="F" Invoked="NavigationShortcut" />
+                <KeyboardAccelerator Key="A" Invoked="NavigationShortcut" />
+                <KeyboardAccelerator Key="T" Invoked="NavigationShortcut" />
             </Grid.KeyboardAccelerators>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="SidebarColumn" Width="232" />
@@ -410,10 +419,16 @@
                                           FontFamily="{StaticResource FontUi}">
                                     <StackPanel Spacing="8">
                                         <TextBlock Style="{StaticResource SettingsLabel}">Command palette <Run Text="Ctrl+K" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
-                                        <TextBlock Style="{StaticResource SettingsLabel}">Search articles <Run Text="Ctrl+F" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
-                                        <TextBlock Style="{StaticResource SettingsLabel}">Add feed <Run Text="Ctrl+N" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Search articles <Run Text="Ctrl+F or /" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Add feed <Run Text="Ctrl+N or A" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
                                         <TextBlock Style="{StaticResource SettingsLabel}">Settings <Run Text="Ctrl+," Foreground="{ThemeResource MutedBrush}" /></TextBlock>
                                         <TextBlock Style="{StaticResource SettingsLabel}">Move between panes <Run Text="F6 / Shift+F6" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Next or previous article <Run Text="J / K" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Next unread article <Run Text="N" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Show unread only or all articles <Run Text="U" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Open page in browser <Run Text="O" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Fetch full article <Run Text="F" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                                        <TextBlock Style="{StaticResource SettingsLabel}">Text size and spacing <Run Text="T" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
                                         <TextBlock Style="{StaticResource SettingsLabel}">Refresh feeds <Run Text="R" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
                                         <TextBlock Style="{StaticResource SettingsLabel}">Mark read or unread <Run Text="M" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
                                         <TextBlock Style="{StaticResource SettingsLabel}">Star or unstar article <Run Text="S" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
