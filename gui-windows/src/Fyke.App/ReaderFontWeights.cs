@@ -7,9 +7,20 @@ using Windows.UI.Text;
 namespace Fyke.App;
 
 /// <summary>Exposes the profile's typography in the font-weight type used by WinUI.</summary>
-public sealed class ReaderFontWeights : INotifyPropertyChanged
+/// <remarks>
+/// One instance serves the app, so item templates reach it through a static x:Bind path. The
+/// generated property accessors keep the bindings made in code working when the app is trimmed.
+/// </remarks>
+[WinRT.GeneratedBindableCustomProperty]
+public sealed partial class ReaderFontWeights : INotifyPropertyChanged
 {
     private ReaderTypography typography;
+
+    private ReaderFontWeights()
+    {
+    }
+
+    public static ReaderFontWeights Shared { get; } = new();
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

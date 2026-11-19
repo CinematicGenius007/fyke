@@ -56,7 +56,7 @@ public sealed partial class MainWindow
         var resources = Application.Current.Resources;
         var reading = (FontFamily)resources["FontReading"];
         var code = (FontFamily)resources["FontCode"];
-        readerFonts = (ReaderFontWeights)Root.Resources["ReaderFonts"];
+        readerFonts = ReaderFontWeights.Shared;
         articleRenderer = new ArticleBlockRenderer(reading, ui, code, readerFonts, readerTextStyle,
             linkAction: DiscussionLinkAction, trackImages: true);
         InitializeSettings();

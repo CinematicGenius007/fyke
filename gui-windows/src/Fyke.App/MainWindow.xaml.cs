@@ -38,7 +38,6 @@ public sealed partial class MainWindow : Window
         MessageText.FontFamily = ui;
         DetailText.FontFamily = ui;
         RetryButton.FontFamily = ui;
-        Root.DataContext = ViewModel;
         InitializeReader(ui);
         ViewModel.PropertyChanged += (_, _) => ShowState();
         ShowState();

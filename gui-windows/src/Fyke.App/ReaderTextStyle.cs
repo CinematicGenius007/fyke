@@ -7,7 +7,9 @@ using Microsoft.UI.Xaml.Data;
 namespace Fyke.App;
 
 /// <summary>Applies reader layout preferences to the current article and discussion controls.</summary>
-public sealed class ReaderTextStyle : INotifyPropertyChanged
+/// <remarks>The generated property accessors keep these code bindings working when the app is trimmed.</remarks>
+[WinRT.GeneratedBindableCustomProperty]
+public sealed partial class ReaderTextStyle : INotifyPropertyChanged
 {
     internal ReaderTextLayout Layout { get; private set; } = ReaderTextLayout.Default;
 

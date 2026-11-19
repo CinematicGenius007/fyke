@@ -2,10 +2,13 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Fyke.App"
+    xmlns:vm="using:Fyke.ViewModels"
     xmlns:primitives="using:Microsoft.UI.Xaml.Controls.Primitives">
     <Grid x:Name="Root">
         <Grid.Resources>
-            <local:ReaderFontWeights x:Key="ReaderFonts" />
+            <DataTemplate x:Key="FolderChoiceTemplate" x:DataType="vm:FolderChoice">
+                <TextBlock Text="{x:Bind Name}" />
+            </DataTemplate>
             <Style x:Key="ReadSearchTitle" TargetType="TextBlock">
                 <Setter Property="Foreground" Value="{ThemeResource ReadBrush}" />
             </Style>
@@ -55,7 +58,7 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="LIBRARY" FontSize="11" FontFamily="{StaticResource FontUi}" VerticalAlignment="Center"
-                               FontWeight="{Binding SectionLabel, Source={StaticResource ReaderFonts}}"
+                               FontWeight="{x:Bind local:ReaderFontWeights.Shared.SectionLabel, Mode=OneWay}"
                                Foreground="{ThemeResource MutedBrush}" />
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
                         <Button x:Name="AddFeedButton" Width="32" Height="32" Padding="0"
@@ -87,15 +90,15 @@
                         </Style>
                     </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
-                        <DataTemplate>
+                        <DataTemplate x:DataType="vm:ReaderDestination">
                             <Grid Height="32" ColumnSpacing="8" DataContextChanged="ApplyDestinationIndent"
-                                  AutomationProperties.Name="{Binding AccessibleName}">
+                                  AutomationProperties.Name="{x:Bind AccessibleName}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="14" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <FontIcon Glyph="{Binding Glyph}" FontSize="14"
+                                <FontIcon Glyph="{x:Bind Glyph}" FontSize="14"
                                           Foreground="{ThemeResource InkSoftBrush}" />
                                 <Button Width="24" Height="24" Padding="0" Margin="-5,0,0,0"
                                         HorizontalAlignment="Left" VerticalAlignment="Center" Visibility="Collapsed"
@@ -105,11 +108,11 @@
                                         CornerRadius="{StaticResource RadiusControl}">
                                     <FontIcon FontSize="10" />
                                 </Button>
-                                <TextBlock Grid.Column="1" Text="{Binding Title}" TextTrimming="CharacterEllipsis"
-                                           FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                <TextBlock Grid.Column="1" Text="{x:Bind Title}" TextTrimming="CharacterEllipsis"
+                                           FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                            VerticalAlignment="Center" Foreground="{ThemeResource InkBrush}" />
-                                <TextBlock Grid.Column="2" Text="{Binding CountText}" VerticalAlignment="Center"
-                                           FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                <TextBlock Grid.Column="2" Text="{x:Bind CountText}" VerticalAlignment="Center"
+                                           FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                            Foreground="{ThemeResource UnreadBrush}" />
                             </Grid>
                         </DataTemplate>
@@ -119,7 +122,7 @@
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                     <TextBlock x:Name="SubscriptionStatus" Visibility="Collapsed" Margin="10,0,0,0" VerticalAlignment="Center"
                            FontSize="12" TextWrapping="Wrap" FontFamily="{StaticResource FontUi}"
-                           FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                           FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                            Foreground="{ThemeResource MutedBrush}" AutomationProperties.LiveSetting="Polite" />
                     <Button Grid.Column="1" x:Name="SettingsButton" Width="32" Height="32" Padding="0"
                             Click="SettingsClicked" CornerRadius="{StaticResource RadiusControl}"
@@ -144,7 +147,7 @@
                     </Grid.ColumnDefinitions>
                     <StackPanel VerticalAlignment="Center" Spacing="2">
                         <TextBlock x:Name="TimelineHeading" FontSize="24"
-                                   FontFamily="{StaticResource FontReading}" FontWeight="{Binding Title, Source={StaticResource ReaderFonts}}"
+                                   FontFamily="{StaticResource FontReading}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Title, Mode=OneWay}"
                                    TextTrimming="CharacterEllipsis" Foreground="{ThemeResource InkBrush}"
                                    AutomationProperties.AutomationId="TimelineHeading" />
                         <TextBlock x:Name="ViewSummary" FontSize="12" Visibility="Collapsed" TextTrimming="CharacterEllipsis"
@@ -184,14 +187,14 @@
                         </Style>
                     </ListView.ItemContainerStyle>
                     <ListView.ItemTemplate>
-                        <DataTemplate>
-                            <StackPanel Padding="4,8" Spacing="4" AutomationProperties.Name="{Binding AccessibleName}">
-                                <TextBlock Text="{Binding Title}" TextWrapping="Wrap" MaxLines="2"
+                        <DataTemplate x:DataType="vm:TimelineArticle">
+                            <StackPanel Padding="4,8" Spacing="4" AutomationProperties.Name="{x:Bind AccessibleName}">
+                                <TextBlock Text="{x:Bind Title}" TextWrapping="Wrap" MaxLines="2"
                                            FontFamily="{StaticResource FontReading}"
-                                           FontWeight="{Binding TimelineTitle, Source={StaticResource ReaderFonts}}"
+                                           FontWeight="{x:Bind local:ReaderFontWeights.Shared.TimelineTitle, Mode=OneWay}"
                                            TextTrimming="CharacterEllipsis" Foreground="{ThemeResource InkBrush}" />
-                                <TextBlock Text="{Binding FeedTitle}" FontSize="12" TextTrimming="CharacterEllipsis"
-                                           FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                <TextBlock Text="{x:Bind FeedTitle}" FontSize="12" TextTrimming="CharacterEllipsis"
+                                           FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                            Foreground="{ThemeResource MutedBrush}" />
                             </StackPanel>
                         </DataTemplate>
@@ -199,14 +202,14 @@
                 </ListView>
                 <StackPanel Grid.Row="1" Margin="20,8" Spacing="8" x:Name="TimelineState">
                     <TextBlock x:Name="TimelineMessage" TextWrapping="Wrap" Foreground="{ThemeResource InkSoftBrush}"
-                               FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                               FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                AutomationProperties.LiveSetting="Polite" />
                     <Button x:Name="RetryTimeline" Content="Try again" Height="32" Click="RetryTimelineClicked"
-                            FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                            FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                             Visibility="Collapsed" CornerRadius="{StaticResource RadiusControl}" />
                 </StackPanel>
                 <Button Grid.Row="3" x:Name="MoreArticles" Margin="16,8" Height="32" Content="Load more"
-                        FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                        FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                         Visibility="Collapsed" Click="MoreArticlesClicked" CornerRadius="{StaticResource RadiusControl}" />
             </Grid>
             <primitives:Thumb Grid.Column="3" x:Name="TimelineDivider" IsTabStop="True" UseSystemFocusVisuals="True" DragDelta="TimelineDividerDragged" KeyDown="TimelineDividerKeyDown"
@@ -231,7 +234,7 @@
                     </Grid.ColumnDefinitions>
                     <TextBlock x:Name="MarkStatus" FontSize="13" Visibility="Collapsed" TextWrapping="Wrap"
                                VerticalAlignment="Center" FontFamily="{StaticResource FontUi}"
-                               FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                               FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                Foreground="{ThemeResource InkSoftBrush}" AutomationProperties.LiveSetting="Polite" />
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
                         <Button x:Name="StarArticle" Width="32" Height="32" Padding="0" Click="StarArticleClicked"
@@ -252,37 +255,37 @@
                     <StackPanel x:Name="ArticleColumn" Margin="24,20" Spacing="12" MaxWidth="640" HorizontalAlignment="Stretch"
                                 AutomationProperties.AutomationId="ArticlePane">
                         <TextBlock x:Name="ArticleHeading" FontSize="32" TextWrapping="Wrap" IsTextSelectionEnabled="True"
-                                   FontFamily="{StaticResource FontReading}" FontWeight="{Binding Title, Source={StaticResource ReaderFonts}}"
+                                   FontFamily="{StaticResource FontReading}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Title, Mode=OneWay}"
                                    AutomationProperties.AutomationId="ArticleHeading"
                                    Foreground="{ThemeResource InkBrush}" />
                         <TextBlock x:Name="ArticleSource" TextWrapping="Wrap" Foreground="{ThemeResource MutedBrush}"
                                    AutomationProperties.AutomationId="ArticleSource"
-                                   FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}" />
+                                   FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}" />
                         <TextBlock x:Name="ArticleStatus" TextWrapping="Wrap" Foreground="{ThemeResource InkSoftBrush}"
-                                   FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                   FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                    Visibility="Collapsed" AutomationProperties.LiveSetting="Polite" />
                         <Button x:Name="RetryArticle" Content="Try again" Click="RetryArticleClicked"
-                                FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                 Visibility="Collapsed" Height="32" CornerRadius="{StaticResource RadiusControl}" />
                         <StackPanel x:Name="ArticleBody" Spacing="16" AutomationProperties.AutomationId="ArticleBody" />
                         <StackPanel x:Name="ArticleDiscussion" Visibility="Collapsed" Spacing="8" Margin="0,12,0,0">
                             <Border Style="{StaticResource ArticleRule}" />
                             <TextBlock x:Name="DiscussionHeading" FontSize="15" TextWrapping="Wrap"
                                        FontFamily="{StaticResource FontUi}"
-                                       FontWeight="{Binding SectionLabel, Source={StaticResource ReaderFonts}}"
+                                       FontWeight="{x:Bind local:ReaderFontWeights.Shared.SectionLabel, Mode=OneWay}"
                                        Foreground="{ThemeResource InkBrush}" AutomationProperties.LiveSetting="Polite" />
                             <TextBlock x:Name="DiscussionDetail" FontSize="13" TextWrapping="Wrap"
-                                       FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                       FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                        Foreground="{ThemeResource MutedBrush}" />
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Button x:Name="DiscussionAction" Height="32" Click="DiscussionActionClicked"
                                         AutomationProperties.AutomationId="DiscussionAction"
                                         AutomationProperties.AcceleratorKey="C"
-                                        FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                        FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                         CornerRadius="{StaticResource RadiusControl}" />
                                 <HyperlinkButton x:Name="DiscussionWebsite" Height="32"
                                                  FontFamily="{StaticResource FontUi}"
-                                                 FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}" />
+                                                 FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}" />
                             </StackPanel>
                             <ItemsRepeater x:Name="DiscussionComments" ElementPrepared="PrepareDiscussionComment"
                                            AutomationProperties.Name="Comments">
@@ -458,7 +461,7 @@
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                 <TextBlock Text="Reading" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center"
-                                           FontFamily="{StaticResource FontReading}" FontWeight="{Binding Reading, Source={StaticResource ReaderFonts}}" />
+                                           FontFamily="{StaticResource FontReading}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Reading, Mode=OneWay}" />
                                 <ComboBox Grid.Column="1" x:Name="ReadingWeightPicker" Style="{StaticResource SettingsPicker}" IsEnabled="False"
                                           SelectionChanged="FontWeightChanged" AutomationProperties.Name="Reading font weight"
                                           AutomationProperties.AutomationId="ReadingWeightPicker" />
@@ -467,7 +470,7 @@
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                 <TextBlock Text="Titles" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center"
-                                           FontFamily="{StaticResource FontReading}" FontWeight="{Binding Title, Source={StaticResource ReaderFonts}}" />
+                                           FontFamily="{StaticResource FontReading}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Title, Mode=OneWay}" />
                                 <ComboBox Grid.Column="1" x:Name="TitleWeightPicker" Style="{StaticResource SettingsPicker}" IsEnabled="False"
                                           SelectionChanged="FontWeightChanged" AutomationProperties.Name="Titles font weight"
                                           AutomationProperties.AutomationId="TitleWeightPicker" />
@@ -476,7 +479,7 @@
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                 <TextBlock Text="App" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center"
-                                           FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}" />
+                                           FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}" />
                                 <ComboBox Grid.Column="1" x:Name="UiWeightPicker" Style="{StaticResource SettingsPicker}" IsEnabled="False"
                                           SelectionChanged="FontWeightChanged" AutomationProperties.Name="App font weight"
                                           AutomationProperties.AutomationId="UiWeightPicker" />
@@ -485,7 +488,7 @@
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                 <TextBlock Text="Code" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center"
-                                           FontFamily="{StaticResource FontCode}" FontWeight="{Binding Code, Source={StaticResource ReaderFonts}}" />
+                                           FontFamily="{StaticResource FontCode}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Code, Mode=OneWay}" />
                                 <ComboBox Grid.Column="1" x:Name="CodeWeightPicker" Style="{StaticResource SettingsPicker}" IsEnabled="False"
                                           SelectionChanged="FontWeightChanged" AutomationProperties.Name="Code font weight"
                                           AutomationProperties.AutomationId="CodeWeightPicker" />
@@ -549,11 +552,11 @@
         <StackPanel Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center"
                     Spacing="12" MaxWidth="400"
                     x:Name="InlineState">
-            <TextBlock x:Name="MessageText" AutomationProperties.AutomationId="ConnectionMessage" Text="{Binding Message}" FontSize="20" TextWrapping="Wrap"
+            <TextBlock x:Name="MessageText" AutomationProperties.AutomationId="ConnectionMessage" Text="{x:Bind ViewModel.Message, Mode=OneWay}" FontSize="20" TextWrapping="Wrap"
                        Foreground="{ThemeResource InkBrush}" />
-            <TextBlock x:Name="DetailText" Text="{Binding Detail}" TextWrapping="Wrap"
+            <TextBlock x:Name="DetailText" Text="{x:Bind ViewModel.Detail, Mode=OneWay}" TextWrapping="Wrap"
                        Foreground="{ThemeResource InkSoftBrush}" />
-            <Button x:Name="RetryButton" AutomationProperties.AutomationId="ConnectionRetry" Content="Try again" Command="{Binding RetryCommand}" Height="32"
+            <Button x:Name="RetryButton" AutomationProperties.AutomationId="ConnectionRetry" Content="Try again" Command="{x:Bind ViewModel.RetryCommand}" Height="32"
                     CornerRadius="{StaticResource RadiusControl}" />
         </StackPanel>
         <Border Grid.Row="1" x:Name="BulkNotice" Visibility="Collapsed" MaxWidth="480" Margin="16"
@@ -565,13 +568,13 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock x:Name="BulkNoticeText" VerticalAlignment="Center" TextWrapping="Wrap"
-                           FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                           FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                            Foreground="{ThemeResource GroundBrush}" AutomationProperties.LiveSetting="Polite" />
                 <Button Grid.Column="1" x:Name="BulkNoticeUndo" Content="Undo" Height="32" VerticalAlignment="Center"
                         Click="UndoBulkClicked" CornerRadius="{StaticResource RadiusControl}"
                         AutomationProperties.AutomationId="BulkNoticeUndo" AutomationProperties.AcceleratorKey="Ctrl+Z"
                         ToolTipService.ToolTip="Undo (Ctrl+Z)"
-                        FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}" />
+                        FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}" />
             </Grid>
         </Border>
         <Grid Grid.RowSpan="2" x:Name="SearchOverlay" Visibility="Collapsed" TabFocusNavigation="Cycle">
@@ -594,21 +597,21 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBox x:Name="SearchQuery" PlaceholderText="Search your feeds" FontSize="20"
-                                 FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                 FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                  TextChanged="SearchQueryChanged" AutomationProperties.Name="Search your feeds"
                                  AutomationProperties.AutomationId="SearchQuery" />
                         <TextBlock Grid.Column="1" x:Name="SearchCount" FontSize="13" VerticalAlignment="Center"
-                                   FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                   FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                    Foreground="{ThemeResource MutedBrush}" AutomationProperties.LiveSetting="Polite" />
                     </Grid>
                     <Border Grid.Row="1" BorderThickness="0,1,0,1" BorderBrush="{ThemeResource HairlineBrush}">
                         <Grid>
                             <StackPanel x:Name="SearchState" Margin="20,16" Spacing="8">
                                 <TextBlock x:Name="SearchStatus" TextWrapping="Wrap" FontSize="14"
-                                           FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                           FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                            Foreground="{ThemeResource InkSoftBrush}" AutomationProperties.LiveSetting="Polite" />
                                 <Button x:Name="RetrySearch" Content="Try again" Height="32" Click="RetrySearchClicked"
-                                        FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                        FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                         Visibility="Collapsed" CornerRadius="{StaticResource RadiusControl}" />
                             </StackPanel>
                             <ListView x:Name="SearchResults" Margin="8" MaxHeight="512" Visibility="Collapsed"
@@ -620,31 +623,31 @@
                                     </Style>
                                 </ListView.ItemContainerStyle>
                                 <ListView.ItemTemplate>
-                                    <DataTemplate>
+                                    <DataTemplate x:DataType="vm:SearchHit">
                                         <Button Height="64" Padding="12,8" HorizontalAlignment="Stretch"
                                                 HorizontalContentAlignment="Stretch" Background="Transparent" BorderThickness="0"
                                                 CornerRadius="{StaticResource RadiusControl}" Click="SearchResultClicked"
-                                                AutomationProperties.Name="{Binding AccessibleName}">
+                                                AutomationProperties.Name="{x:Bind AccessibleName}">
                                             <Grid ColumnSpacing="20">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="104" />
                                                 </Grid.ColumnDefinitions>
                                                 <StackPanel Spacing="3">
-                                                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis"
+                                                    <TextBlock Text="{x:Bind Title}" TextTrimming="CharacterEllipsis"
                                                                FontSize="18" FontFamily="{StaticResource FontReading}"
-                                                               FontWeight="{Binding TimelineTitle, Source={StaticResource ReaderFonts}}"
+                                                               FontWeight="{x:Bind local:ReaderFontWeights.Shared.TimelineTitle, Mode=OneWay}"
                                                                DataContextChanged="PrepareSearchTitle" />
                                                     <TextBlock TextTrimming="CharacterEllipsis" FontSize="13"
                                                                FontFamily="{StaticResource FontUi}"
-                                                               FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                                               FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                                                Foreground="{ThemeResource InkSoftBrush}"
                                                                DataContextChanged="PrepareSearchSnippet" />
                                                 </StackPanel>
                                                 <StackPanel Grid.Column="1" Spacing="3" Margin="0,4,0,0">
-                                                    <TextBlock Text="{Binding FeedTitle}" TextTrimming="CharacterEllipsis"
+                                                    <TextBlock Text="{x:Bind FeedTitle}" TextTrimming="CharacterEllipsis"
                                                                TextAlignment="Right" FontSize="13" FontFamily="{StaticResource FontUi}"
-                                                               FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                                               FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                                                Foreground="{ThemeResource MutedBrush}" />
                                                     <TextBlock TextAlignment="Right" FontSize="13" FontFamily="{StaticResource FontUi}"
                                                                Foreground="{ThemeResource MutedBrush}"
@@ -664,17 +667,17 @@
                         </Grid.ColumnDefinitions>
                         <ToggleButton x:Name="SearchUnread" Content="All articles" Height="32"
                                       Checked="SearchUnreadChanged" Unchecked="SearchUnreadChanged"
-                                      FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                      FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                       CornerRadius="{StaticResource RadiusControl}" AutomationProperties.Name="Unread only"
                                       AutomationProperties.AutomationId="SearchUnread" />
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
                             <Button x:Name="SaveSearchViewButton" Content="Save view…" Height="32" IsEnabled="False"
                                     Click="SaveSearchViewClicked" CornerRadius="{StaticResource RadiusControl}"
-                                    FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                    FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                     AutomationProperties.AutomationId="SaveSearchViewButton" AutomationProperties.AcceleratorKey="Ctrl+S"
                                     ToolTipService.ToolTip="Save view (Ctrl+S)" />
                             <Button Content="Close" Height="32" Click="CloseSearchClicked"
-                                    FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                    FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                     CornerRadius="{StaticResource RadiusControl}" AutomationProperties.AcceleratorKey="Esc" />
                         </StackPanel>
                     </Grid>
@@ -697,17 +700,17 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBox x:Name="PaletteQuery" PlaceholderText="Go to, do, or find…" FontSize="18"
-                                 FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                 FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                  TextChanged="PaletteQueryChanged" AutomationProperties.Name="Command palette"
                                  AutomationProperties.AutomationId="PaletteQuery" />
                         <Button Grid.Column="1" Content="Close" Height="32" VerticalAlignment="Center" Click="ClosePaletteClicked"
-                                FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                 CornerRadius="{StaticResource RadiusControl}" AutomationProperties.AcceleratorKey="Esc" />
                     </Grid>
                     <Border Grid.Row="1" BorderThickness="0,1,0,0" BorderBrush="{ThemeResource HairlineBrush}">
                         <Grid>
                             <TextBlock x:Name="PaletteStatus" Margin="20,16" TextWrapping="Wrap" FontSize="14"
-                                       FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                       FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                        Foreground="{ThemeResource InkSoftBrush}" AutomationProperties.LiveSetting="Polite" />
                             <ListView x:Name="PaletteResults" Margin="8" MaxHeight="420"
                                       AutomationProperties.Name="Commands and articles" AutomationProperties.AutomationId="PaletteResults">
@@ -719,25 +722,25 @@
                                     </Style>
                                 </ListView.ItemContainerStyle>
                                 <ListView.ItemTemplate>
-                                    <DataTemplate>
+                                    <DataTemplate x:DataType="local:PaletteResult">
                                         <Button Height="36" Padding="12,4" HorizontalAlignment="Stretch"
                                                 HorizontalContentAlignment="Stretch" Background="Transparent" BorderThickness="0"
                                                 CornerRadius="{StaticResource RadiusControl}" Click="PaletteResultClicked"
-                                                AutomationProperties.Name="{Binding Title}" AutomationProperties.AcceleratorKey="{Binding Shortcut}">
+                                                AutomationProperties.Name="{x:Bind Title}" AutomationProperties.AcceleratorKey="{x:Bind Shortcut}">
                                             <Grid ColumnSpacing="12">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" MaxWidth="140" />
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
-                                                           FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                                <TextBlock Text="{x:Bind Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                                           FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                                            Foreground="{ThemeResource InkBrush}" />
-                                                <TextBlock Grid.Column="1" Text="{Binding Detail}" TextTrimming="CharacterEllipsis"
+                                                <TextBlock Grid.Column="1" Text="{x:Bind Detail}" TextTrimming="CharacterEllipsis"
                                                            FontSize="12" VerticalAlignment="Center" FontFamily="{StaticResource FontUi}"
-                                                           FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}" Foreground="{ThemeResource MutedBrush}" />
-                                                <TextBlock Grid.Column="2" Text="{Binding Shortcut}" FontSize="12" VerticalAlignment="Center"
-                                                           FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                                           FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}" Foreground="{ThemeResource MutedBrush}" />
+                                                <TextBlock Grid.Column="2" Text="{x:Bind Shortcut}" FontSize="12" VerticalAlignment="Center"
+                                                           FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                                            Foreground="{ThemeResource MutedBrush}" />
                                             </Grid>
                                         </Button>
@@ -761,21 +764,21 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <TextBlock Text="Add a feed" FontSize="26" Margin="0,0,0,16"
-                               FontFamily="{StaticResource FontReading}" FontWeight="{Binding Title, Source={StaticResource ReaderFonts}}"
+                               FontFamily="{StaticResource FontReading}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Title, Mode=OneWay}"
                                Foreground="{ThemeResource InkBrush}" />
                     <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                         <StackPanel Spacing="12">
                             <TextBox x:Name="AddFeedAddress" PlaceholderText="Site or feed address" MinHeight="38"
-                                     FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                     FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                      TextChanged="AddFeedAddressChanged" AutomationProperties.Name="Site or feed address"
                                      AutomationProperties.AutomationId="AddFeedAddress" />
                             <TextBlock x:Name="AddFeedStatus" TextWrapping="Wrap" FontSize="13"
-                                       FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                       FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                        Foreground="{ThemeResource InkSoftBrush}" AutomationProperties.LiveSetting="Polite" />
                             <Button x:Name="AddFeedLocalRetry" Content="Find feeds on the local network" Visibility="Collapsed"
                                     Height="32" Click="AddFeedLocalClicked" CornerRadius="{StaticResource RadiusControl}"
                                     AutomationProperties.AutomationId="AddFeedLocalRetry"
-                                    FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}" />
+                                    FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}" />
                             <StackPanel x:Name="AddFeedOptions" Spacing="12" Visibility="Collapsed">
                                 <ListView x:Name="AddFeedCandidates" SelectionMode="Multiple" MaxHeight="240"
                                           SelectionChanged="AddFeedSelectionChanged" AutomationProperties.Name="Discovered feeds"
@@ -786,19 +789,19 @@
                                         </Style>
                                     </ListView.ItemContainerStyle>
                                     <ListView.ItemTemplate>
-                                        <DataTemplate>
-                                            <StackPanel Spacing="4" Padding="4,8" AutomationProperties.Name="{Binding DisplayTitle}">
-                                                <TextBlock Text="{Binding DisplayTitle}" FontSize="15" TextTrimming="CharacterEllipsis"
-                                                           FontFamily="{StaticResource FontUi}" FontWeight="{Binding SectionLabel, Source={StaticResource ReaderFonts}}"
+                                        <DataTemplate x:DataType="vm:FeedCandidate">
+                                            <StackPanel Spacing="4" Padding="4,8" AutomationProperties.Name="{x:Bind DisplayTitle}">
+                                                <TextBlock Text="{x:Bind DisplayTitle}" FontSize="15" TextTrimming="CharacterEllipsis"
+                                                           FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.SectionLabel, Mode=OneWay}"
                                                            Foreground="{ThemeResource InkBrush}" />
-                                                <TextBlock Text="{Binding Url}" FontSize="12" TextTrimming="CharacterEllipsis"
+                                                <TextBlock Text="{x:Bind Url}" FontSize="12" TextTrimming="CharacterEllipsis"
                                                            FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource MutedBrush}" />
-                                                <ItemsControl ItemsSource="{Binding Latest}">
+                                                <ItemsControl ItemsSource="{x:Bind Latest}">
                                                     <ItemsControl.ItemTemplate>
-                                                        <DataTemplate>
-                                                            <TextBlock Text="{Binding}" FontSize="15" TextTrimming="CharacterEllipsis"
+                                                        <DataTemplate x:DataType="x:String">
+                                                            <TextBlock Text="{x:Bind}" FontSize="15" TextTrimming="CharacterEllipsis"
                                                                        FontFamily="{StaticResource FontReading}"
-                                                                       FontWeight="{Binding Reading, Source={StaticResource ReaderFonts}}"
+                                                                       FontWeight="{x:Bind local:ReaderFontWeights.Shared.Reading, Mode=OneWay}"
                                                                        Foreground="{ThemeResource UnreadBrush}" />
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
@@ -815,7 +818,7 @@
                                     <TextBlock Text="Name" VerticalAlignment="Center" FontFamily="{StaticResource FontUi}"
                                                Foreground="{ThemeResource InkSoftBrush}" />
                                     <TextBox Grid.Column="1" x:Name="AddFeedName" MinHeight="32"
-                                             FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                             FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                              AutomationProperties.Name="Feed name" AutomationProperties.AutomationId="AddFeedName" />
                                 </Grid>
                                 <Grid ColumnSpacing="12">
@@ -825,9 +828,9 @@
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Text="Folder" VerticalAlignment="Center" FontFamily="{StaticResource FontUi}"
                                                Foreground="{ThemeResource InkSoftBrush}" />
-                                    <ComboBox Grid.Column="1" x:Name="AddFeedFolder" DisplayMemberPath="Name" MinHeight="32"
+                                    <ComboBox Grid.Column="1" x:Name="AddFeedFolder" ItemTemplate="{StaticResource FolderChoiceTemplate}" MinHeight="32"
                                               HorizontalAlignment="Stretch" FontFamily="{StaticResource FontUi}"
-                                              FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                              FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                               AutomationProperties.Name="Folder" AutomationProperties.AutomationId="AddFeedFolder" />
                                 </Grid>
                             </StackPanel>
@@ -858,24 +861,24 @@
                     BorderBrush="{ThemeResource HairlineBrush}" Background="{ThemeResource SurfaceBrush}">
                 <StackPanel Spacing="12">
                     <TextBlock x:Name="CatalogEditHeading" FontSize="24" TextWrapping="Wrap"
-                               FontFamily="{StaticResource FontReading}" FontWeight="{Binding Title, Source={StaticResource ReaderFonts}}"
+                               FontFamily="{StaticResource FontReading}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Title, Mode=OneWay}"
                                Foreground="{ThemeResource InkBrush}" />
                     <TextBox x:Name="CatalogEditName" PlaceholderText="Name" MinHeight="32" TextChanged="CatalogEditNameChanged"
-                             FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                             FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                              AutomationProperties.Name="Name" AutomationProperties.AutomationId="CatalogEditName" />
-                    <ComboBox x:Name="CatalogMoveTarget" DisplayMemberPath="Name" HorizontalAlignment="Stretch" MinHeight="32"
-                              FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                    <ComboBox x:Name="CatalogMoveTarget" ItemTemplate="{StaticResource FolderChoiceTemplate}" HorizontalAlignment="Stretch" MinHeight="32"
+                              FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                               SelectionChanged="CatalogEditTargetChanged" AutomationProperties.Name="Destination folder"
                               AutomationProperties.AutomationId="CatalogMoveTarget" />
                     <TextBlock x:Name="CatalogEditHint" FontSize="13" TextWrapping="Wrap"
-                               FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                               FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                Foreground="{ThemeResource MutedBrush}" />
                     <CheckBox x:Name="CatalogDeleteContents" Content="Also delete everything inside" Visibility="Collapsed"
                               Checked="CatalogDeleteContentsChanged" Unchecked="CatalogDeleteContentsChanged"
-                              FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                              FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                               AutomationProperties.AutomationId="CatalogDeleteContents" />
                     <TextBlock x:Name="CatalogEditStatus" FontSize="13" TextWrapping="Wrap" Visibility="Collapsed"
-                               FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                               FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                Foreground="{ThemeResource InkSoftBrush}" AutomationProperties.LiveSetting="Polite" />
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,8,0,0">
                         <Button x:Name="CatalogEditCancel" Content="Cancel" Height="32" Click="CatalogEditCancelClicked"
