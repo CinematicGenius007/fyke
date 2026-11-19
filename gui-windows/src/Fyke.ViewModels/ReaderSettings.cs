@@ -6,7 +6,7 @@ namespace Fyke.ViewModels;
 public enum ReaderScrollbarMode { WhileScrolling, Always, Never }
 
 public sealed record ReaderPreferences(bool FullText, bool LoadImages, ReaderTypography Typography,
-    ReaderTextLayout TextLayout, ReaderScrollbarMode Scrollbars, bool InvalidConfig);
+    ReaderTextLayout TextLayout, ReaderScrollbarMode Scrollbars, IReadOnlyList<long> CollapsedFolderIds, bool InvalidConfig);
 
 public sealed class ReaderSettings(IDaemonClient client)
 {
@@ -24,7 +24,27 @@ public sealed class ReaderSettings(IDaemonClient client)
         var autoImages = ui.ValueKind == JsonValueKind.Object
             && ui.TryGetProperty("loadImages", out var images) && images.ValueKind == JsonValueKind.True;
         return new ReaderPreferences(fullText.GetBoolean(), autoImages, ReaderTypography.FromConfig(config),
-            ReaderTextLayout.FromUi(ui), ReadScrollbars(ui), hasError);
+            ReaderTextLayout.FromUi(ui), ReadScrollbars(ui), ReadCollapsedFolders(ui), hasError);
+    }
+
+    private static long[] ReadCollapsedFolders(JsonElement ui)
+    {
+        if (ui.ValueKind != JsonValueKind.Object || !ui.TryGetProperty("collapsedFolders", out var folders)
+            || folders.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var ids = new HashSet<long>();
+        foreach (var folder in folders.EnumerateArray())
+        {
+            if (folder.ValueKind == JsonValueKind.Number && folder.TryGetInt64(out var id) && id > 0)
+            {
+                ids.Add(id);
+            }
+        }
+
+        return ids.Order().ToArray();
     }
 
     private static ReaderScrollbarMode ReadScrollbars(JsonElement ui)
@@ -48,6 +68,9 @@ public sealed class ReaderSettings(IDaemonClient client)
 
     public Task SetLoadImagesAsync(bool enabled, CancellationToken ct) =>
         client.CallAsync("config.set", new { UiPatch = new Dictionary<string, bool> { ["loadImages"] = enabled } }, ct);
+
+    public Task SetCollapsedFoldersAsync(IReadOnlyList<long> ids, CancellationToken ct) =>
+        client.CallAsync("config.set", new { UiPatch = new Dictionary<string, IReadOnlyList<long>> { ["collapsedFolders"] = ids } }, ct);
 
     public Task SetScrollbarsAsync(ReaderScrollbarMode mode, CancellationToken ct)
     {

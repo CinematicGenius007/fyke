@@ -42,6 +42,7 @@ public sealed partial class MainWindow : Window
         InitializeReader(ui);
         ViewModel.PropertyChanged += (_, _) => ShowState();
         ShowState();
+        AppWindow.Closing += FinishFolderDisclosureBeforeClose;
         Closed += OnClosed;
         connection = KeepConnectionAsync(lifetime.Token);
     }

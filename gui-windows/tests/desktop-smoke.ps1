@@ -585,6 +585,23 @@ try {
     } | Out-Null
     if (Find-ByName $items 'Reviewed discovery feed') { throw 'The removed feed is still in the sidebar.' }
 
+    Wait-For 'the collapsed folder to be saved with other reading settings' {
+        $ui = (Read-ReaderConfig $configPath).ui
+        if ($ui.collapsedFolders.Count -eq 1 -and $ui.collapsedFolders[0] -gt 0 -and $ui.scrollbars -eq 'never') { $true }
+    } | Out-Null
+    if (!$window.CloseMainWindow() -or !$window.WaitForExit(5000)) { throw 'The reader did not close before relaunch.' }
+    $window.Dispose()
+    $window = $null
+    $launchTime = Get-Date
+    $window = [Diagnostics.Process]::Start($start)
+    $appErrors = $window.StandardError.ReadToEndAsync()
+    $handle = Wait-For 'the relaunched main window' { if ($window.MainWindowHandle -ne [IntPtr]::Zero) { $window.MainWindowHandle } }
+    $root = [Windows.Automation.AutomationElement]::FromHandle($handle)
+    $items = Wait-For 'the relaunched sidebar' { Find-ById 'ReaderDestinations' }
+    Wait-For 'the saved collapsed folder to return without its feed' {
+        if ((Find-ByName $items 'Expand Fixture folder') -and !(Find-ByName $items 'Desktop fixture')) { $true }
+    } | Out-Null
+
     Select-ReaderItem $items 'Fixture folder'
     Wait-For 'the folder destination before removal' {
         $heading = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $headingId)
@@ -604,6 +621,10 @@ try {
     $deleteFolder.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
     Wait-For 'the folder feed to move to the top level' { Find-ByName $items 'Desktop fixture' } | Out-Null
     if (Find-ByName $items 'Fixture folder') { throw 'The removed folder is still in the sidebar.' }
+    Wait-For 'the deleted folder to be removed from the saved disclosure state' {
+        $ids = (Read-ReaderConfig $configPath).ui.collapsedFolders
+        if ($null -ne $ids -and $ids.Count -eq 0) { $true }
+    } | Out-Null
     $remaining = (& $daemonPath list --json | Out-String | ConvertFrom-Json).items
     if (!($remaining | Where-Object { $_.title -eq 'Native reader fixture' })) {
         throw 'Deleting the folder also deleted its articles.'
@@ -611,7 +632,7 @@ try {
 
     & $daemonPath status
     if ($LASTEXITCODE -ne 0) { throw 'The companion daemon did not answer status' }
-    Write-Host 'WinUI verified daemon recovery, the reader, search and palette, bulk undo, and subscription management.'
+    Write-Host 'WinUI verified daemon recovery, the reader, search and palette, bulk undo, subscription management, and folder disclosure across relaunch.'
 } catch {
     Write-Host $_.ScriptStackTrace
     if ($window -and $window.HasExited) {

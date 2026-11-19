@@ -69,7 +69,7 @@ The structure and measurements follow the design rules; the chrome is Windows:
 
 The sidebar and timeline use native lists. The catalog groups feeds by folder and aggregates unread counts. Selecting a destination requests a 100-article page using the daemon’s feed, folder, or starred filter. Load more passes the returned keyset cursor back to the daemon. Navigation cancels stale requests. Entry events, catalog events, and replay gaps trigger a batched reload. Reconnect refreshes the catalog and timeline. The lists apply changes by row identity so unchanged rows and the open article stay in place while they are still in the result. The reader pane displays the selected article’s title, source, and stored body. Changing selection cancels the previous body request.
 
-The folder row opens its timeline. Its disclosure button expands or collapses descendants without changing the active feed or article. Folder unread counts include collapsed descendants. Collapse state lasts for the window session. Saving it across launches is part of the planned settings work.
+The folder row opens its timeline. Its disclosure button expands or collapses descendants while preserving the active feed and article. Folder unread counts include collapsed descendants. The window restores `ui.collapsedFolders` before showing the catalog and saves changes through the daemon. Writes run in order so a rapid toggle saves the latest state. Reloading a catalog prunes IDs for folders that have been removed. The window gives an in-flight disclosure save up to one second to finish on close.
 
 ## Article reader
 
@@ -191,7 +191,8 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W2e.2a | Reading tab and saved font weights | Wire and write tests preserve other roles. The Windows smoke test changes the weight on an open article |
 | W2e.2b | Article text size, line spacing, and column width | Profile and patch tests. Windows smoke changes the sliders and verifies the saved values and the open article's text size |
 | W2e.2c | Scrollbar visibility | Profile and patch tests. Windows smoke changes the saved mode and checks that overflowing Settings content still scrolls |
-| W2e.2d | Planned appearance and persistent folder disclosure | Reopen a profile with saved themes and collapsed folders. Compare narrow and wide layouts with macOS |
+| W2e.2d | Persistent folder disclosure | Profile tests and Windows smoke coverage for relaunch, keeping the open article, and pruning the saved folder after deletion |
+| W2e.2e | Planned appearance | Reopen a profile with saved themes. Compare narrow and wide layouts with macOS |
 | W2e.3 | Planned Agents settings and MCP configuration | Detect installed Codex, exercise missing and signed-out states, and paste a working MCP configuration |
 | W2e.4 | Planned storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
 | W2e.5 | Planned General background updating and link destination controls | Runtime and login behavior with W4, plus safe native link routing and browser fallback |

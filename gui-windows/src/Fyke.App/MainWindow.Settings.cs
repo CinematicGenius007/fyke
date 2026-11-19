@@ -157,6 +157,7 @@ public sealed partial class MainWindow
         {
             var loaded = await readerSettings.ReadAsync(ct);
             ct.ThrowIfCancellationRequested();
+            RestoreFolderDisclosure(loaded);
             if (!preferencesRead && !readingSettings)
             {
                 ApplyPreferences(loaded);

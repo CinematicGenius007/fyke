@@ -142,4 +142,35 @@ public sealed class ReaderSettingsTests
 
         await settings.SetScrollbarsAsync(mode, CancellationToken.None);
     }
+
+    [Fact]
+    public async Task ReadsDistinctPositiveFolderIdsFromTheSharedProfile()
+    {
+        using var reply = JsonDocument.Parse("""
+            {"full_text":true,"ui":{"collapsedFolders":[4294967296,2,2,-1,0,"3",1.2]}}
+            """);
+        var settings = new ReaderSettings(new FakeClient { OnCall = (_, _) => reply.RootElement });
+
+        Assert.Equal([2L, 4294967296L], (await settings.ReadAsync(CancellationToken.None)).CollapsedFolderIds);
+    }
+
+    [Fact]
+    public async Task CollapsedFolderWritesPatchTheSharedArray()
+    {
+        var wire = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+        var settings = new ReaderSettings(new FakeClient
+        {
+            OnCall = (method, parameters) =>
+            {
+                Assert.Equal("config.set", method);
+                var patch = JsonSerializer.SerializeToElement(parameters, wire).GetProperty("ui_patch");
+                var field = Assert.Single(patch.EnumerateObject());
+                Assert.Equal("collapsedFolders", field.Name);
+                Assert.Equal([2L, 4294967296L], field.Value.EnumerateArray().Select(item => item.GetInt64()));
+                return JsonSerializer.SerializeToElement(new { ok = true });
+            },
+        });
+
+        await settings.SetCollapsedFoldersAsync([2, 4294967296], CancellationToken.None);
+    }
 }

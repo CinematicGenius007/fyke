@@ -22,7 +22,6 @@ public sealed partial class MainWindow
 {
     private readonly ObservableCollection<TimelineArticle> articles = [];
     private readonly ObservableCollection<ReaderDestination> destinations = [];
-    private readonly HashSet<long> collapsedFolders = [];
     private IReadOnlyList<ReaderDestination> catalog = [];
     private DispatcherQueueTimer readerReloadTimer = null!;
     private int readerChangesPending;
@@ -85,6 +84,7 @@ public sealed partial class MainWindow
         UpdateBulkButton();
         if (connected)
         {
+            TrySaveFolderDisclosure();
             _ = LoadReaderAsync(refreshCatalog: true);
         }
         else
@@ -185,6 +185,7 @@ public sealed partial class MainWindow
 
             ApplyVisibleDestinations();
             UpdateFolderDisclosure(button);
+            QueueFolderDisclosureSave();
         }
     }
 
@@ -276,6 +277,7 @@ public sealed partial class MainWindow
                     && row.Scope == previous.Scope && row.Id == previous.Id) ?? rows[0];
 
                 catalog = rows;
+                UpdateFolderCatalog(rows);
                 if (IsAddFeedOpen && !addingFeeds)
                 {
                     PopulateAddFeedFolders((AddFeedFolder.SelectedItem as FolderChoice)?.Id);

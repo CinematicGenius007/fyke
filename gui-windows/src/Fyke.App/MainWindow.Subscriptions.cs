@@ -119,7 +119,12 @@ public sealed partial class MainWindow
     private void ApplyCatalogRemoval(CatalogRemoval removal, bool deleteContents)
     {
         var removed = removal.Removed(deleteContents);
+        var collapsedCount = collapsedFolders.Count;
         collapsedFolders.ExceptWith(removed.Where(row => row.Scope == ReaderScope.Folder).Select(row => row.Id));
+        if (collapsedFolders.Count != collapsedCount)
+        {
+            QueueFolderDisclosureSave();
+        }
         if (openArticle?.FeedId is long feed && removed.Any(row => row.Scope == ReaderScope.Feed && row.Id == feed))
         {
             SetTimelineSelection(null);
