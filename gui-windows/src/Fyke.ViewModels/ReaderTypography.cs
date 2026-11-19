@@ -2,12 +2,23 @@ using System.Text.Json;
 
 namespace Fyke.ViewModels;
 
+public enum ReaderFontRole { Reading, Title, Ui, Code }
+
 /// <summary>The shared macOS and Windows font-weight steps stored under ui.weights.</summary>
 public readonly record struct ReaderTypography(int Reading, int Title, int Ui, int Code)
 {
     public const ushort Regular = 400;
     public const ushort Medium = 500;
     public const ushort Semibold = 600;
+
+    public int StepFor(ReaderFontRole role) => role switch
+    {
+        ReaderFontRole.Reading => Reading,
+        ReaderFontRole.Title => Title,
+        ReaderFontRole.Ui => Ui,
+        ReaderFontRole.Code => Code,
+        _ => throw new ArgumentOutOfRangeException(nameof(role)),
+    };
 
     public static ReaderTypography FromConfig(JsonElement config)
     {

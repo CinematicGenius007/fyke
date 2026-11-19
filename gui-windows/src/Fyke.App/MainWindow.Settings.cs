@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,6 +20,7 @@ public sealed partial class MainWindow
     private ReaderPreferences? preferences;
     private Control? focusBeforeSettings;
     private bool readingSettings;
+    private readonly Dictionary<ComboBox, ReaderFontRole> weightPickers = [];
 
     private bool IsSettingsOpen => SettingsPane?.Visibility == Visibility.Visible;
 
@@ -27,6 +29,26 @@ public sealed partial class MainWindow
         readerSettings = new ReaderSettings(client);
         ReaderShell.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(SettingsKeyDown), true);
         Root.PreviewKeyDown += SettingsShortcutKeyDown;
+        SettingsTabs.SelectionChanged += SettingsTabChanged;
+        SettingsTabs.SelectedItem = GeneralSettingsTab;
+
+        weightPickers.Add(ReadingWeightPicker, ReaderFontRole.Reading);
+        weightPickers.Add(TitleWeightPicker, ReaderFontRole.Title);
+        weightPickers.Add(UiWeightPicker, ReaderFontRole.Ui);
+        weightPickers.Add(CodeWeightPicker, ReaderFontRole.Code);
+        string[] choices = ["Much lighter", "Lighter", "Normal", "Bolder", "Much bolder"];
+        foreach (var picker in weightPickers.Keys)
+        {
+            picker.ItemsSource = choices;
+        }
+    }
+
+    private void SettingsTabChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+    {
+        var reading = sender.SelectedItem == ReadingSettingsTab;
+        GeneralSettingsBody.Visibility = reading ? Visibility.Collapsed : Visibility.Visible;
+        ReadingSettingsBody.Visibility = reading ? Visibility.Visible : Visibility.Collapsed;
+        _ = SettingsScroll.ChangeView(null, 0, null, disableAnimation: true);
     }
 
     private void SettingsClicked(object sender, RoutedEventArgs args) => ToggleSettings();
@@ -58,7 +80,7 @@ public sealed partial class MainWindow
             Destinations.IsItemClickEnabled = true;
             TimelinePane.Visibility = TimelineDivider.Visibility = ArticlePane.Visibility = Visibility.Collapsed;
             SettingsPane.Visibility = Visibility.Visible;
-            _ = ReadGeneralSettingsAsync();
+            _ = ReadSettingsAsync();
         }
 
         CloseSettingsButton.Focus(FocusState.Programmatic);
@@ -150,11 +172,29 @@ public sealed partial class MainWindow
         preferences = loaded;
         readerFonts.Apply(loaded.Typography);
         articleRenderer.SetAutomaticImages(loaded.LoadImages);
-        FullTextToggle.IsOn = loaded.FullText;
-        LoadImagesToggle.IsOn = loaded.LoadImages;
+        ApplySettingsControls(loaded);
     }
 
-    private void ReloadSettingsClicked(object sender, RoutedEventArgs args) => _ = ReadGeneralSettingsAsync();
+    private void ApplySettingsControls(ReaderPreferences loaded)
+    {
+        FullTextToggle.IsOn = loaded.FullText;
+        LoadImagesToggle.IsOn = loaded.LoadImages;
+        foreach (var (picker, role) in weightPickers)
+        {
+            picker.SelectedIndex = loaded.Typography.StepFor(role) + 2;
+        }
+    }
+
+    private void EnableSettingsControls(bool enabled)
+    {
+        FullTextToggle.IsEnabled = LoadImagesToggle.IsEnabled = enabled;
+        foreach (var picker in weightPickers.Keys)
+        {
+            picker.IsEnabled = enabled;
+        }
+    }
+
+    private void ReloadSettingsClicked(object sender, RoutedEventArgs args) => _ = ReadSettingsAsync();
 
     private void GeneralSettingToggled(object sender, RoutedEventArgs args)
     {
@@ -164,17 +204,34 @@ public sealed partial class MainWindow
             return;
         }
 
-        if (toggle == FullTextToggle && saved.FullText != toggle.IsOn)
+        var enabled = toggle.IsOn;
+        if (toggle == FullTextToggle && saved.FullText != enabled)
         {
-            _ = ReadGeneralSettingsAsync(fullText: toggle.IsOn);
+            _ = ReadSettingsAsync(ct => readerSettings.SetFullTextAsync(enabled, ct), current => current.FullText == enabled);
         }
-        else if (toggle == LoadImagesToggle && saved.LoadImages != toggle.IsOn)
+        else if (toggle == LoadImagesToggle && saved.LoadImages != enabled)
         {
-            _ = ReadGeneralSettingsAsync(loadImages: toggle.IsOn);
+            _ = ReadSettingsAsync(ct => readerSettings.SetLoadImagesAsync(enabled, ct), current => current.LoadImages == enabled);
         }
     }
 
-    private async Task ReadGeneralSettingsAsync(bool? fullText = null, bool? loadImages = null)
+    private void FontWeightChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (!IsSettingsOpen || readingSettings || preferences is not { InvalidConfig: false } saved
+            || sender is not ComboBox { SelectedIndex: >= 0 } picker || !weightPickers.TryGetValue(picker, out var role))
+        {
+            return;
+        }
+
+        var step = picker.SelectedIndex - 2;
+        if (step != saved.Typography.StepFor(role))
+        {
+            _ = ReadSettingsAsync(ct => readerSettings.SetFontWeightAsync(role, step, ct),
+                current => current.Typography.StepFor(role) == step);
+        }
+    }
+
+    private async Task ReadSettingsAsync(Func<CancellationToken, Task>? save = null, Func<ReaderPreferences, bool>? confirmed = null)
     {
         if (readingSettings || !readerConnected || lifetime.IsCancellationRequested)
         {
@@ -183,22 +240,24 @@ public sealed partial class MainWindow
 
         readingSettings = true;
         var ct = lifetime.Token;
-        var saving = fullText.HasValue || loadImages.HasValue;
-        FullTextToggle.IsEnabled = LoadImagesToggle.IsEnabled = false;
-        ShowSettingsStatus(saving ? "Saving setting…" : "Loading settings…");
+        EnableSettingsControls(false);
+        ShowSettingsStatus(save is null ? "Loading settings…" : "Saving setting…");
         try
         {
-            await SaveGeneralPreferenceAsync(fullText, loadImages, ct);
+            if (save is not null)
+            {
+                await SaveSettingAsync(save, ct);
+            }
+
             var loaded = await readerSettings.ReadAsync(ct);
             ct.ThrowIfCancellationRequested();
             ApplyPreferences(loaded);
             preferencesRead = true;
-            var changeConfirmed = (!fullText.HasValue || loaded.FullText == fullText)
-                && (!loadImages.HasValue || loaded.LoadImages == loadImages);
+            var changeConfirmed = confirmed?.Invoke(loaded) ?? true;
             ShowSettingsStatus(loaded.InvalidConfig ? "config.json has a mistake. Fyke is using the last available settings."
                 : changeConfirmed ? null : "Fyke couldn’t save this setting. Check the current value and try again.",
                 retry: loaded.InvalidConfig);
-            FullTextToggle.IsEnabled = LoadImagesToggle.IsEnabled = !loaded.InvalidConfig;
+            EnableSettingsControls(!loaded.InvalidConfig);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -209,8 +268,7 @@ public sealed partial class MainWindow
             {
                 if (preferences is { } saved)
                 {
-                    FullTextToggle.IsOn = saved.FullText;
-                    LoadImagesToggle.IsOn = saved.LoadImages;
+                    ApplySettingsControls(saved);
                 }
 
                 ShowSettingsStatus("Fyke couldn’t confirm your settings. Try again.", retry: true);
@@ -222,18 +280,11 @@ public sealed partial class MainWindow
         }
     }
 
-    private async Task SaveGeneralPreferenceAsync(bool? fullText, bool? loadImages, CancellationToken ct)
+    private static async Task SaveSettingAsync(Func<CancellationToken, Task> save, CancellationToken ct)
     {
         try
         {
-            if (fullText is bool full)
-            {
-                await readerSettings.SetFullTextAsync(full, ct);
-            }
-            else if (loadImages is bool images)
-            {
-                await readerSettings.SetLoadImagesAsync(images, ct);
-            }
+            await save(ct);
         }
         catch (Exception error) when (!ct.IsCancellationRequested && error is DaemonException or TimeoutException or JsonException)
         {

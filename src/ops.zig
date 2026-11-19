@@ -198,6 +198,14 @@ pub const ConfigSet = struct {
         try root.object.put(arena, "ai", ai);
     }
 
+    fn mergeUiField(arena: std.mem.Allocator, current: ?std.json.Value, patch: std.json.Value) !std.json.Value {
+        var field = current orelse return patch;
+        if (field != .object or patch != .object) return patch;
+        var keys = patch.object.iterator();
+        while (keys.next()) |entry| try field.object.put(arena, entry.key_ptr.*, entry.value_ptr.*);
+        return field;
+    }
+
     /// Other keys in the file are the owner's, so they survive untouched. A file that
     /// does not parse is refused rather than replaced, because it holds an edit.
     fn save(s: *Service, arena: std.mem.Allocator, p: Params) !void {
@@ -218,7 +226,11 @@ pub const ConfigSet = struct {
             var ui = root.object.get("ui") orelse std.json.Value{ .object = .empty };
             if (ui != .object) return error.InvalidConfig;
             var keys = changes.object.iterator();
-            while (keys.next()) |entry| try ui.object.put(arena, entry.key_ptr.*, entry.value_ptr.*);
+            while (keys.next()) |entry| {
+                const key = entry.key_ptr.*;
+                const value = try mergeUiField(arena, ui.object.get(key), entry.value_ptr.*);
+                try ui.object.put(arena, key, value);
+            }
             try root.object.put(arena, "ui", ui);
         }
         if (p.ai) |changes| try mergeAi(s, arena, &root, changes);

@@ -42,4 +42,29 @@ public sealed class ReaderSettingsTests
 
         Assert.Equal(["{\"full_text\":false}", "{\"ui_patch\":{\"loadImages\":true}}"], calls);
     }
+
+    [Theory]
+    [InlineData(ReaderFontRole.Reading, "reading", 1)]
+    [InlineData(ReaderFontRole.Title, "title", 2)]
+    [InlineData(ReaderFontRole.Ui, "ui", -1)]
+    [InlineData(ReaderFontRole.Code, "code", -2)]
+    public async Task UpdatesOnlyTheChosenFontRole(ReaderFontRole role, string key, int step)
+    {
+        var wire = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+        var settings = new ReaderSettings(new FakeClient
+        {
+            OnCall = (method, parameters) =>
+            {
+                Assert.Equal("config.set", method);
+                var weights = JsonSerializer.SerializeToElement(parameters, wire).GetProperty("ui_patch").GetProperty("weights");
+                var field = Assert.Single(weights.EnumerateObject());
+                Assert.Equal(key, field.Name);
+                Assert.Equal(step, field.Value.GetInt32());
+                return JsonSerializer.SerializeToElement(new { ok = true });
+            },
+        });
+
+        Assert.Equal(step, new ReaderTypography(1, 2, -1, -2).StepFor(role));
+        await settings.SetFontWeightAsync(role, step, CancellationToken.None);
+    }
 }

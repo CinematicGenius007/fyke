@@ -8,7 +8,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
-using Windows.UI.Text;
 
 namespace Fyke.App;
 
@@ -93,16 +92,16 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
         {
             FontFamily = reading,
             FontSize = size ?? textSize,
-            FontWeight = heading ? weights.Title : weights.Reading,
             IsTextSelectionEnabled = true,
             TextWrapping = TextWrapping.Wrap,
         };
-        AppendInlines(text.Inlines, nodes, heading ? weights.Title : weights.ReadingStrong);
+        weights.Bind(text, TextBlock.FontWeightProperty, heading ? nameof(ReaderFontWeights.Title) : nameof(ReaderFontWeights.Reading));
+        AppendInlines(text.Inlines, nodes, heading ? nameof(ReaderFontWeights.Title) : nameof(ReaderFontWeights.ReadingStrong));
         return text;
     }
 
     private void AppendInlines(InlineCollection target, IEnumerable<ArticleBlock> nodes,
-        FontWeight emphasis, bool insideLink = false)
+        string emphasis, bool insideLink = false)
     {
         foreach (var node in nodes)
         {
@@ -112,14 +111,20 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
                     target.Add(new Run { Text = node.Text ?? string.Empty });
                     break;
                 case "code":
-                    target.Add(new Run { Text = node.Text ?? string.Empty, FontFamily = code, FontWeight = weights.Code });
+                    var run = new Run { Text = node.Text ?? string.Empty, FontFamily = code };
+                    weights.Bind(run, TextElement.FontWeightProperty, nameof(ReaderFontWeights.Code));
+                    target.Add(run);
                     break;
                 case "br":
                     target.Add(new LineBreak());
                     break;
                 case "em":
                 case "strong":
-                    Span style = node.Kind == "em" ? new Italic() : new Span { FontWeight = emphasis };
+                    Span style = node.Kind == "em" ? new Italic() : new Span();
+                    if (node.Kind == "strong")
+                    {
+                        weights.Bind(style, TextElement.FontWeightProperty, emphasis);
+                    }
                     AppendInlines(style.Inlines, node.Children ?? [], emphasis, insideLink);
                     target.Add(style);
                     break;
@@ -157,15 +162,17 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
 
     private ScrollViewer Code(string? value)
     {
+        var text = new TextBlock
+        {
+            Text = value ?? string.Empty, FontFamily = code, FontSize = 14,
+            IsTextSelectionEnabled = true, Margin = new Thickness(16, 12, 16, 12),
+        };
+        weights.Bind(text, TextBlock.FontWeightProperty, nameof(ReaderFontWeights.Code));
         return new ScrollViewer
         {
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Content = new TextBlock
-            {
-                Text = value ?? string.Empty, FontFamily = code, FontSize = 14, FontWeight = weights.Code,
-                IsTextSelectionEnabled = true, Margin = new Thickness(16, 12, 16, 12),
-            },
+            Content = text,
         };
     }
 
@@ -181,8 +188,9 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
             var marker = new TextBlock
             {
                 Text = node.Ordered == true ? (++index).ToString(CultureInfo.CurrentCulture) + "." : "•",
-                FontFamily = reading, FontSize = textSize, FontWeight = weights.Reading,
+                FontFamily = reading, FontSize = textSize,
             };
+            weights.Bind(marker, TextBlock.FontWeightProperty, nameof(ReaderFontWeights.Reading));
             var content = Flow(item);
             Grid.SetColumn(content, 1);
             row.Children.Add(marker);
@@ -218,9 +226,17 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
         return table;
     }
 
-    private HyperlinkButton? LinkBlock(string? value) => ArticleBlock.WebAddress(value) is Uri address
-        ? new HyperlinkButton { NavigateUri = address, Content = address.Host, FontFamily = ui, FontWeight = weights.Ui }
-        : null;
+    private HyperlinkButton? LinkBlock(string? value)
+    {
+        if (ArticleBlock.WebAddress(value) is not Uri address)
+        {
+            return null;
+        }
+
+        var link = new HyperlinkButton { NavigateUri = address, Content = address.Host, FontFamily = ui };
+        weights.Bind(link, Control.FontWeightProperty, nameof(ReaderFontWeights.Ui));
+        return link;
+    }
 
     private StackPanel? ImagePlaceholder(ArticleBlock node)
     {
@@ -232,7 +248,8 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
         var panel = new StackPanel { Spacing = 8 };
         var label = string.IsNullOrWhiteSpace(node.Alt) ? "Image" : node.Alt;
         var loadLabel = $"Load image · {label}";
-        var button = new Button { Content = loadLabel, FontFamily = ui, FontWeight = weights.Ui, Height = 32 };
+        var button = new Button { Content = loadLabel, FontFamily = ui, Height = 32 };
+        weights.Bind(button, Control.FontWeightProperty, nameof(ReaderFontWeights.Ui));
         var image = new Image { Visibility = Visibility.Collapsed, Stretch = Stretch.Uniform, MaxHeight = 720 };
         var requested = false;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(image, label);

@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using Fyke.ViewModels;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Data;
 using Windows.UI.Text;
 
 namespace Fyke.App;
@@ -18,6 +20,9 @@ public sealed class ReaderFontWeights : INotifyPropertyChanged
     public FontWeight Ui => Weight(ReaderTypography.Regular, typography.Ui);
     public FontWeight SectionLabel => Weight(ReaderTypography.Semibold, typography.Ui);
     public FontWeight Code => Weight(ReaderTypography.Regular, typography.Code);
+
+    internal void Bind(DependencyObject element, DependencyProperty property, string role) =>
+        BindingOperations.SetBinding(element, property, new Binding { Source = this, Path = new PropertyPath(role) });
 
     internal void Apply(ReaderTypography preferences)
     {

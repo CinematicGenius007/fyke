@@ -568,6 +568,10 @@ got = op("config.get")["result"]["ui"]
 check("a UI patch preserves other settings", got == dict(saved["ui"], loadImages=True), got)
 check("a patch and replacement cannot be combined", "error" in op("config.set", ui={}, ui_patch={"loadImages": False}))
 check("an invalid patch changes no settings", "error" in op("config.set", ui_patch=[]) and op("config.get")["result"]["ui"] == got)
+check("a UI patch accepts a font weight object", "result" in op("config.set", ui_patch={"weights": {"reading": 1, "title": -1}}))
+check("a UI patch accepts a single font weight", "result" in op("config.set", ui_patch={"weights": {"reading": 2}}))
+weights = op("config.get")["result"]["ui"]
+check("a weight update preserves other roles and settings", weights == dict(got, weights={"reading": 2, "title": -1}), weights)
 text = open(ops_home + "/config.json").read().replace('"dark"', '"terminal"').replace('"full_text"', '"x"')
 open(ops_home + "/config.json", "w").write(text.rstrip()[:-1] + ',"full_text": false,"remove_read_after_days": 60}')
 got = op("config.get")["result"]

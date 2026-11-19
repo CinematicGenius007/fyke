@@ -212,6 +212,19 @@ try {
         $config = Read-ReaderConfig $configPath
         if ($config.ui.loadImages -eq $true -and $config.ui.weights.title -eq 2) { $true }
     } | Out-Null
+
+    $readingTab = Wait-For 'the Reading settings tab' { Find-ById 'ReadingSettingsTab' }
+    $readingTab.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    $weightPicker = Wait-For 'the enabled Reading weight picker' {
+        $picker = Find-ById 'ReadingWeightPicker'
+        if ($picker -and $picker.Current.IsEnabled -and !$picker.Current.IsOffscreen) { $picker }
+    }
+    $weightPicker.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
+    Select-ReaderItem $root 'Much lighter'
+    Wait-For 'the changed Reading weight to preserve the other font roles' {
+        $weights = (Read-ReaderConfig $configPath).ui.weights
+        if ($weights.reading -eq -2 -and $weights.title -eq 2 -and $weights.ui -eq -1 -and $weights.code -eq -2) { $true }
+    } | Out-Null
     Invoke-Button 'CloseSettingsButton'
     Wait-For 'Settings to return to the open article and its feed' {
         $heading = Find-ById 'ArticleHeading'
@@ -220,6 +233,14 @@ try {
             $scope.Current.Name -eq 'Desktop fixture') { $true }
     } | Out-Null
     $timeline = Find-ById 'ReaderTimeline'
+    Wait-For 'the open article to use the changed Reading weight' {
+        $body = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $paragraph)
+        if ($body -and !$body.Current.IsOffscreen) {
+            $text = $body.GetCurrentPattern([Windows.Automation.TextPattern]::Pattern)
+            if ($text.DocumentRange.GetAttributeValue([Windows.Automation.TextPattern]::FontWeightAttribute) -eq 200) { $true }
+        }
+    } | Out-Null
+    Assert-TextWeight (Find-ById 'ArticleHeading') 800 'the unchanged article title weight'
     Wait-For 'an automatic image request from the open article' {
         $probe = Invoke-WebRequest -Uri ([Uri]::new([Uri]$FeedUrl, '/image-status')) -UseBasicParsing
         if ($probe.Content -eq 'requested') { $true }

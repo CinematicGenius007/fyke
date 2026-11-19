@@ -75,7 +75,7 @@ The folder row opens its timeline. Its disclosure button expands or collapses de
 
 The reader requests `entries.get` in blocks format and renders the stored nodes with native controls. Paragraphs use selectable text and inline links. Lists, quotes, headings, code, tables, and separators keep their structure. Images have an explicit load control by default. Feed HTML never reaches a web view, as [decision 0002](decisions/0002-web-viewer.md) requires. Links open in the default browser.
 
-The reader loads saved reading, title, interface, and code weights from `ui.weights` through `config.get` when the window first connects. Each preference shifts its baseline weight by up to two steps, using the same profile fields and steps as macOS. Missing or invalid fields use the role's default. Emphasized body text starts at semibold before applying the reading preference. The Windows weight controls are planned with Settings.
+The reader loads saved reading, title, interface, and code weights from `ui.weights` through `config.get` when the window first connects. Each preference shifts its baseline weight by up to two steps, using the same profile fields and steps as macOS. Missing or invalid fields use the role's default. Emphasized body text starts at semibold before applying the reading preference.
 
 An article with a Hacker News discussion offers **Show comments** below its body. Press **C** or follow an inline link to the article's own thread to jump there. The client calls `entries.discussion` on demand, then shows returned blocks in a virtualized list inside the reader's scroll area. Readers can collapse a comment and its replies, retry a failed load, and open the full thread in their browser. Other discussion addresses open in the browser. Changing articles clears discussion state and cancels an in-flight request.
 
@@ -113,9 +113,11 @@ Export requests the document through `opml.export`. The save picker suggests `fe
 
 ## Settings
 
-The gear at the foot of the sidebar, Ctrl+, and the command palette open General settings over the timeline and reader. The sidebar stays visible. Escape or the close button returns to the same article and timeline. Selecting a destination closes Settings and opens that destination. F6 moves between Settings and the sidebar.
+The gear at the foot of the sidebar, Ctrl+, and the command palette open Settings over the timeline and reader. The sidebar stays visible. Escape or the close button returns to the same article and timeline. Selecting a destination closes Settings and opens that destination. F6 moves between Settings and the sidebar. General and Reading share the same selector, and reopening Settings returns to its last tab.
 
 General settings offer full-article fetching, automatic article image loading, OPML, and the shortcut list. Automatic image loading is off by default. The saved preference also applies to the current article, and images explicitly opened by the reader stay visible when automatic loading is disabled. The full-text setting uses `config.set`. Image loading updates `ui.loadImages` through a field-level `ui_patch`. Fyke reads back the stored value after a write and reports unreadable settings inline.
+
+Reading offers Much lighter, Lighter, Normal, Bolder, and Much bolder for Reading, Titles, App, and Code. Each change patches only its named role under `ui.weights`. The open article and rendered discussion text bind to the same font-weight values as the other reader controls, so a confirmed change applies without reopening the article.
 
 ## Background running and notifications
 
@@ -182,7 +184,8 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W2c | Subscription refresh and removal | Operation and removal-scope tests, plus Windows smoke coverage for refresh, canceled removal, subscription removal, and keeping folder contents |
 | W2d | OPML import and export | Operation and file-write tests, daemon round-trip with nested folders, manual Windows checks for picker cancellation and overwrite confirmation |
 | W2e.1 | Settings navigation and General preferences | Profile and daemon patch tests, Windows smoke coverage for changing settings and returning to the open article |
-| W2e.2 | Planned appearance, reading preferences, and persistent folder disclosure | Reopen a profile with saved themes, font weights, and collapsed folders. Compare narrow and wide layouts with macOS |
+| W2e.2a | Reading tab and saved font weights | Wire and write tests preserve other roles. The Windows smoke test changes the weight on an open article |
+| W2e.2b | Planned appearance, remaining reading preferences, and persistent folder disclosure | Reopen a profile with saved themes and collapsed folders. Compare narrow and wide layouts with macOS |
 | W2e.3 | Planned Agents settings and MCP configuration | Detect installed Codex, exercise missing and signed-out states, and paste a working MCP configuration |
 | W2e.4 | Planned storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
 | W2e.5 | Planned General background updating and link destination controls | Runtime and login behavior with W4, plus safe native link routing and browser fallback |

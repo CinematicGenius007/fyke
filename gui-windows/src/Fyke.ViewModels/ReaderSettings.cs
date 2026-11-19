@@ -27,4 +27,19 @@ public sealed class ReaderSettings(IDaemonClient client)
 
     public Task SetLoadImagesAsync(bool enabled, CancellationToken ct) =>
         client.CallAsync("config.set", new { UiPatch = new Dictionary<string, bool> { ["loadImages"] = enabled } }, ct);
+
+    public Task SetFontWeightAsync(ReaderFontRole role, int step, CancellationToken ct)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(step, -2);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(step, 2);
+        var name = role switch
+        {
+            ReaderFontRole.Reading => "reading",
+            ReaderFontRole.Title => "title",
+            ReaderFontRole.Ui => "ui",
+            ReaderFontRole.Code => "code",
+            _ => throw new ArgumentOutOfRangeException(nameof(role)),
+        };
+        return client.CallAsync("config.set", new { UiPatch = new { Weights = new Dictionary<string, int> { [name] = step } } }, ct);
+    }
 }

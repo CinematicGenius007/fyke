@@ -314,14 +314,25 @@
                         <Setter Property="CornerRadius" Value="{StaticResource RadiusControl}" />
                         <Setter Property="FontFamily" Value="{StaticResource FontUi}" />
                     </Style>
+                    <Style x:Key="WeightPicker" TargetType="ComboBox">
+                        <Setter Property="MinWidth" Value="152" />
+                        <Setter Property="MinHeight" Value="32" />
+                        <Setter Property="FontFamily" Value="{StaticResource FontUi}" />
+                    </Style>
                 </Grid.Resources>
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                 <Grid Margin="24,16,24,8">
-                    <TextBlock Text="Settings" FontSize="24" VerticalAlignment="Center" HorizontalAlignment="Center"
-                               FontFamily="{StaticResource FontReading}" FontWeight="{Binding Title, Source={StaticResource ReaderFonts}}"
-                               Foreground="{ThemeResource InkBrush}" AutomationProperties.HeadingLevel="Level1" />
+                    <SelectorBar x:Name="SettingsTabs" HorizontalAlignment="Center"
+                                 AutomationProperties.Name="Settings tabs" FontFamily="{StaticResource FontUi}">
+                        <SelectorBarItem x:Name="GeneralSettingsTab" Text="General" AutomationProperties.AutomationId="GeneralSettingsTab">
+                            <SelectorBarItem.Icon><SymbolIcon Symbol="Setting" /></SelectorBarItem.Icon>
+                        </SelectorBarItem>
+                        <SelectorBarItem x:Name="ReadingSettingsTab" Text="Reading" AutomationProperties.AutomationId="ReadingSettingsTab">
+                            <SelectorBarItem.Icon><FontIcon Glyph="&#xE8D2;" FontSize="14" /></SelectorBarItem.Icon>
+                        </SelectorBarItem>
+                    </SelectorBar>
                     <Button x:Name="CloseSettingsButton" HorizontalAlignment="Right" Width="32" Height="32" Padding="0"
-                            Click="CloseSettingsClicked" CornerRadius="{StaticResource RadiusControl}"
+                            Click="CloseSettingsClicked" CornerRadius="{StaticResource RadiusControl}" VerticalAlignment="Center"
                             AutomationProperties.AutomationId="CloseSettingsButton" AutomationProperties.Name="Close Settings"
                             ToolTipService.ToolTip="Close Settings (Esc)">
                         <FontIcon Glyph="&#xE711;" FontSize="14" />
@@ -334,9 +345,9 @@
                                 Style="{StaticResource SettingsAction}" />
                     </StackPanel>
                 </Grid>
-                <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <ScrollViewer Grid.Row="2" x:Name="SettingsScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
                     <Grid Padding="24,16,24,28">
-                        <StackPanel MaxWidth="640" Spacing="24">
+                        <StackPanel x:Name="GeneralSettingsBody" MaxWidth="640" Spacing="24">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Updates" Style="{StaticResource SettingsTitle}" AutomationProperties.HeadingLevel="Level2" />
                                 <Grid ColumnSpacing="12">
@@ -399,6 +410,44 @@
                                     </StackPanel>
                                 </Expander>
                             </StackPanel>
+                        </StackPanel>
+                        <StackPanel x:Name="ReadingSettingsBody" MaxWidth="640" Spacing="8" Visibility="Collapsed">
+                            <TextBlock Text="Font weights" Style="{StaticResource SettingsTitle}" AutomationProperties.HeadingLevel="Level2" />
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <TextBlock Text="Reading" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center"
+                                           FontFamily="{StaticResource FontReading}" FontWeight="{Binding Reading, Source={StaticResource ReaderFonts}}" />
+                                <ComboBox Grid.Column="1" x:Name="ReadingWeightPicker" Style="{StaticResource WeightPicker}" IsEnabled="False"
+                                          SelectionChanged="FontWeightChanged" AutomationProperties.Name="Reading font weight"
+                                          AutomationProperties.AutomationId="ReadingWeightPicker" />
+                            </Grid>
+                            <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <TextBlock Text="Titles" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center"
+                                           FontFamily="{StaticResource FontReading}" FontWeight="{Binding Title, Source={StaticResource ReaderFonts}}" />
+                                <ComboBox Grid.Column="1" x:Name="TitleWeightPicker" Style="{StaticResource WeightPicker}" IsEnabled="False"
+                                          SelectionChanged="FontWeightChanged" AutomationProperties.Name="Titles font weight"
+                                          AutomationProperties.AutomationId="TitleWeightPicker" />
+                            </Grid>
+                            <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <TextBlock Text="App" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center"
+                                           FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}" />
+                                <ComboBox Grid.Column="1" x:Name="UiWeightPicker" Style="{StaticResource WeightPicker}" IsEnabled="False"
+                                          SelectionChanged="FontWeightChanged" AutomationProperties.Name="App font weight"
+                                          AutomationProperties.AutomationId="UiWeightPicker" />
+                            </Grid>
+                            <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <TextBlock Text="Code" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center"
+                                           FontFamily="{StaticResource FontCode}" FontWeight="{Binding Code, Source={StaticResource ReaderFonts}}" />
+                                <ComboBox Grid.Column="1" x:Name="CodeWeightPicker" Style="{StaticResource WeightPicker}" IsEnabled="False"
+                                          SelectionChanged="FontWeightChanged" AutomationProperties.Name="Code font weight"
+                                          AutomationProperties.AutomationId="CodeWeightPicker" />
+                            </Grid>
                         </StackPanel>
                     </Grid>
                 </ScrollViewer>

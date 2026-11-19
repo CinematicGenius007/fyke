@@ -214,10 +214,10 @@ public sealed partial class MainWindow
         {
             Text = caption,
             FontFamily = discussionUiFont,
-            FontWeight = readerFonts.SectionLabel,
             FontSize = 13,
             TextWrapping = TextWrapping.Wrap,
         };
+        readerFonts.Bind(metadata, TextBlock.FontWeightProperty, nameof(ReaderFontWeights.SectionLabel));
         if (row.ReplyCount == 0 && comment.Blocks.Length == 0)
         {
             content.Children.Add(metadata);
