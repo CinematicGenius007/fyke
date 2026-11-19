@@ -4,11 +4,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using Fyke.Client;
 using Fyke.ViewModels;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Windows.UI.Core;
 using VirtualKey = Windows.System.VirtualKey;
-using VirtualKeyModifiers = Windows.System.VirtualKeyModifiers;
 
 namespace Fyke.App;
 
@@ -25,20 +26,7 @@ public sealed partial class MainWindow
     {
         readerSettings = new ReaderSettings(client);
         ReaderShell.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(SettingsKeyDown), true);
-        var shortcut = new KeyboardAccelerator
-        {
-            Key = (VirtualKey)0xBC, // VK_OEM_COMMA is absent from the WinRT enum.
-            Modifiers = VirtualKeyModifiers.Control,
-        };
-        shortcut.Invoked += (_, args) =>
-        {
-            if (readerConnected)
-            {
-                args.Handled = true;
-                ToggleSettings();
-            }
-        };
-        ReaderShell.KeyboardAccelerators.Add(shortcut);
+        Root.PreviewKeyDown += SettingsShortcutKeyDown;
 
         SettingsShortcutRows.ColumnDefinitions.Add(new ColumnDefinition());
         SettingsShortcutRows.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -136,6 +124,26 @@ public sealed partial class MainWindow
         }
     }
 
+    private void SettingsShortcutKeyDown(object sender, KeyRoutedEventArgs args)
+    {
+        // WinUI's KeyboardAccelerator can fail fast when it formats VK_OEM_COMMA.
+        const VirtualKey comma = (VirtualKey)0xBC;
+        if (!readerConnected || args.OriginalKey != comma || !IsDown(VirtualKey.Control)
+            || IsDown(VirtualKey.Menu) || IsDown(VirtualKey.Shift))
+        {
+            return;
+        }
+
+        args.Handled = true;
+        if (!args.KeyStatus.WasKeyDown)
+        {
+            ToggleSettings();
+        }
+
+        static bool IsDown(VirtualKey key) =>
+            (InputKeyboardSource.GetKeyStateForCurrentThread(key) & CoreVirtualKeyStates.Down) != 0;
+    }
+
     private async Task LoadInitialPreferencesAsync(CancellationToken ct)
     {
         try
@@ -173,18 +181,19 @@ public sealed partial class MainWindow
 
     private void GeneralSettingToggled(object sender, RoutedEventArgs args)
     {
-        if (!IsSettingsOpen || readingSettings || preferences is not { InvalidConfig: false } saved)
+        if (!IsSettingsOpen || readingSettings || sender is not ToggleSwitch toggle
+            || preferences is not { InvalidConfig: false } saved)
         {
             return;
         }
 
-        if (sender == FullTextToggle && saved.FullText != FullTextToggle.IsOn)
+        if (toggle == FullTextToggle && saved.FullText != toggle.IsOn)
         {
-            _ = ReadGeneralSettingsAsync(fullText: FullTextToggle.IsOn);
+            _ = ReadGeneralSettingsAsync(fullText: toggle.IsOn);
         }
-        else if (sender == LoadImagesToggle && saved.LoadImages != LoadImagesToggle.IsOn)
+        else if (toggle == LoadImagesToggle && saved.LoadImages != toggle.IsOn)
         {
-            _ = ReadGeneralSettingsAsync(loadImages: LoadImagesToggle.IsOn);
+            _ = ReadGeneralSettingsAsync(loadImages: toggle.IsOn);
         }
     }
 
