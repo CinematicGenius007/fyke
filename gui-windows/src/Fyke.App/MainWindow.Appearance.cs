@@ -18,8 +18,8 @@ public sealed partial class MainWindow
     // The Light and Dark dictionaries of Themes/Tokens.xaml.
     private IDictionary<object, object> tokenThemes = null!;
     // The theme ids the pickers list, in their order: the built-ins, then the user's.
-    private IReadOnlyList<string> themeIds = [];
-    private IReadOnlyList<string> themeNames = [];
+    private string[] themeIds = [];
+    private string[] themeNames = [];
 
     private void InitializeAppearance()
     {
@@ -113,7 +113,7 @@ public sealed partial class MainWindow
 
         int IndexOf(string id)
         {
-            for (var i = 0; i < themeIds.Count; i++)
+            for (var i = 0; i < themeIds.Length; i++)
             {
                 if (themeIds[i] == id)
                 {
