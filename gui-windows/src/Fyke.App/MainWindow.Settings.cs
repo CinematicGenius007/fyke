@@ -75,7 +75,7 @@ public sealed partial class MainWindow
 
     private void OpenSettings()
     {
-        if (!readerConnected || !CloseAddFeed() || !CloseCatalogEdit())
+        if (!readerConnected || viewDialogOpen || !CloseAddFeed() || !CloseCatalogEdit())
         {
             return;
         }

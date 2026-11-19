@@ -63,11 +63,11 @@ The structure and measurements follow the design rules; the chrome is Windows:
 - The window uses Mica and an extended title bar; the sidebar sits on Mica and the list and reader on the ground color.
 - Panes are 232 / 368 / flexible, and the reading column is 640.
 - Sidebar rows are 32 high with 14 px Segoe Fluent Icons; indent is `10 + 22 × depth`.
-- Ctrl+F opens search, Ctrl+K opens the command palette, Ctrl+Shift+K marks the current scope read, and Ctrl+Z undoes the last bulk mark. Ctrl+S to save a view is planned.
+- Ctrl+F opens search, Ctrl+K opens the command palette, Ctrl+Shift+K marks the current scope read, and Ctrl+Z undoes the last bulk mark. In search, Ctrl+S saves the search as a view.
 - Focus uses native controls. The system high contrast resource mapping and visual acceptance checks are planned.
 - Planned popovers use native flyouts with the shared popover treatment.
 
-The sidebar and timeline use native lists. The catalog groups feeds by folder and aggregates unread counts. Selecting a destination requests a 100-article page using the daemon’s feed, folder, or starred filter. Load more passes the returned keyset cursor back to the daemon. Navigation cancels stale requests. Entry events, catalog events, and replay gaps trigger a batched reload. Reconnect refreshes the catalog and timeline. The lists apply changes by row identity so unchanged rows and the open article stay in place while they are still in the result. The reader pane displays the selected article’s title, source, and stored body. Changing selection cancels the previous body request.
+The sidebar and timeline use native lists. The catalog groups feeds by folder and aggregates unread counts. Selecting a destination requests a 100-article page using the daemon’s feed, folder, starred, or saved-view filter. Load more passes the returned keyset cursor back to the daemon. Navigation cancels stale requests. Entry events, catalog events, and replay gaps trigger a batched reload. Reconnect refreshes the catalog and timeline. The lists apply changes by row identity so unchanged rows and the open article stay in place while they are still in the result. The reader pane displays the selected article’s title, source, and stored body. Changing selection cancels the previous body request.
 
 The folder row opens its timeline. Its disclosure button expands or collapses descendants while preserving the active feed and article. Folder unread counts include collapsed descendants. The window restores `ui.collapsedFolders` before showing the catalog and saves changes through the daemon. Writes run in order so a rapid toggle saves the latest state. Reloading a catalog prunes IDs for folders that have been removed. The window gives an in-flight disclosure save up to one second to finish on close.
 
@@ -81,11 +81,19 @@ An article with a Hacker News discussion offers **Show comments** below its body
 
 Opening an article marks it read after its body loads. The reader toolbar and the **M** and **S** shortcuts change read and star state through `entries.mark`. The daemon publishes the changes to the timeline and sidebar counts. Removing a star while viewing Starred removes the row and keeps the article open. The toolbar shows the confirmed state and reports a failed change alongside the actions.
 
-**Mark all read** is available for All, folders, and feeds from the timeline, the sidebar context menu, or Ctrl+Shift+K. It collects up to 20,000 unread IDs through the scope's cursor, then writes atomic batches through `entries.mark_many`. The notification offers Undo for acknowledged changes, including when later batches fail. Undo restores only the articles that were unread at the time of the write and keeps its remaining batches after an interrupted restore. The window keeps the last 100 undo actions available through Ctrl+Z after the notification closes.
+**Mark all read** is available for All, folders, feeds, and saved views from the timeline, the sidebar context menu, or Ctrl+Shift+K. It scans up to 20,000 articles through the scope's cursor, then writes atomic batches of unread IDs through `entries.mark_many`. The notification offers Undo for acknowledged changes, including when later batches fail. Undo restores only the articles that were unread at the time of the write and keeps its remaining batches after an interrupted restore. The window keeps the last 100 undo actions available through Ctrl+Z after the notification closes.
 
 ## Search
 
-The timeline search button and Ctrl+F open the search panel. It uses `entries.search` for titles, body text, and feed names, shows the newest 100 matches with highlighted snippets, and offers an unread-only filter. Up and Down move between results from the search field, Enter opens the selected article, and Escape closes the panel and returns focus. Opening a match leaves the current destination selected, including when the result is outside it. Editing the query, closing search, or disconnecting cancels any pending search. Saving the query as a view is planned.
+The timeline search button and Ctrl+F open the search panel. It uses `entries.search` for titles, body text, and feed names, shows the newest 100 matches with highlighted snippets, and offers an unread-only filter. Up and Down move between results from the search field, Enter opens the selected article, and Escape closes the panel and returns focus. Opening a match leaves the current destination selected, including when the result is outside it. Editing the query, closing search, or disconnecting cancels any pending search.
+
+## Saved views
+
+**Save view** in Search opens the editor with the current words and reading state. **New saved view** in All's context menu and in the command palette opens a blank rule. The editor supports reading state, words, feed and folder selection, article host and paths, and a date window. Preview asks `views.preview` for exact total and unread counts without writing a view.
+
+Saved views appear below Starred in daemon order and also appear in the palette. Their timelines show the daemon's rule sentence and load articles through `entries.list` with `view_id`. An article stays open when a mark removes it from the timeline. The timeline edit button and the view's context menu reopen the rule. Updates use the last read revision through `views.put`. A stale revision leaves the latest rule in place and prompts the editor to reload it on close. View events refresh the sidebar and current timeline after changes from MCP or another window.
+
+Use a view's sidebar menu to reorder or delete it. Deletion asks for confirmation and, if the daemon reports linked routines, asks separately before disabling and detaching them. Undo for view creation, editing, and deletion is planned.
 
 ## Command palette and focus
 
@@ -199,7 +207,10 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W2e.3 | Planned Agents settings and MCP configuration | Detect installed Codex, exercise missing and signed-out states, and paste a working MCP configuration |
 | W2e.4 | Planned storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
 | W2e.5 | Planned General background updating and link destination controls | Runtime and login behavior with W4, plus safe native link routing and browser fallback |
-| W3 | Saved views, Today, recipes, briefs, Ask, catch-up, routines, Activity, and citation navigation | One module per flow with fixture-driven API and desktop checks, including failed or partial work |
+| W3a | Saved-view creation, preview, timeline, edit, reorder, and removal | Model tests for rule round-trip, revision, scope and removal. Windows smoke covers Search through creation, preview, edit and removal. Visual review and view undo are open |
+| W3b | Planned routine editor, schedules over saved views, and run actions | Run a routine over one feed or all feeds. Verify combined actions and their results, including failed or partial runs |
+| W3c | Planned Codex briefs, recipe editing, Today and citations | Run a brief from a view, edit and preview its recipe, reopen the result, and follow citations in Windows |
+| W3d | Planned Ask, catch-up and Activity | Verify question and catch-up inputs, cited results, live job state, and failure or cancellation |
 | W4 | Restart supervision, notifications and activation | Close the window, crash and restart the daemon, sign out/in, deny notification access, reopen the right result |
 | W5 | Versioned GUI/core bundle, runtime dependencies, signing, installer, upgrades, uninstall and release notes | Clean Windows 11 x64 standard-user install, upgrade from a prior build, rollback and uninstall with data retention, verified published checksums |
 

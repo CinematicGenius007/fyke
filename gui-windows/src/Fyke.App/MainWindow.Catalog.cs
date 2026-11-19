@@ -51,9 +51,15 @@ public sealed partial class MainWindow
         var export = Add("Export OPML…", target => _ = ExportOpmlAsync());
         var mark = Add("Mark all read", target => StartBulkMark(target));
         var remove = Add("Remove…", target => OpenCatalogEdit(CatalogEditKind.Remove, target));
+        var newView = Add("New saved view…", target => _ = OpenViewEditorAsync());
+        var editView = Add("Edit view…", target => _ = OpenViewEditorAsync(id: target.Id));
+        var moveViewUp = Add("Move view up", target => _ = MoveViewAsync(target.Id, -1));
+        var moveViewDown = Add("Move view down", target => _ = MoveViewAsync(target.Id, 1));
+        var deleteView = Add("Delete view…", target => _ = DeleteViewAsync(target));
         flyout.Opening += (_, _) =>
         {
-            var scope = (row.DataContext as ReaderDestination)?.Scope;
+            var target = row.DataContext as ReaderDestination;
+            var scope = target?.Scope;
             var editable = scope is ReaderScope.Feed or ReaderScope.Folder;
             rename.Visibility = move.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
             create.Visibility = scope is ReaderScope.All or ReaderScope.Folder ? Visibility.Visible : Visibility.Collapsed;
@@ -67,6 +73,14 @@ public sealed partial class MainWindow
             mark.IsEnabled = CanChangeBulkMarks;
             remove.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
             remove.Text = scope == ReaderScope.Folder ? "Delete folder…" : "Remove feed…";
+            newView.Visibility = scope == ReaderScope.All ? Visibility.Visible : Visibility.Collapsed;
+            editView.Visibility = moveViewUp.Visibility = moveViewDown.Visibility = deleteView.Visibility =
+                scope == ReaderScope.View ? Visibility.Visible : Visibility.Collapsed;
+            if (target is { Scope: ReaderScope.View })
+            {
+                moveViewUp.IsEnabled = ViewMovePosition(target.Id, -1) is not null;
+                moveViewDown.IsEnabled = ViewMovePosition(target.Id, 1) is not null;
+            }
         };
         row.ContextFlyout = flyout;
 
@@ -87,7 +101,7 @@ public sealed partial class MainWindow
 
     private void OpenCatalogEdit(CatalogEditKind kind, ReaderDestination? item = null)
     {
-        if (!readerConnected || !CloseCatalogEdit() || !CloseAddFeed())
+        if (!readerConnected || viewDialogOpen || !CloseCatalogEdit() || !CloseAddFeed())
         {
             return;
         }

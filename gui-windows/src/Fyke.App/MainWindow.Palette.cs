@@ -42,7 +42,7 @@ public sealed partial class MainWindow
 
     private void OpenPalette()
     {
-        if (!readerConnected || !CloseAddFeed() || !CloseCatalogEdit())
+        if (!readerConnected || viewDialogOpen || !CloseAddFeed() || !CloseCatalogEdit())
         {
             return;
         }
@@ -141,6 +141,7 @@ public sealed partial class MainWindow
             {
                 ReaderScope.Folder => "Folder",
                 ReaderScope.Feed => "Feed",
+                ReaderScope.View => "Saved view",
                 _ => "Library",
             };
             yield return new PaletteResult($"destination.{item.Scope}.{item.Id}", item.Title, detail, null,
@@ -164,6 +165,12 @@ public sealed partial class MainWindow
         yield return new("add-feed", "Add feed", null, "Ctrl+N", () => OpenAddFeed());
         yield return new("settings", "Settings", null, "Ctrl+,", OpenSettings);
         yield return new("new-folder", "New folder", null, null, () => OpenCatalogEdit(CatalogEditKind.CreateFolder));
+        yield return new("new-view", "New saved view", null, null, () => _ = OpenViewEditorAsync());
+        if (destination is { Scope: ReaderScope.View } view)
+        {
+            yield return new("edit-view", $"Edit {view.Title}", null, null, () => _ = OpenViewEditorAsync(id: view.Id));
+            yield return new("delete-view", $"Delete {view.Title}", null, null, () => _ = DeleteViewAsync(view));
+        }
         if (!refreshingSubscriptions)
         {
             var feed = destination is { Scope: ReaderScope.Feed } currentFeed ? currentFeed : null;

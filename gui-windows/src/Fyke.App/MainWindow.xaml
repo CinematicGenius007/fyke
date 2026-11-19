@@ -142,11 +142,21 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock x:Name="TimelineHeading" FontSize="24" VerticalAlignment="Center"
-                               FontFamily="{StaticResource FontReading}" FontWeight="{Binding Title, Source={StaticResource ReaderFonts}}"
-                               TextTrimming="CharacterEllipsis" Foreground="{ThemeResource InkBrush}"
-                               AutomationProperties.AutomationId="TimelineHeading" />
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock x:Name="TimelineHeading" FontSize="24"
+                                   FontFamily="{StaticResource FontReading}" FontWeight="{Binding Title, Source={StaticResource ReaderFonts}}"
+                                   TextTrimming="CharacterEllipsis" Foreground="{ThemeResource InkBrush}"
+                                   AutomationProperties.AutomationId="TimelineHeading" />
+                        <TextBlock x:Name="ViewSummary" FontSize="12" Visibility="Collapsed" TextTrimming="CharacterEllipsis"
+                                   FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource MutedBrush}" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Top">
+                        <Button x:Name="EditViewButton" Width="32" Height="32" Padding="0" Visibility="Collapsed"
+                                Click="EditViewClicked" CornerRadius="{StaticResource RadiusControl}"
+                                AutomationProperties.AutomationId="EditViewButton" AutomationProperties.Name="Edit view"
+                                ToolTipService.ToolTip="Edit view">
+                            <FontIcon Glyph="&#xE70F;" FontSize="14" />
+                        </Button>
                         <Button x:Name="BulkReadButton" Width="32" Height="32" Padding="0" Visibility="Collapsed"
                                 Click="MarkAllReadClicked" CornerRadius="{StaticResource RadiusControl}"
                                 AutomationProperties.AutomationId="BulkReadButton" AutomationProperties.Name="Mark all read"
@@ -565,6 +575,9 @@
             </Grid>
         </Border>
         <Grid Grid.RowSpan="2" x:Name="SearchOverlay" Visibility="Collapsed" TabFocusNavigation="Cycle">
+            <Grid.KeyboardAccelerators>
+                <KeyboardAccelerator Key="S" Modifiers="Control" Invoked="SaveSearchViewShortcut" />
+            </Grid.KeyboardAccelerators>
             <Border Background="{ThemeResource ScrimBrush}" PointerPressed="SearchBackdropPressed" />
             <Border MaxWidth="640" Margin="16,96,16,16" VerticalAlignment="Top"
                     CornerRadius="{StaticResource RadiusSheet}" BorderThickness="1"
@@ -654,9 +667,16 @@
                                       FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
                                       CornerRadius="{StaticResource RadiusControl}" AutomationProperties.Name="Unread only"
                                       AutomationProperties.AutomationId="SearchUnread" />
-                        <Button Grid.Column="1" Content="Close" Height="32" Click="CloseSearchClicked"
-                                FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
-                                CornerRadius="{StaticResource RadiusControl}" AutomationProperties.AcceleratorKey="Esc" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="SaveSearchViewButton" Content="Save view…" Height="32" IsEnabled="False"
+                                    Click="SaveSearchViewClicked" CornerRadius="{StaticResource RadiusControl}"
+                                    FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                    AutomationProperties.AutomationId="SaveSearchViewButton" AutomationProperties.AcceleratorKey="Ctrl+S"
+                                    ToolTipService.ToolTip="Save view (Ctrl+S)" />
+                            <Button Content="Close" Height="32" Click="CloseSearchClicked"
+                                    FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}"
+                                    CornerRadius="{StaticResource RadiusControl}" AutomationProperties.AcceleratorKey="Esc" />
+                        </StackPanel>
                     </Grid>
                 </Grid>
             </Border>

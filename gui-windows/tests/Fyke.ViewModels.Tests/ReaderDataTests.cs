@@ -22,6 +22,9 @@ public sealed class ReaderDataTests
                 "folders.list" => """
                     {"items":[{"id":4,"parent_id":1,"name":"Databases"},{"id":1,"parent_id":null,"name":"Engineering"}]}
                     """,
+                "views.list" => """
+                    {"items":[{"id":1,"name":"Zig","rule":{"words":"zig"},"revision":2,"sentence":"Articles about zig","unread":2,"total":8}]}
+                    """,
                 _ => throw new InvalidOperationException(method),
             }),
         };
@@ -32,6 +35,7 @@ public sealed class ReaderDataTests
             [
                 (ReaderScope.All, "All", 0, 6L),
                 (ReaderScope.Starred, "Starred", 0, 4L),
+                (ReaderScope.View, "Zig", 0, 2L),
                 (ReaderScope.Folder, "Engineering", 0, 5L),
                 (ReaderScope.Folder, "Databases", 1, 3L),
                 (ReaderScope.Feed, "Café", 2, 3L),
@@ -39,6 +43,8 @@ public sealed class ReaderDataTests
                 (ReaderScope.Feed, "https://example.com", 0, 1L),
             ],
             destinations.Select(row => (row.Scope, row.Title, row.Depth, row.Count)));
+        var view = Assert.Single(destinations, row => row.Scope == ReaderScope.View);
+        Assert.Equal("Articles about zig", view.RuleSummary);
     }
 
     [Theory]
@@ -46,6 +52,7 @@ public sealed class ReaderDataTests
     [InlineData(ReaderScope.Starred, "StarredOnly")]
     [InlineData(ReaderScope.Folder, "FolderId")]
     [InlineData(ReaderScope.Feed, "FeedId")]
+    [InlineData(ReaderScope.View, "ViewId")]
     public async Task TimelineSendsOnlyTheSelectedFilterAndKeepsTheCursor(ReaderScope scope, string? filter)
     {
         var fake = new FakeClient
@@ -56,7 +63,7 @@ public sealed class ReaderDataTests
                 var sent = JsonSerializer.SerializeToElement(parameters);
                 Assert.Equal("prior", sent.GetProperty("Before").GetString());
                 Assert.Equal(ReaderData.PageSize, sent.GetProperty("Limit").GetInt32());
-                foreach (var name in new[] { "FeedId", "FolderId", "StarredOnly" })
+                foreach (var name in new[] { "FeedId", "FolderId", "StarredOnly", "ViewId" })
                 {
                     var value = sent.GetProperty(name);
                     if (name == filter)

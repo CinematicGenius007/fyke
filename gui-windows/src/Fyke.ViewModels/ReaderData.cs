@@ -10,15 +10,17 @@ public enum ReaderScope
     Starred,
     Folder,
     Feed,
+    View,
 }
 
 public sealed record ReaderDestination(ReaderScope Scope, long Id, string Title, int Depth, long Count,
-    long? ParentId = null, long Entries = 0, long Starred = 0)
+    long? ParentId = null, long Entries = 0, long Starred = 0, string? RuleSummary = null)
 {
     public string Glyph => Scope switch
     {
         ReaderScope.All => "\uE8B7",
         ReaderScope.Starred => "\uE734",
+        ReaderScope.View => "\uE71C",
         ReaderScope.Folder => string.Empty,
         _ => "\uE8A1",
     };
@@ -43,11 +45,13 @@ public sealed class ReaderData(IDaemonClient client)
     private static readonly JsonSerializerOptions Wire = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
     public const int PageSize = 100;
     public const int SearchLimit = 100;
+    public SavedViews Views { get; } = new(client);
 
     public async Task<IReadOnlyList<ReaderDestination>> DestinationsAsync(CancellationToken ct)
     {
         var feeds = Read<CatalogItems<Feed>>(await client.CallAsync("feeds.list", null, ct).ConfigureAwait(false)).Items;
         var folders = Read<CatalogItems<Folder>>(await client.CallAsync("folders.list", null, ct).ConfigureAwait(false)).Items;
+        var views = await Views.ListAsync(ct).ConfigureAwait(false);
         var foldersByParent = folders.ToLookup(folder => folder.ParentId);
         var feedsByFolder = feeds.ToLookup(feed => feed.FolderId);
         var rows = new List<ReaderDestination>
@@ -56,6 +60,8 @@ public sealed class ReaderData(IDaemonClient client)
             new(ReaderScope.Starred, 0, "Starred", 0, feeds.Sum(feed => feed.Starred)),
         };
 
+        rows.AddRange(views.Select(view => new ReaderDestination(ReaderScope.View, view.Id, view.Name, 0,
+            view.Unread, Entries: view.Total, RuleSummary: view.Sentence)));
         AddChildren(null, 0);
         return rows;
 
@@ -95,8 +101,10 @@ public sealed class ReaderData(IDaemonClient client)
         {
             FeedId = destination.Scope == ReaderScope.Feed ? (long?)destination.Id : null,
             FolderId = destination.Scope == ReaderScope.Folder ? (long?)destination.Id : null,
+            ViewId = destination.Scope == ReaderScope.View ? (long?)destination.Id : null,
             StarredOnly = destination.Scope == ReaderScope.Starred ? (bool?)true : null,
-            UnreadOnly = unreadOnly,
+            // A saved view supplies its own reading-state filter.
+            UnreadOnly = unreadOnly && destination.Scope != ReaderScope.View,
             Limit = Math.Clamp(limit, PageSize, 1000),
             Before = before,
         };
@@ -115,7 +123,10 @@ public sealed class ReaderData(IDaemonClient client)
                 .ConfigureAwait(false);
             foreach (var entry in page.Items)
             {
-                ids.Add(entry.Id);
+                if (destination.Scope != ReaderScope.View || !entry.Read)
+                {
+                    ids.Add(entry.Id);
+                }
             }
 
             if (page.NextCursor is null)

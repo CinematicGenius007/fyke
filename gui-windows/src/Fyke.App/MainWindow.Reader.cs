@@ -110,7 +110,8 @@ public sealed partial class MainWindow
         // Gap events also cover replay after pruned or reset daemon history.
         if ((change.IsGap || change.Type.StartsWith("entry.", StringComparison.Ordinal)
             || change.Type.StartsWith("feed.", StringComparison.Ordinal)
-            || change.Type.StartsWith("folder.", StringComparison.Ordinal))
+            || change.Type.StartsWith("folder.", StringComparison.Ordinal)
+            || change.Type == "entries.changed" || change.Type == "view.changed")
             && Interlocked.Exchange(ref readerChangesPending, 1) == 0)
         {
             _ = DispatcherQueue.TryEnqueue(ScheduleReaderReload);
@@ -218,7 +219,7 @@ public sealed partial class MainWindow
         NavigateToDestination(selected);
     }
 
-    private void NavigateToDestination(ReaderDestination selected)
+    private void NavigateToDestination(ReaderDestination selected, bool refreshCatalog = false)
     {
         CloseSettings(restoreFocus: false);
         if (destination is { } current && current.Scope == selected.Scope && current.Id == selected.Id)
@@ -242,7 +243,7 @@ public sealed partial class MainWindow
         nextCursor = null;
         MoreArticles.Visibility = Visibility.Collapsed;
         _ = OpenArticleAsync(null);
-        _ = LoadReaderAsync();
+        _ = LoadReaderAsync(refreshCatalog);
     }
 
     private async Task LoadReaderAsync(bool refreshCatalog = false, bool append = false)
@@ -293,6 +294,9 @@ public sealed partial class MainWindow
             }
 
             TimelineHeading.Text = destination.Title;
+            ViewSummary.Text = destination.RuleSummary ?? string.Empty;
+            ViewSummary.Visibility = ViewSummary.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+            EditViewButton.Visibility = destination.Scope == ReaderScope.View ? Visibility.Visible : Visibility.Collapsed;
             var page = await reader.TimelineAsync(destination, cursor, request.Token, limit);
             request.Token.ThrowIfCancellationRequested();
             if (append)
@@ -368,7 +372,8 @@ public sealed partial class MainWindow
             if (openArticle is { } opened)
             {
                 var current = articles.FirstOrDefault(row => row.Id == opened.Id);
-                if (current is null && selected is not null && destination?.Scope != ReaderScope.Starred)
+                // A mark can remove the selected row from a filtered list while it is being read.
+                if (current is null && selected is not null && destination?.Scope is not (ReaderScope.Starred or ReaderScope.View))
                 {
                     _ = OpenArticleAsync(null);
                 }

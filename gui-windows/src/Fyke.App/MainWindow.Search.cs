@@ -39,7 +39,7 @@ public sealed partial class MainWindow
 
     private void OpenSearch()
     {
-        if (!readerConnected || !CloseAddFeed() || !CloseCatalogEdit())
+        if (!readerConnected || viewDialogOpen || !CloseAddFeed() || !CloseCatalogEdit())
         {
             return;
         }
@@ -49,6 +49,7 @@ public sealed partial class MainWindow
             ClosePalette();
             ShowSearchMessage("Find words in titles, article text, and feed names.");
             ShowReaderOverlay(SearchOverlay, SearchQuery);
+            SaveSearchViewButton.IsEnabled = SearchUnread.IsChecked == true;
         }
         else
         {
@@ -99,6 +100,7 @@ public sealed partial class MainWindow
 
         searchRequest?.Cancel();
         var query = SearchQuery.Text.Trim();
+        SaveSearchViewButton.IsEnabled = query.Length > 0 || SearchUnread.IsChecked == true;
         if (query.Length == 0)
         {
             ShowSearchMessage("Find words in titles, article text, and feed names.");

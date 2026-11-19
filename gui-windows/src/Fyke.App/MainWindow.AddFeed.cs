@@ -42,7 +42,7 @@ public sealed partial class MainWindow
 
     private void OpenAddFeed(long? folderId = null)
     {
-        if (!readerConnected || IsAddFeedOpen || !CloseCatalogEdit())
+        if (!readerConnected || viewDialogOpen || IsAddFeedOpen || !CloseCatalogEdit())
         {
             return;
         }

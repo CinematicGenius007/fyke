@@ -643,9 +643,70 @@ try {
         throw 'Deleting the folder also deleted its articles.'
     }
 
+    function Set-ViewField([string]$id, [string]$value) {
+        $field = Wait-For "the $id field" {
+            $control = Find-ById $id
+            if ($control -and !$control.Current.IsOffscreen) { $control }
+        }
+        $field.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).SetValue($value)
+    }
+    function Invoke-ViewDialogButton([string]$name) {
+        $button = Wait-For "the $name dialog button" {
+            $control = Find-ByName $root $name
+            if ($control -and $control.Current.IsEnabled -and !$control.Current.IsOffscreen) { $control }
+        }
+        $button.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    }
+
+    $timeline = Find-ById 'ReaderTimeline'
+    Select-ReaderItem $timeline 'Live reader update'
+    $markUnread = Wait-ForArticleAction 'ReadArticle' 'Mark as unread'
+    $markUnread.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-ForArticleAction 'ReadArticle' 'Mark as read' | Out-Null
+
+    Invoke-Button 'SearchButton'
+    Set-ViewField 'SearchQuery' 'Arrives while'
+    Toggle-Setting 'SearchUnread'
+    Invoke-Button 'SaveSearchViewButton'
+    Set-ViewField 'ViewName' 'Fixture saved view'
+    Invoke-ViewDialogButton 'Preview'
+    Wait-For 'one matching article in the unsaved view' {
+        Find-ByName $root ('1 matching article ' + [char]0x00b7 + ' 1 unread')
+    } | Out-Null
+    Invoke-ViewDialogButton 'Save view'
+    Wait-For 'the saved view in the sidebar' { Find-ByName $items 'Fixture saved view' } | Out-Null
+    Wait-For 'the saved search timeline' {
+        $heading = Find-ById 'TimelineHeading'
+        if ($heading.Current.Name -eq 'Fixture saved view' -and (Find-ByName $timeline 'Live reader update') -and
+            !(Find-ByName $timeline 'Native reader fixture')) { $true }
+    } | Out-Null
+    Select-ReaderItem $timeline 'Live reader update'
+    Wait-For 'the reader to stay open after marking the article read in the unread view' {
+        if ((Find-ByName $root 'Arrives while the first article is open.') -and
+            !(Find-ByName $timeline 'Live reader update')) { $true }
+    } | Out-Null
+
+    Invoke-PaletteResult 'Edit Fixture saved view' 'Edit Fixture saved view'
+    Set-ViewField 'ViewName' 'Renamed fixture view'
+    Set-ViewField 'ViewWords' 'stored blocks'
+    Select-SettingsOption 'ViewReadingState' 'All articles'
+    Invoke-ViewDialogButton 'Save view'
+    Wait-For 'the edited rule and name to appear in the timeline' {
+        $heading = Find-ById 'TimelineHeading'
+        if ($heading.Current.Name -eq 'Renamed fixture view' -and (Find-ByName $timeline 'Native reader fixture') -and
+            !(Find-ByName $timeline 'Live reader update')) { $true }
+    } | Out-Null
+
+    Invoke-PaletteResult 'Delete Renamed fixture view' 'Delete Renamed fixture view'
+    Invoke-ViewDialogButton 'Delete view'
+    Wait-For 'All to reopen after deleting the active view' {
+        $heading = Find-ById 'TimelineHeading'
+        if ($heading.Current.Name -eq 'All' -and !(Find-ByName $items 'Renamed fixture view')) { $true }
+    } | Out-Null
+
     & $daemonPath status
     if ($LASTEXITCODE -ne 0) { throw 'The companion daemon did not answer status' }
-    Write-Host 'WinUI verified daemon recovery, the reader, search and palette, bulk undo, subscription management, and folder disclosure across relaunch.'
+    Write-Host 'WinUI verified daemon recovery, reading, search, the palette, bulk undo, subscription management, folder disclosure across relaunch, and saved views.'
 } catch {
     Write-Host $_.ScriptStackTrace
     if ($window -and $window.HasExited) {
