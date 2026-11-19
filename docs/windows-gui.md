@@ -54,6 +54,8 @@ Only `Fyke.App` depends on Windows. Everything a test can reach without a window
 
 `tools/gen_tokens.py` also writes `gui-windows/src/Fyke.App/Themes/Tokens.xaml`: colors as `Color` and `SolidColorBrush` resources in `Light` and `Dark` theme dictionaries, radii as `CornerRadius`, and font families. As with Swift, the XAML is generated and never edited. Inter, Newsreader and JetBrains Mono come from `gui/Fonts` and are bundled with the app.
 
+`App.xaml` loads the standard WinUI control resources before the generated tokens so native templates can resolve their theme resources and Fyke's tokens take precedence.
+
 ## Reader layout on Windows
 
 The structure and measurements follow the design rules; the chrome is Windows:
