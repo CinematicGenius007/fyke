@@ -54,6 +54,33 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python ./tests/run-desktop-smoke.py "$env:RUNNER_TEMP/fyke-desktop/Fyke.App.exe" "$env:GITHUB_WORKSPACE/zig-out/bin/fyke.exe"
 
+      # Reports what a user would download, so every change shows its cost in size.
+      - name: Measure the published app
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        working-directory: gui-windows
+        shell: pwsh
+        run: |
+          $rows = @()
+          $ways = [ordered]@{
+            'Current settings'        = @()
+            'Trimmed, self-contained' = @('--self-contained', '-p:PublishTrimmed=true')
+            'Native AOT'              = @('-p:PublishAot=true')
+          }
+          foreach ($name in $ways.Keys) {
+            $out = Join-Path $env:RUNNER_TEMP ("publish-" + ($name -replace '\W', ''))
+            dotnet publish src/Fyke.App -c Release -r win-x64 -p:Platform=x64 -o $out @($ways[$name]) 2>&1 | Select-Object -Last 3
+            if ($LASTEXITCODE -ne 0) { $rows += "| $name | failed | | |"; continue }
+            $bytes = (Get-ChildItem $out -Recurse -File | Measure-Object Length -Sum).Sum
+            $files = (Get-ChildItem $out -Recurse -File).Count
+            $zip = "$out.zip"
+            Compress-Archive "$out/*" $zip -CompressionLevel Optimal
+            $rows += "| $name | {0:N1} MB | {1:N1} MB | $files |" -f ($bytes / 1MB), ((Get-Item $zip).Length / 1MB)
+          }
+          $table = "| Publish | On disk | Zipped | Files |`n|---|---|---|---|`n" + ($rows -join "`n")
+          $table
+          $table | Out-File -Append $env:GITHUB_STEP_SUMMARY
+
       # Each script is its own step, so that one failure does not hide the others.
       - name: e2e
         if: ${{ !cancelled() }}
