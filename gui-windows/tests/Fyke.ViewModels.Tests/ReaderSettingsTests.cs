@@ -105,4 +105,41 @@ public sealed class ReaderSettingsTests
             [ReaderTextSetting.ColumnWidth] = 1000,
         }, CancellationToken.None);
     }
+
+    [Theory]
+    [InlineData("{}", ReaderScrollbarMode.WhileScrolling)]
+    [InlineData("{\"scrollbars\":\"scrolling\"}", ReaderScrollbarMode.WhileScrolling)]
+    [InlineData("{\"scrollbars\":\"always\"}", ReaderScrollbarMode.Always)]
+    [InlineData("{\"scrollbars\":\"never\"}", ReaderScrollbarMode.Never)]
+    [InlineData("{\"scrollbars\":\"system\"}", ReaderScrollbarMode.WhileScrolling)]
+    public async Task ReadsTheSharedScrollbarValues(string ui, ReaderScrollbarMode expected)
+    {
+        using var reply = JsonDocument.Parse($$"""{"full_text":true,"ui":{{ui}}}""");
+        var settings = new ReaderSettings(new FakeClient { OnCall = (_, _) => reply.RootElement });
+
+        Assert.Equal(expected, (await settings.ReadAsync(CancellationToken.None)).Scrollbars);
+    }
+
+    [Theory]
+    [InlineData(ReaderScrollbarMode.WhileScrolling, "scrolling")]
+    [InlineData(ReaderScrollbarMode.Always, "always")]
+    [InlineData(ReaderScrollbarMode.Never, "never")]
+    public async Task WritesOnlyTheSharedScrollbarField(ReaderScrollbarMode mode, string value)
+    {
+        var wire = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+        var settings = new ReaderSettings(new FakeClient
+        {
+            OnCall = (method, parameters) =>
+            {
+                Assert.Equal("config.set", method);
+                var patch = JsonSerializer.SerializeToElement(parameters, wire).GetProperty("ui_patch");
+                var field = Assert.Single(patch.EnumerateObject());
+                Assert.Equal("scrollbars", field.Name);
+                Assert.Equal(value, field.Value.GetString());
+                return JsonSerializer.SerializeToElement(new { ok = true });
+            },
+        });
+
+        await settings.SetScrollbarsAsync(mode, CancellationToken.None);
+    }
 }

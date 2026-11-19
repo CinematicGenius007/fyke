@@ -3,8 +3,10 @@ using Fyke.Client;
 
 namespace Fyke.ViewModels;
 
+public enum ReaderScrollbarMode { WhileScrolling, Always, Never }
+
 public sealed record ReaderPreferences(bool FullText, bool LoadImages, ReaderTypography Typography,
-    ReaderTextLayout TextLayout, bool InvalidConfig);
+    ReaderTextLayout TextLayout, ReaderScrollbarMode Scrollbars, bool InvalidConfig);
 
 public sealed class ReaderSettings(IDaemonClient client)
 {
@@ -22,7 +24,23 @@ public sealed class ReaderSettings(IDaemonClient client)
         var autoImages = ui.ValueKind == JsonValueKind.Object
             && ui.TryGetProperty("loadImages", out var images) && images.ValueKind == JsonValueKind.True;
         return new ReaderPreferences(fullText.GetBoolean(), autoImages, ReaderTypography.FromConfig(config),
-            ReaderTextLayout.FromUi(ui), hasError);
+            ReaderTextLayout.FromUi(ui), ReadScrollbars(ui), hasError);
+    }
+
+    private static ReaderScrollbarMode ReadScrollbars(JsonElement ui)
+    {
+        if (ui.ValueKind != JsonValueKind.Object || !ui.TryGetProperty("scrollbars", out var mode)
+            || mode.ValueKind != JsonValueKind.String)
+        {
+            return ReaderScrollbarMode.WhileScrolling;
+        }
+
+        return mode.GetString() switch
+        {
+            "always" => ReaderScrollbarMode.Always,
+            "never" => ReaderScrollbarMode.Never,
+            _ => ReaderScrollbarMode.WhileScrolling,
+        };
     }
 
     public Task SetFullTextAsync(bool enabled, CancellationToken ct) =>
@@ -30,6 +48,18 @@ public sealed class ReaderSettings(IDaemonClient client)
 
     public Task SetLoadImagesAsync(bool enabled, CancellationToken ct) =>
         client.CallAsync("config.set", new { UiPatch = new Dictionary<string, bool> { ["loadImages"] = enabled } }, ct);
+
+    public Task SetScrollbarsAsync(ReaderScrollbarMode mode, CancellationToken ct)
+    {
+        var value = mode switch
+        {
+            ReaderScrollbarMode.WhileScrolling => "scrolling",
+            ReaderScrollbarMode.Always => "always",
+            ReaderScrollbarMode.Never => "never",
+            _ => throw new ArgumentOutOfRangeException(nameof(mode)),
+        };
+        return client.CallAsync("config.set", new { UiPatch = new { Scrollbars = value } }, ct);
+    }
 
     public Task SetTextLayoutAsync(IReadOnlyDictionary<ReaderTextSetting, double> changes, CancellationToken ct) =>
         client.CallAsync("config.set", new

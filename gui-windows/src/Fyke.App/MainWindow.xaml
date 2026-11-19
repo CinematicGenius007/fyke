@@ -314,7 +314,7 @@
                         <Setter Property="CornerRadius" Value="{StaticResource RadiusControl}" />
                         <Setter Property="FontFamily" Value="{StaticResource FontUi}" />
                     </Style>
-                    <Style x:Key="WeightPicker" TargetType="ComboBox">
+                    <Style x:Key="SettingsPicker" TargetType="ComboBox">
                         <Setter Property="MinWidth" Value="152" />
                         <Setter Property="MinHeight" Value="32" />
                         <Setter Property="FontFamily" Value="{StaticResource FontUi}" />
@@ -345,7 +345,8 @@
                                 Style="{StaticResource SettingsAction}" />
                     </StackPanel>
                 </Grid>
-                <ScrollViewer Grid.Row="2" x:Name="SettingsScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <ScrollViewer Grid.Row="2" x:Name="SettingsScroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
+                              AutomationProperties.AutomationId="SettingsScroll">
                     <Grid Padding="24,16,24,28">
                         <StackPanel x:Name="GeneralSettingsBody" MaxWidth="640" Spacing="24">
                             <StackPanel Spacing="8">
@@ -417,7 +418,7 @@
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                 <TextBlock Text="Reading" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center"
                                            FontFamily="{StaticResource FontReading}" FontWeight="{Binding Reading, Source={StaticResource ReaderFonts}}" />
-                                <ComboBox Grid.Column="1" x:Name="ReadingWeightPicker" Style="{StaticResource WeightPicker}" IsEnabled="False"
+                                <ComboBox Grid.Column="1" x:Name="ReadingWeightPicker" Style="{StaticResource SettingsPicker}" IsEnabled="False"
                                           SelectionChanged="FontWeightChanged" AutomationProperties.Name="Reading font weight"
                                           AutomationProperties.AutomationId="ReadingWeightPicker" />
                             </Grid>
@@ -426,7 +427,7 @@
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                 <TextBlock Text="Titles" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center"
                                            FontFamily="{StaticResource FontReading}" FontWeight="{Binding Title, Source={StaticResource ReaderFonts}}" />
-                                <ComboBox Grid.Column="1" x:Name="TitleWeightPicker" Style="{StaticResource WeightPicker}" IsEnabled="False"
+                                <ComboBox Grid.Column="1" x:Name="TitleWeightPicker" Style="{StaticResource SettingsPicker}" IsEnabled="False"
                                           SelectionChanged="FontWeightChanged" AutomationProperties.Name="Titles font weight"
                                           AutomationProperties.AutomationId="TitleWeightPicker" />
                             </Grid>
@@ -435,7 +436,7 @@
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                 <TextBlock Text="App" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center"
                                            FontFamily="{StaticResource FontUi}" FontWeight="{Binding Ui, Source={StaticResource ReaderFonts}}" />
-                                <ComboBox Grid.Column="1" x:Name="UiWeightPicker" Style="{StaticResource WeightPicker}" IsEnabled="False"
+                                <ComboBox Grid.Column="1" x:Name="UiWeightPicker" Style="{StaticResource SettingsPicker}" IsEnabled="False"
                                           SelectionChanged="FontWeightChanged" AutomationProperties.Name="App font weight"
                                           AutomationProperties.AutomationId="UiWeightPicker" />
                             </Grid>
@@ -444,7 +445,7 @@
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                 <TextBlock Text="Code" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center"
                                            FontFamily="{StaticResource FontCode}" FontWeight="{Binding Code, Source={StaticResource ReaderFonts}}" />
-                                <ComboBox Grid.Column="1" x:Name="CodeWeightPicker" Style="{StaticResource WeightPicker}" IsEnabled="False"
+                                <ComboBox Grid.Column="1" x:Name="CodeWeightPicker" Style="{StaticResource SettingsPicker}" IsEnabled="False"
                                           SelectionChanged="FontWeightChanged" AutomationProperties.Name="Code font weight"
                                           AutomationProperties.AutomationId="CodeWeightPicker" />
                             </Grid>
@@ -490,6 +491,14 @@
                                         AutomationProperties.AutomationId="ColumnWidthSlider" />
                                 <TextBlock Grid.Column="2" x:Name="ColumnWidthValue" HorizontalAlignment="Right" VerticalAlignment="Center"
                                            Style="{StaticResource SettingsDetail}" />
+                            </Grid>
+                            <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <TextBlock Text="Show scrollbars" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center" />
+                                <ComboBox Grid.Column="1" x:Name="ScrollbarsPicker" Style="{StaticResource SettingsPicker}" IsEnabled="False"
+                                          SelectionChanged="ScrollbarsChanged" AutomationProperties.Name="Show scrollbars"
+                                          AutomationProperties.AutomationId="ScrollbarsPicker" />
                             </Grid>
                         </StackPanel>
                     </Grid>

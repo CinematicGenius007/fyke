@@ -217,18 +217,21 @@ try {
 
     $readingTab = Wait-For 'the Reading settings tab' { Find-ById 'ReadingSettingsTab' }
     $readingTab.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
-    $weightPicker = Wait-For 'the enabled Reading weight picker' {
-        $picker = Find-ById 'ReadingWeightPicker'
-        if ($picker -and $picker.Current.IsEnabled -and !$picker.Current.IsOffscreen) { $picker }
+    function Select-SettingsOption([string]$id, [string]$name) {
+        $picker = Wait-For "$id to be enabled and visible" {
+            $control = Find-ById $id
+            if ($control -and $control.Current.IsEnabled -and !$control.Current.IsOffscreen) { $control }
+        }
+        $picker.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
+        $selection = Wait-For "the enabled $name option in $id" {
+            $option = Find-ByName $picker $name
+            $pattern = $null
+            if ($option -and $option.Current.IsEnabled -and !$option.Current.IsOffscreen -and
+                $option.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern, [ref]$pattern)) { $pattern }
+        }
+        $selection.Select()
     }
-    $weightPicker.GetCurrentPattern([Windows.Automation.ExpandCollapsePattern]::Pattern).Expand()
-    $lighterWeight = Wait-For 'the enabled Much lighter option in the Reading picker' {
-        $option = Find-ByName $weightPicker 'Much lighter'
-        $selection = $null
-        if ($option -and $option.Current.IsEnabled -and !$option.Current.IsOffscreen -and
-            $option.TryGetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selection)) { $selection }
-    }
-    $lighterWeight.Select()
+    Select-SettingsOption 'ReadingWeightPicker' 'Much lighter'
     Wait-For 'the changed Reading weight to preserve the other font roles' {
         $weights = (Read-ReaderConfig $configPath).ui.weights
         if ($weights.reading -eq -2 -and $weights.title -eq 2 -and $weights.ui -eq -1 -and $weights.code -eq -2) { $true }
@@ -245,6 +248,24 @@ try {
     Set-ReadingSlider 'TextSizeSlider' 24
     Set-ReadingSlider 'LineSpacingSlider' 1.8
     Set-ReadingSlider 'ColumnWidthSlider' 720
+
+    $settingsScroller = Find-ById 'SettingsScroll'
+    $scroll = $null
+    $settingsHasOverflow = $settingsScroller.TryGetCurrentPattern([Windows.Automation.ScrollPattern]::Pattern, [ref]$scroll) -and
+        $scroll.Current.VerticallyScrollable
+    if ($settingsHasOverflow) { $scroll.SetScrollPercent([Windows.Automation.ScrollPattern]::NoScroll, 100) }
+    Select-SettingsOption 'ScrollbarsPicker' 'Never'
+    Wait-For 'the saved scrollbar mode to apply' {
+        $picker = Find-ById 'ScrollbarsPicker'
+        if ($picker -and $picker.Current.IsEnabled -and (Read-ReaderConfig $configPath).ui.scrollbars -eq 'never') { $true }
+    } | Out-Null
+    if ($settingsHasOverflow) {
+        $scroll.SetScrollPercent([Windows.Automation.ScrollPattern]::NoScroll, 0)
+        Wait-For 'Settings to scroll with its bar hidden' {
+            if ($scroll.Current.VerticallyScrollable -and $scroll.Current.VerticalScrollPercent -lt 0.5) { $true }
+        } | Out-Null
+    }
+
     Invoke-Button 'CloseSettingsButton'
     Wait-For 'article layout to persist alongside the updated font weight' {
         $ui = (Read-ReaderConfig $configPath).ui

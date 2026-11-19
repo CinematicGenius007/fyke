@@ -43,6 +43,7 @@ public sealed partial class MainWindow
         {
             picker.ItemsSource = choices;
         }
+        ScrollbarsPicker.ItemsSource = new[] { "While scrolling", "Always", "Never" };
     }
 
     private void SettingsTabChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
@@ -176,7 +177,13 @@ public sealed partial class MainWindow
             loaded = loaded with
             {
                 LoadImages = previous.LoadImages, Typography = previous.Typography, TextLayout = previous.TextLayout,
+                Scrollbars = previous.Scrollbars,
             };
+        }
+
+        if (preferences?.Scrollbars != loaded.Scrollbars)
+        {
+            ApplyScrollbarMode(loaded.Scrollbars);
         }
 
         preferences = loaded;
@@ -191,6 +198,7 @@ public sealed partial class MainWindow
         FullTextToggle.IsOn = loaded.FullText;
         LoadImagesToggle.IsOn = loaded.LoadImages;
         ApplyTextLayoutControls(loaded.TextLayout);
+        ScrollbarsPicker.SelectedIndex = (int)loaded.Scrollbars;
         foreach (var (picker, role) in weightPickers)
         {
             picker.SelectedIndex = loaded.Typography.StepFor(role) + 2;
@@ -199,7 +207,7 @@ public sealed partial class MainWindow
 
     private void EnableSettingsControls(bool enabled)
     {
-        FullTextToggle.IsEnabled = LoadImagesToggle.IsEnabled = enabled;
+        FullTextToggle.IsEnabled = LoadImagesToggle.IsEnabled = ScrollbarsPicker.IsEnabled = enabled;
         foreach (var picker in weightPickers.Keys)
         {
             picker.IsEnabled = enabled;
@@ -245,6 +253,36 @@ public sealed partial class MainWindow
             _ = ReadSettingsAsync(ct => readerSettings.SetFontWeightAsync(role, step, ct),
                 current => current.Typography.StepFor(role) == step);
         }
+    }
+
+    private void ScrollbarsChanged(object sender, SelectionChangedEventArgs args)
+    {
+        if (!IsSettingsOpen || readingSettings || preferences is not { InvalidConfig: false } saved
+            || sender is not ComboBox { SelectedIndex: >= 0 } picker)
+        {
+            return;
+        }
+
+        var mode = (ReaderScrollbarMode)picker.SelectedIndex;
+        if (saved.Scrollbars != mode)
+        {
+            _ = ReadSettingsAsync(ct => readerSettings.SetScrollbarsAsync(mode, ct), current => current.Scrollbars == mode);
+        }
+    }
+
+    private void ApplyScrollbarMode(ReaderScrollbarMode mode)
+    {
+        var visibility = mode switch
+        {
+            ReaderScrollbarMode.Always => ScrollBarVisibility.Visible,
+            ReaderScrollbarMode.Never => ScrollBarVisibility.Hidden,
+            _ => ScrollBarVisibility.Auto,
+        };
+        ArticleScroller.VerticalScrollBarVisibility = SettingsScroll.VerticalScrollBarVisibility = visibility;
+        ScrollViewer.SetVerticalScrollBarVisibility(Destinations, visibility);
+        ScrollViewer.SetVerticalScrollBarVisibility(Timeline, visibility);
+        ScrollViewer.SetVerticalScrollBarVisibility(SearchResults, visibility);
+        ScrollViewer.SetVerticalScrollBarVisibility(PaletteResults, visibility);
     }
 
     private async Task ReadSettingsAsync(Func<CancellationToken, Task>? save = null, Func<ReaderPreferences, bool>? confirmed = null)
