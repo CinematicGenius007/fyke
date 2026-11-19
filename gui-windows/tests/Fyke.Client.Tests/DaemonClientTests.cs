@@ -81,8 +81,8 @@ public sealed class DaemonClientTests
         Assert.False(failure.Is("in_use"));
         Assert.False(failure.IsUnknownMethod);
         // An error reply leaves the connection in step: the next call works, on the same connection.
-        fake.On("ping", _ => new { ok = true });
-        Assert.True((await client.CallAsync("ping", null, CancellationToken.None)).GetProperty("ok").GetBoolean());
+        fake.On("feeds.list", _ => new { ok = true });
+        Assert.True((await client.CallAsync("feeds.list", null, CancellationToken.None)).GetProperty("ok").GetBoolean());
         Assert.Equal(1, fake.Accepted);
     }
 
@@ -204,7 +204,7 @@ public sealed class DaemonClientTests
     }
 
     [Fact]
-    public async Task ACallThatTakesTooLongTimesOutAndTheNextOneWorks()
+    public async Task AWriteThatTakesTooLongHasAnUnknownOutcomeAndTheNextCallWorks()
     {
         await using var fake = new FakeDaemon();
         fake.On("hang", async _ =>
@@ -212,7 +212,7 @@ public sealed class DaemonClientTests
             await Task.Delay(TimeSpan.FromSeconds(30));
             return new { };
         });
-        fake.On("ping", _ => new { ok = true });
+        fake.On("feeds.list", _ => new { ok = true });
         fake.Start();
         var options = TestSupport.Options(fake);
         await using var client = new DaemonClient(new DaemonClientOptions
@@ -224,10 +224,12 @@ public sealed class DaemonClientTests
         });
         await client.StartAsync(CancellationToken.None);
 
-        await Assert.ThrowsAsync<TimeoutException>(() => client.CallAsync("hang", null, CancellationToken.None));
+        var write = await Assert.ThrowsAsync<DaemonOutcomeUnknownException>(
+            () => client.CallAsync("hang", null, CancellationToken.None));
+        Assert.IsType<TimeoutException>(write.InnerException);
 
         Assert.Equal(ConnectionState.Connected, client.State);
-        Assert.True((await client.CallAsync("ping", null, CancellationToken.None)).GetProperty("ok").GetBoolean());
+        Assert.True((await client.CallAsync("feeds.list", null, CancellationToken.None)).GetProperty("ok").GetBoolean());
     }
 
     [Fact]
@@ -363,13 +365,13 @@ public sealed class DaemonClientTests
         });
         await Assert.ThrowsAsync<DaemonUnavailableException>(() => client.StartAsync(CancellationToken.None));
         Assert.Equal(ConnectionState.Failed, client.State);
-        fake.On("ping", _ => new { ok = true });
+        fake.On("feeds.list", _ => new { ok = true });
         fake.Start();
 
         await client.StartAsync(CancellationToken.None);
 
         Assert.Equal(ConnectionState.Connected, client.State);
-        Assert.True((await client.CallAsync("ping", null, CancellationToken.None)).GetProperty("ok").GetBoolean());
+        Assert.True((await client.CallAsync("feeds.list", null, CancellationToken.None)).GetProperty("ok").GetBoolean());
     }
 
     [Fact]
@@ -384,6 +386,46 @@ public sealed class DaemonClientTests
         Assert.Equal(FailureReason.ProgramMissing, failure.Reason);
         Assert.Equal(ConnectionState.Failed, client.State);
         Assert.Equal((ConnectionState.Failed, FailureReason.ProgramMissing), seen[^1]);
+    }
+
+    [Fact]
+    public async Task ASocketPathTooLongToConnectFailsAtOnceWithoutStartingADaemon()
+    {
+        var starter = new RecordingStarter();
+        var folder = Path.Combine(Path.GetTempPath(), new string('d', 120));
+        await using var client = new DaemonClient(new DaemonClientOptions { DataFolder = folder, ProcessStarter = starter });
+        var seen = TestSupport.Record(client);
+
+        var failure = await Assert.ThrowsAsync<DaemonUnavailableException>(() => client.StartAsync(CancellationToken.None));
+
+        Assert.Equal(FailureReason.PathTooLong, failure.Reason);
+        Assert.Contains(FykeHome.SocketPath(folder), failure.Message, StringComparison.Ordinal);
+        Assert.Equal(0, starter.Calls);
+        Assert.Equal((ConnectionState.Failed, FailureReason.PathTooLong), seen[^1]);
+    }
+
+    [Fact]
+    public async Task AReadThatTakesTooLongTimesOut()
+    {
+        await using var fake = new FakeDaemon();
+        fake.On("entries.search", async _ =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(30));
+            return new { };
+        });
+        fake.Start();
+        var options = TestSupport.Options(fake);
+        await using var client = new DaemonClient(new DaemonClientOptions
+        {
+            DataFolder = options.DataFolder,
+            SocketPath = options.SocketPath,
+            ProcessStarter = options.ProcessStarter,
+            CallTimeout = TimeSpan.FromMilliseconds(200),
+        });
+        await client.StartAsync(CancellationToken.None);
+
+        await Assert.ThrowsAsync<TimeoutException>(() => client.CallAsync("entries.search", null, CancellationToken.None));
+        Assert.Equal(ConnectionState.Connected, client.State);
     }
 
     [Fact]
@@ -501,16 +543,16 @@ public sealed class DaemonClientTests
     public async Task AfterTheDaemonDiesACallReconnectsStartsItAndRetries()
     {
         await using var fake = new FakeDaemon();
-        fake.On("ping", _ => new { ok = true });
+        fake.On("feeds.list", _ => new { ok = true });
         fake.Start();
         var starter = new RecordingStarter(_ => fake.Restart());
         await using var client = new DaemonClient(TestSupport.Options(fake, starter));
         var seen = TestSupport.Record(client);
         await client.StartAsync(CancellationToken.None);
-        await client.CallAsync("ping", null, CancellationToken.None);
+        await client.CallAsync("feeds.list", null, CancellationToken.None);
 
         fake.Kill();
-        var result = await client.CallAsync("ping", null, CancellationToken.None);
+        var result = await client.CallAsync("feeds.list", null, CancellationToken.None);
 
         Assert.True(result.GetProperty("ok").GetBoolean());
         Assert.Equal(ConnectionState.Connected, client.State);
@@ -554,17 +596,17 @@ public sealed class DaemonClientTests
     public async Task CallsThatFailTogetherShareOneReconnect()
     {
         await using var fake = new FakeDaemon();
-        fake.On("ping", _ => new { ok = true });
+        fake.On("feeds.list", _ => new { ok = true });
         fake.Start();
         var starter = new RecordingStarter(_ => fake.Restart());
         await using var client = new DaemonClient(TestSupport.Options(fake, starter));
         var seen = TestSupport.Record(client);
         await client.StartAsync(CancellationToken.None);
         // Fill the pool with several idle connections.
-        await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => client.CallAsync("ping", null, CancellationToken.None)));
+        await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => client.CallAsync("feeds.list", null, CancellationToken.None)));
 
         fake.Kill();
-        var results = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => client.CallAsync("ping", null, CancellationToken.None)));
+        var results = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => client.CallAsync("feeds.list", null, CancellationToken.None)));
 
         Assert.All(results, r => Assert.True(r.GetProperty("ok").GetBoolean()));
         Assert.Equal(1, seen.Count(s => s.State == ConnectionState.Reconnecting));
@@ -575,7 +617,7 @@ public sealed class DaemonClientTests
     public async Task WhenTheDaemonDoesNotComeBackTheClientFailsAndRetryWorks()
     {
         await using var fake = new FakeDaemon();
-        fake.On("ping", _ => new { ok = true });
+        fake.On("feeds.list", _ => new { ok = true });
         fake.Start();
         var options = TestSupport.Options(fake);
         await using var client = new DaemonClient(new DaemonClientOptions
@@ -591,7 +633,7 @@ public sealed class DaemonClientTests
         await client.StartAsync(CancellationToken.None);
 
         fake.Kill();
-        await Assert.ThrowsAsync<DaemonUnavailableException>(() => client.CallAsync("ping", null, CancellationToken.None));
+        await Assert.ThrowsAsync<DaemonUnavailableException>(() => client.CallAsync("feeds.list", null, CancellationToken.None));
 
         Assert.Equal(ConnectionState.Failed, client.State);
         Assert.Equal(
@@ -605,14 +647,14 @@ public sealed class DaemonClientTests
         fake.Restart();
         await client.StartAsync(CancellationToken.None);
         Assert.Equal(ConnectionState.Connected, client.State);
-        Assert.True((await client.CallAsync("ping", null, CancellationToken.None)).GetProperty("ok").GetBoolean());
+        Assert.True((await client.CallAsync("feeds.list", null, CancellationToken.None)).GetProperty("ok").GetBoolean());
     }
 
     [Fact]
     public async Task ADaemonThatCameBackOlderFailsTheReconnect()
     {
         await using var fake = new FakeDaemon();
-        fake.On("ping", _ => new { ok = true });
+        fake.On("feeds.list", _ => new { ok = true });
         fake.Start();
         var starter = new RecordingStarter(_ =>
         {
@@ -623,7 +665,7 @@ public sealed class DaemonClientTests
         await client.StartAsync(CancellationToken.None);
 
         fake.Kill();
-        await Assert.ThrowsAsync<DaemonTooOldException>(() => client.CallAsync("ping", null, CancellationToken.None));
+        await Assert.ThrowsAsync<DaemonTooOldException>(() => client.CallAsync("feeds.list", null, CancellationToken.None));
 
         Assert.Equal(ConnectionState.Failed, client.State);
     }

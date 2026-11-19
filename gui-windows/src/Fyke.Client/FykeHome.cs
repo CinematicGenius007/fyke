@@ -57,8 +57,27 @@ public static class FykeHome
         return Path.Combine(home, ".fyke");
     }
 
+    /// <summary>
+    /// The longest socket path, in UTF-8 bytes, that fits a socket address: 108 bytes with the
+    /// terminating zero. <c>fyke data move</c> refuses a folder past it (src/data_move.zig).
+    /// </summary>
+    public const int MaxSocketPathBytes = 107;
+
     /// <summary>The socket for a data folder.</summary>
     public static string SocketPath(string dataFolder) => Path.Combine(dataFolder, SocketFileName);
+
+    /// <summary>Fails at once for a socket no client can connect to, rather than waiting for a daemon.</summary>
+    /// <exception cref="DaemonUnavailableException">The path is longer than <see cref="MaxSocketPathBytes"/>.</exception>
+    public static void CheckSocketPath(string socketPath)
+    {
+        ArgumentNullException.ThrowIfNull(socketPath);
+        var length = System.Text.Encoding.UTF8.GetByteCount(socketPath);
+        if (length > MaxSocketPathBytes)
+        {
+            throw new DaemonUnavailableException(FailureReason.PathTooLong,
+                $"The socket path {socketPath} is {length} bytes, and a socket path holds at most {MaxSocketPathBytes}.");
+        }
+    }
 
     // A pointer that exists but cannot be read must not fall back to the default folder: a
     // daemon started there would open a second, empty database.

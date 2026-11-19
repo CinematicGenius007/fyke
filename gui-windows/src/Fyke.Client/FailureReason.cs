@@ -15,6 +15,9 @@ public static class FailureReason
     /// <summary>The daemon runs, but it is older than this app needs.</summary>
     public const string DaemonTooOld = "daemon-too-old";
 
+    /// <summary>The data folder's path is too long for the daemon's socket.</summary>
+    public const string PathTooLong = "path-too-long";
+
     /// <summary>The person or the app stopped the attempt.</summary>
     public const string Cancelled = "cancelled";
 }

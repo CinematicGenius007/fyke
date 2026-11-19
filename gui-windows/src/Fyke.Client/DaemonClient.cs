@@ -15,6 +15,14 @@ public sealed class DaemonClient : IDaemonClient
     /// <summary><c>api_version</c> in src/ops.zig, the oldest daemon this app works with.</summary>
     public const long RequiredApiVersion = 2;
 
+    // Operations that only read. A lost or late reply to one of these can be asked for again; a
+    // write may have committed already, so its caller learns that the outcome is unknown.
+    private static readonly HashSet<string> ReadOnlyMethods =
+    [
+        "stats.get", "entries.list", "entries.get", "entries.search", "entries.discussion", "feeds.list",
+        "feeds.preview", "folders.list", "config.get", "opml.export", "views.list", "views.get", "views.preview",
+    ];
+
     private readonly DaemonClientOptions _options;
     private readonly IDaemonProcessStarter _starter;
     private readonly CancellationTokenSource _lifetime = new();
@@ -123,17 +131,18 @@ public sealed class DaemonClient : IDaemonClient
             {
                 return await CallOnceAsync(request, method, timeout, epoch, ct).ConfigureAwait(false);
             }
+            catch (TimeoutException e) when (!ReadOnlyMethods.Contains(method))
+            {
+                throw new DaemonOutcomeUnknownException(method, e);
+            }
             catch (Exception e) when (IsTransportFailure(e))
             {
-                // A lost reply can follow a committed write. Only replay operations known to read.
-                if (method is not ("ping" or "stats.get" or "entries.list" or "entries.get"
-                    or "entries.search" or "entries.discussion" or "feeds.list" or "feeds.preview"
-                    or "folders.list" or "config.get" or "opml.export"
-                    or "views.list" or "views.get" or "views.preview"))
+                if (!ReadOnlyMethods.Contains(method))
                 {
                     await TryReconnectAsync(epoch, ct).ConfigureAwait(false);
                     throw new DaemonOutcomeUnknownException(method, e);
                 }
+
                 await ReconnectAsync(epoch, ct).ConfigureAwait(false);
                 if (attempt >= 1)
                 {
@@ -495,14 +504,15 @@ public sealed class DaemonClient : IDaemonClient
     {
         lock (_stateLock)
         {
-            if (_state == state && _reason == reason)
+            var failureMessage = state == ConnectionState.Failed ? message : null;
+            if (_state == state && _reason == reason && _failureMessage == failureMessage)
             {
                 return;
             }
 
             _state = state;
             _reason = reason;
-            _failureMessage = state == ConnectionState.Failed ? message : null;
+            _failureMessage = failureMessage;
             var old = _changed;
             _changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             old.TrySetResult();
@@ -519,6 +529,7 @@ public sealed class DaemonClient : IDaemonClient
     {
         _dataFolder = _options.DataFolder ?? FykeHome.Discover();
         _socketPath = _options.SocketPath ?? FykeHome.SocketPath(_dataFolder);
+        FykeHome.CheckSocketPath(_socketPath);
 
         var clock = Stopwatch.StartNew();
         var delay = _options.RetryDelay;
