@@ -9,14 +9,9 @@
     <!-- The published app is compiled ahead of time: it starts without a JIT and ships only the
          code it reaches, the smallest of the measured options. -->
     <PublishAot>true</PublishAot>
-    <!-- Code the compiler cannot see through would fail at run time, so it fails the build. -->
-    <WarningsAsErrors>$(WarningsAsErrors);IL2026;IL2057;IL2067;IL2070;IL2072;IL2075;IL2087;IL2091;IL3050;IL3051</WarningsAsErrors>
     <!-- Debug symbols stay in the build folder; a published copy is what people download. -->
     <DebugType Condition="'$(_IsPublishing)' == 'true'">none</DebugType>
     <Platforms>x64</Platforms>
-    <!-- Generated XAML code and the Windows App SDK targets raise warnings of their own, which the
-         shared warnings-as-errors setting would turn into failures. Fyke's own code stays clean. -->
-    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
     <!-- The Windows App SDK's components, not its metapackage: the app is self-contained, so every

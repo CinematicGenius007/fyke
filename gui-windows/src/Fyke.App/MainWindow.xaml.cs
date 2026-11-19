@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -43,6 +44,7 @@ public sealed partial class MainWindow : Window
         InitializeReader(ui);
         ViewModel.PropertyChanged += (_, _) => ShowState();
         ShowState();
+        SizeWindow();
         AppWindow.Closing += FinishFolderDisclosureBeforeClose;
         Closed += OnClosed;
         connection = KeepConnectionAsync(lifetime.Token);
@@ -74,6 +76,8 @@ public sealed partial class MainWindow : Window
         ShowReaderConnection();
     }
 
+    // An event handler, so nothing may escape it: an exception here would end the process
+    // while it closes. Each step runs whatever happened to the one before.
     private async void OnClosed(object sender, WindowEventArgs args)
     {
         readerReloadTimer.Stop();
@@ -81,10 +85,23 @@ public sealed partial class MainWindow : Window
         textSaveTimer.Stop();
         systemAppearance.ColorValuesChanged -= SystemColorsChanged;
         windowThemeSettings.Changed -= WindowThemeChanged;
-        await lifetime.CancelAsync();
-        await connection;
-        ViewModel.Dispose();
-        await client.DisposeAsync();
-        lifetime.Dispose();
+        try
+        {
+            await lifetime.CancelAsync();
+            await connection;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception e)
+        {
+            Trace.TraceError($"The connection to the daemon ended with an error: {e}");
+        }
+        finally
+        {
+            ViewModel.Dispose();
+            await client.DisposeAsync();
+            lifetime.Dispose();
+        }
     }
 }
