@@ -6,7 +6,8 @@ namespace Fyke.ViewModels;
 public enum ReaderScrollbarMode { WhileScrolling, Always, Never }
 
 public sealed record ReaderPreferences(bool FullText, bool LoadImages, ReaderTypography Typography,
-    ReaderTextLayout TextLayout, ReaderScrollbarMode Scrollbars, IReadOnlyList<long> CollapsedFolderIds, bool InvalidConfig);
+    ReaderTextLayout TextLayout, ReaderScrollbarMode Scrollbars, IReadOnlyList<long> CollapsedFolderIds,
+    ReaderAppearance Appearance, bool InvalidConfig);
 
 public sealed class ReaderSettings(IDaemonClient client)
 {
@@ -24,7 +25,7 @@ public sealed class ReaderSettings(IDaemonClient client)
         var autoImages = ui.ValueKind == JsonValueKind.Object
             && ui.TryGetProperty("loadImages", out var images) && images.ValueKind == JsonValueKind.True;
         return new ReaderPreferences(fullText.GetBoolean(), autoImages, ReaderTypography.FromConfig(config),
-            ReaderTextLayout.FromUi(ui), ReadScrollbars(ui), ReadCollapsedFolders(ui), hasError);
+            ReaderTextLayout.FromUi(ui), ReadScrollbars(ui), ReadCollapsedFolders(ui), ReaderAppearance.FromUi(ui), hasError);
     }
 
     private static long[] ReadCollapsedFolders(JsonElement ui)
@@ -71,6 +72,20 @@ public sealed class ReaderSettings(IDaemonClient client)
 
     public Task SetCollapsedFoldersAsync(IReadOnlyList<long> ids, CancellationToken ct) =>
         client.CallAsync("config.set", new { UiPatch = new Dictionary<string, IReadOnlyList<long>> { ["collapsedFolders"] = ids } }, ct);
+
+    public Task SetFollowSystemAsync(bool enabled, CancellationToken ct) =>
+        client.CallAsync("config.set", new { UiPatch = new Dictionary<string, bool> { ["followSystem"] = enabled } }, ct);
+
+    public Task SetThemeAsync(ReaderThemeSlot slot, string theme, CancellationToken ct)
+    {
+        var patch = new Dictionary<string, object> { [ReaderAppearance.WireName(slot)] = theme };
+        if (slot == ReaderThemeSlot.Fixed)
+        {
+            patch["followSystem"] = false;
+        }
+
+        return client.CallAsync("config.set", new { UiPatch = patch }, ct);
+    }
 
     public Task SetScrollbarsAsync(ReaderScrollbarMode mode, CancellationToken ct)
     {

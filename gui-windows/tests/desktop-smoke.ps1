@@ -231,6 +231,11 @@ try {
         }
         $selection.Select()
     }
+    Select-SettingsOption 'ThemePicker' 'Dark'
+    Wait-For 'Dark to persist as the fixed theme' {
+        $ui = (Read-ReaderConfig $configPath).ui
+        if ($ui.theme -eq 'dark' -and $ui.followSystem -eq $false -and $ui.weights.title -eq 2) { $true }
+    } | Out-Null
     Select-SettingsOption 'ReadingWeightPicker' 'Much lighter'
     Wait-For 'the changed Reading weight to preserve the other font roles' {
         $weights = (Read-ReaderConfig $configPath).ui.weights
@@ -295,6 +300,14 @@ try {
         }
     } | Out-Null
     Assert-TextWeight (Find-ById 'ArticleHeading') 800 'the unchanged article title weight'
+    Wait-For 'the open article heading to use the Dark theme ink' {
+        $heading = Find-ById 'ArticleHeading'
+        if ($heading -and !$heading.Current.IsOffscreen) {
+            $range = $heading.GetCurrentPattern([Windows.Automation.TextPattern]::Pattern).DocumentRange
+            $color = $range.GetAttributeValue([Windows.Automation.TextPattern]::ForegroundColorAttribute)
+            if (($color -is [int] -or $color -is [uint32]) -and ($color -band 0xffffff) -eq 0xf2f2f2) { $true }
+        }
+    } | Out-Null
     Wait-For 'an automatic image request from the open article' {
         $probe = Invoke-WebRequest -Uri ([Uri]::new([Uri]$FeedUrl, '/image-status')) -UseBasicParsing
         if ($probe.Content -eq 'requested') { $true }

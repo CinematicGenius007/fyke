@@ -123,6 +123,8 @@ Reading also controls body text size (14–28), line spacing (1.2–2.0), and ar
 
 Show scrollbars offers While scrolling, Always, and Never under Reading. It saves `ui.scrollbars` and applies to vertical bars in the sidebar, timeline, article, search, palette, and Settings. While scrolling uses Windows' automatic indicator behavior. Never hides the bars and allows wheel, touch, and keyboard scrolling.
 
+Appearance offers Light and Dark for the fixed, day, and night slots. The fixed choice turns off system following. Follow system appearance uses the day or night slot when Windows changes its app appearance. The content and title bar follow the resolved theme, and Windows handles the system high contrast override. Profiles that name Terminal use the Dark fallback. Other theme IDs use Light until their palettes are available. Rendering Newsprint, Terminal, and custom themes is planned.
+
 ## Background running and notifications
 
 Today `fyke service install` registers the daemon in the per-user Run key. The GUI keeps that: closing the window leaves the daemon running. Supervision after a crash, and notifications with every window closed, are planned slices (W4 below) with their own design.
@@ -192,7 +194,8 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W2e.2b | Article text size, line spacing, and column width | Profile and patch tests. Windows smoke changes the sliders and verifies the saved values and the open article's text size |
 | W2e.2c | Scrollbar visibility | Profile and patch tests. Windows smoke changes the saved mode and checks that overflowing Settings content still scrolls |
 | W2e.2d | Persistent folder disclosure | Profile tests and Windows smoke coverage for relaunch, keeping the open article, and pruning the saved folder after deletion |
-| W2e.2e | Planned appearance | Reopen a profile with saved themes. Compare narrow and wide layouts with macOS |
+| W2e.2e | Light and Dark appearance with system following | Profile and patch tests. Windows smoke changes the fixed theme and checks the open article uses its colors |
+| W2e.2f | Planned Newsprint, Terminal, and custom appearance | Reopen a profile with saved themes. Compare palettes, fonts, and narrow and wide layouts with macOS |
 | W2e.3 | Planned Agents settings and MCP configuration | Detect installed Codex, exercise missing and signed-out states, and paste a working MCP configuration |
 | W2e.4 | Planned storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
 | W2e.5 | Planned General background updating and link destination controls | Runtime and login behavior with W4, plus safe native link routing and browser fallback |

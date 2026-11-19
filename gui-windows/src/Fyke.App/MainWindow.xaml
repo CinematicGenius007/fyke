@@ -413,7 +413,38 @@
                             </StackPanel>
                         </StackPanel>
                         <StackPanel x:Name="ReadingSettingsBody" MaxWidth="640" Spacing="8" Visibility="Collapsed">
-                            <TextBlock Text="Font weights" Style="{StaticResource SettingsTitle}" AutomationProperties.HeadingLevel="Level2" />
+                            <TextBlock Text="Appearance" Style="{StaticResource SettingsTitle}" AutomationProperties.HeadingLevel="Level2" />
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <TextBlock Text="Fixed theme" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center" />
+                                <ComboBox Grid.Column="1" x:Name="ThemePicker" Style="{StaticResource SettingsPicker}" IsEnabled="False"
+                                          SelectionChanged="AppearanceThemeChanged" AutomationProperties.Name="Fixed theme"
+                                          AutomationProperties.AutomationId="ThemePicker" />
+                            </Grid>
+                            <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <TextBlock Text="Follow system appearance" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center" />
+                                <ToggleSwitch Grid.Column="1" x:Name="FollowSystemToggle" Toggled="FollowSystemChanged" IsEnabled="False"
+                                              MinWidth="0" OnContent="" OffContent="" AutomationProperties.Name="Follow system appearance"
+                                              AutomationProperties.AutomationId="FollowSystemToggle" />
+                            </Grid>
+                            <StackPanel x:Name="SystemThemeChoices" Spacing="8">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Day" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center" />
+                                    <ComboBox Grid.Column="1" x:Name="DayThemePicker" Style="{StaticResource SettingsPicker}" IsEnabled="False"
+                                              SelectionChanged="AppearanceThemeChanged" AutomationProperties.Name="Day theme" />
+                                </Grid>
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Night" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center" />
+                                    <ComboBox Grid.Column="1" x:Name="NightThemePicker" Style="{StaticResource SettingsPicker}" IsEnabled="False"
+                                              SelectionChanged="AppearanceThemeChanged" AutomationProperties.Name="Night theme" />
+                                </Grid>
+                            </StackPanel>
+                            <TextBlock Text="Font weights" Style="{StaticResource SettingsTitle}" Margin="0,16,0,0"
+                                       AutomationProperties.HeadingLevel="Level2" />
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                 <TextBlock Text="Reading" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center"

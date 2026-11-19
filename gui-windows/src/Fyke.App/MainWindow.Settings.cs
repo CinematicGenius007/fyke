@@ -31,6 +31,7 @@ public sealed partial class MainWindow
         ReaderShell.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(SettingsKeyDown), true);
         Root.PreviewKeyDown += SettingsShortcutKeyDown;
         InitializeTextLayoutSettings();
+        InitializeAppearance();
         SettingsTabs.SelectionChanged += SettingsTabChanged;
         SettingsTabs.SelectedItem = GeneralSettingsTab;
 
@@ -178,7 +179,7 @@ public sealed partial class MainWindow
             loaded = loaded with
             {
                 LoadImages = previous.LoadImages, Typography = previous.Typography, TextLayout = previous.TextLayout,
-                Scrollbars = previous.Scrollbars,
+                Scrollbars = previous.Scrollbars, Appearance = previous.Appearance,
             };
         }
 
@@ -188,6 +189,7 @@ public sealed partial class MainWindow
         }
 
         preferences = loaded;
+        ApplyAppearance(loaded.Appearance);
         readerFonts.Apply(loaded.Typography);
         ApplyReaderTextLayout(loaded.TextLayout);
         articleRenderer.SetAutomaticImages(loaded.LoadImages);
@@ -198,6 +200,7 @@ public sealed partial class MainWindow
     {
         FullTextToggle.IsOn = loaded.FullText;
         LoadImagesToggle.IsOn = loaded.LoadImages;
+        ApplyAppearanceControls(loaded.Appearance);
         ApplyTextLayoutControls(loaded.TextLayout);
         ScrollbarsPicker.SelectedIndex = (int)loaded.Scrollbars;
         foreach (var (picker, role) in weightPickers)
@@ -209,6 +212,7 @@ public sealed partial class MainWindow
     private void EnableSettingsControls(bool enabled)
     {
         FullTextToggle.IsEnabled = LoadImagesToggle.IsEnabled = ScrollbarsPicker.IsEnabled = enabled;
+        FollowSystemToggle.IsEnabled = ThemePicker.IsEnabled = DayThemePicker.IsEnabled = NightThemePicker.IsEnabled = enabled;
         foreach (var picker in weightPickers.Keys)
         {
             picker.IsEnabled = enabled;

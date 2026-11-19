@@ -78,6 +78,8 @@ public sealed partial class MainWindow : Window
         readerReloadTimer.Stop();
         bulkNoticeTimer.Stop();
         textSaveTimer.Stop();
+        systemAppearance.ColorValuesChanged -= SystemColorsChanged;
+        appearanceAccessibility.HighContrastChanged -= HighContrastChanged;
         await lifetime.CancelAsync();
         await connection;
         ViewModel.Dispose();
