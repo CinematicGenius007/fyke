@@ -178,24 +178,38 @@ try {
         $toggle.GetCurrentPattern([Windows.Automation.TogglePattern]::Pattern).Toggle()
     }
 
+    function Read-ReaderConfig([string]$path) {
+        # The daemon saves by rename, which must remain possible while the test reads the file.
+        $share = [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete
+        $stream = [IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, $share)
+        try {
+            $reader = [IO.StreamReader]::new($stream)
+            try { $reader.ReadToEnd() | ConvertFrom-Json }
+            finally { $reader.Dispose() }
+        } finally { $stream.Dispose() }
+    }
+
     $configPath = Join-Path $testHome 'config.json'
     Invoke-Button 'SettingsButton'
-    $coveredHeading = Find-ById 'ArticleHeading'
-    if ($coveredHeading -and !$coveredHeading.Current.IsOffscreen) { throw 'Settings did not cover the article.' }
+    Wait-For 'Settings to cover the article' {
+        $close = Find-ById 'CloseSettingsButton'
+        $coveredHeading = Find-ById 'ArticleHeading'
+        if ($close -and !$close.Current.IsOffscreen -and (!$coveredHeading -or $coveredHeading.Current.IsOffscreen)) { $true }
+    } | Out-Null
     Toggle-Setting 'FullTextToggle'
     Wait-For 'the changed full-text setting' {
-        $config = Get-Content $configPath -Raw | ConvertFrom-Json
+        $config = Read-ReaderConfig $configPath
         if ($config.full_text -eq $false -and $config.ui.weights.title -eq 2) { $true }
     } | Out-Null
     Toggle-Setting 'FullTextToggle'
     Wait-For 'the restored full-text setting' {
-        if ((Get-Content $configPath -Raw | ConvertFrom-Json).full_text -eq $true) { $true }
+        if ((Read-ReaderConfig $configPath).full_text -eq $true) { $true }
     } | Out-Null
 
     Invoke-WebRequest -Uri ([Uri]::new([Uri]$FeedUrl, '/enable-automatic-images')) -Method Post -UseBasicParsing | Out-Null
     Toggle-Setting 'LoadImagesToggle'
     Wait-For 'automatic images to be saved with existing preferences' {
-        $config = Get-Content $configPath -Raw | ConvertFrom-Json
+        $config = Read-ReaderConfig $configPath
         if ($config.ui.loadImages -eq $true -and $config.ui.weights.title -eq 2) { $true }
     } | Out-Null
     Invoke-Button 'CloseSettingsButton'
