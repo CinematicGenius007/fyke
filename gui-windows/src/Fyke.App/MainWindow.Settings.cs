@@ -240,10 +240,20 @@ public sealed partial class MainWindow
 
         readingSettings = true;
         var ct = lifetime.Token;
-        EnableSettingsControls(false);
-        ShowSettingsStatus(save is null ? "Loading settings…" : "Saving setting…");
         try
         {
+            if (save is not null)
+            {
+                // WinUI still uses the originating control until its selection event returns.
+                await Task.Yield();
+                if (!readerConnected || ct.IsCancellationRequested)
+                {
+                    return;
+                }
+            }
+
+            EnableSettingsControls(false);
+            ShowSettingsStatus(save is null ? "Loading settings…" : "Saving setting…");
             if (save is not null)
             {
                 await SaveSettingAsync(save, ct);
