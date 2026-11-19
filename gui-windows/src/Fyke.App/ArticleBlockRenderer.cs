@@ -298,7 +298,7 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
         row.Children.Add(action);
         var button = new Button { Style = Shared("ArticleImageLoad"), Content = row, FontFamily = ui };
         weights.Bind(button, Control.FontWeightProperty, nameof(ReaderFontWeights.Ui));
-        Show("Load", isEnabled: true);
+        Show("Load", $"Load image · {label}", isEnabled: true);
         var image = new Image { Visibility = Visibility.Collapsed, Stretch = Stretch.Uniform, MaxHeight = 720 };
         var requested = false;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(image, label);
@@ -318,7 +318,7 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
 
             image.Source = null;
             image.Visibility = Visibility.Collapsed;
-            Show("Couldn’t load. Try again", isEnabled: true);
+            Show("Try again", $"Image couldn’t load. Try again · {label}", isEnabled: true);
         };
         button.Click += (_, _) =>
         {
@@ -337,16 +337,17 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
 
         void Load()
         {
-            Show("Loading…", isEnabled: false);
+            Show("Loading…", $"Loading image · {label}", isEnabled: false);
             image.Visibility = Visibility.Visible;
             image.Source = new BitmapImage(address);
         }
 
-        void Show(string state, bool isEnabled)
+        // The row shows the description and a short action; Narrator hears the whole state.
+        void Show(string state, string spoken, bool isEnabled)
         {
             action.Text = state;
             button.IsEnabled = isEnabled;
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, $"Image: {label}. {state}");
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, spoken);
         }
 
         void ApplyPreference(bool enabled)
@@ -364,7 +365,7 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
             {
                 image.Source = null;
                 image.Visibility = Visibility.Collapsed;
-                Show("Load", isEnabled: true);
+                Show("Load", $"Load image · {label}", isEnabled: true);
                 button.Visibility = Visibility.Visible;
             }
         }
