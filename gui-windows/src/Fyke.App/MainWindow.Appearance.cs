@@ -83,7 +83,7 @@ public sealed partial class MainWindow
     /// Light dictionary; Terminal and dark themes use Dark.</remarks>
     private void Paint(ReaderPalette palette)
     {
-        var dictionary = (ResourceDictionary)tokenThemes[palette.IsDark ? "Dark" : "Light"];
+        var dictionary = Theme(palette.IsDark ? "Dark" : "Light");
         foreach (var (token, rgba) in palette.Colors)
         {
             var color = ColorHelper.FromArgb((byte)rgba, (byte)(rgba >> 24), (byte)(rgba >> 16), (byte)(rgba >> 8));
@@ -93,6 +93,13 @@ public sealed partial class MainWindow
             }
         }
     }
+
+    // The Light or Dark dictionary of Themes/Tokens.xaml.
+    private ResourceDictionary Theme(string name) =>
+        tokenThemes.TryGetValue(name, out var value) && value is ResourceDictionary dictionary
+            ? dictionary
+            : throw new InvalidOperationException(
+                $"The {name} token dictionary is {value?.GetType().FullName ?? "missing"}, not a ResourceDictionary.");
 
     private void ApplyAppearanceControls(ReaderPreferences saved)
     {

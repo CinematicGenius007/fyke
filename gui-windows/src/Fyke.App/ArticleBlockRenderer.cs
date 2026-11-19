@@ -79,7 +79,7 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
         }
     }
 
-    private static Style Shared(string key) => (Style)Application.Current.Resources[key];
+    private static Style Shared(string key) => AppResources.FromApp<Style>(key);
 
     private StackPanel Flow(IEnumerable<ArticleBlock> nodes)
     {

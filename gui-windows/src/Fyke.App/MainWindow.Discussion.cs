@@ -193,7 +193,7 @@ public sealed partial class MainWindow
         var comment = row.Comment;
         var depth = Math.Clamp(comment.Depth, 0, VisibleReplyDepth);
         var container = new Grid();
-        var lineStyle = (Style)Application.Current.Resources["DiscussionReplyLine"];
+        var lineStyle = AppResources.FromApp<Style>("DiscussionReplyLine");
         for (var level = 0; level < depth; level++)
         {
             container.Children.Add(new Border { Style = lineStyle, Margin = new Thickness(level * ReplyIndent, 0, 0, 0) });
@@ -232,7 +232,7 @@ public sealed partial class MainWindow
         {
             Content = label, Padding = new Thickness(4), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
             BorderThickness = new Thickness(0), HorizontalAlignment = HorizontalAlignment.Left,
-            CornerRadius = (CornerRadius)Application.Current.Resources["RadiusControl"],
+            CornerRadius = AppResources.FromApp<CornerRadius>("RadiusControl"),
         };
         var body = new StackPanel { Spacing = 8 };
         content.Children.Add(toggle);

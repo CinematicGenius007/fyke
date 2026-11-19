@@ -202,7 +202,7 @@ public sealed partial class MainWindow
     {
         if (sender is TextBlock title && args.NewValue is SearchHit hit)
         {
-            title.Style = (Style)Root.Resources[hit.Article.Read ? "ReadSearchTitle" : "UnreadSearchTitle"];
+            title.Style = Root.Resources.Get<Style>(hit.Article.Read ? "ReadSearchTitle" : "UnreadSearchTitle");
         }
     }
 

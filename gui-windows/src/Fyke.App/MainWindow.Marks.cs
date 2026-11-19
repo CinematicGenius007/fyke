@@ -117,7 +117,7 @@ public sealed partial class MainWindow
     private void UpdateMarkButton(Button button, FontIcon icon, bool active, string glyph, string label)
     {
         icon.Glyph = glyph;
-        icon.Style = (Style)Root.Resources[active ? "ActiveArticleMark" : "InactiveArticleMark"];
+        icon.Style = Root.Resources.Get<Style>(active ? "ActiveArticleMark" : "InactiveArticleMark");
         AutomationProperties.SetName(button, label);
         ToolTipService.SetToolTip(button, label);
     }

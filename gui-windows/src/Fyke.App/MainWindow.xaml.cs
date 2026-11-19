@@ -37,7 +37,7 @@ public sealed partial class MainWindow : Window
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
         // StackPanel has no font of its own, so the text elements take it from the token.
-        var ui = (FontFamily)Application.Current.Resources["FontUi"];
+        var ui = AppResources.FromApp<FontFamily>("FontUi");
         MessageText.FontFamily = ui;
         DetailText.FontFamily = ui;
         RetryButton.FontFamily = ui;

@@ -54,8 +54,8 @@ public sealed partial class MainWindow
         Destinations.FontFamily = ui;
         Timeline.FontFamily = ui;
         var resources = Application.Current.Resources;
-        var reading = (FontFamily)resources["FontReading"];
-        var code = (FontFamily)resources["FontCode"];
+        var reading = resources.Get<FontFamily>("FontReading");
+        var code = resources.Get<FontFamily>("FontCode");
         readerFonts = ReaderFontWeights.Shared;
         articleRenderer = new ArticleBlockRenderer(reading, ui, code, readerFonts, readerTextStyle,
             linkAction: DiscussionLinkAction, trackImages: true);
