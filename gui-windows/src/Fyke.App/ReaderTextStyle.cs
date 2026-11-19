@@ -40,6 +40,11 @@ public sealed partial class ReaderTextStyle : INotifyPropertyChanged
             Source = this, Path = new PropertyPath(compact ? nameof(CompactSize) : nameof(Size)),
         });
 
-    internal void BindLineHeight(TextBlock text) =>
+    /// <summary>Gives every line the same height, so inline code cannot push a line down and a list
+    /// marker with the same height sits on the first line's baseline.</summary>
+    internal void BindLineHeight(TextBlock text)
+    {
+        text.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
         text.SetBinding(TextBlock.LineHeightProperty, new Binding { Source = this, Path = new PropertyPath(nameof(LineHeight)) });
+    }
 }

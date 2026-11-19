@@ -51,10 +51,10 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
                 "p" => Text(node.Children ?? []),
                 "h" => Heading(node),
                 "code" => Code(node.Text),
-                "quote" => Flow(node.Children ?? [], new Thickness(16, 0, 0, 0)),
+                "quote" => Quote(node.Children ?? []),
                 "list" => List(node),
                 "table" => Table(node),
-                "hr" => new Border { Style = (Style)Application.Current.Resources["ArticleRule"] },
+                "hr" => new Border { Style = Shared("ArticleRule") },
                 "img" => ImagePlaceholder(node),
                 "embed" => LinkBlock(node.Href),
                 _ => (UIElement?)null,
@@ -79,11 +79,26 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
         }
     }
 
-    private StackPanel Flow(IEnumerable<ArticleBlock> nodes, Thickness margin = default)
+    private static Style Shared(string key) => (Style)Application.Current.Resources[key];
+
+    private StackPanel Flow(IEnumerable<ArticleBlock> nodes)
     {
-        var panel = new StackPanel { Spacing = 12, Margin = margin };
+        var panel = new StackPanel { Spacing = 12 };
         Append(panel, nodes);
         return panel;
+    }
+
+    // A bar in the control colour, then the quoted blocks in the softer ink.
+    private Grid Quote(IEnumerable<ArticleBlock> nodes)
+    {
+        var quote = new Grid { ColumnSpacing = 16 };
+        quote.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        quote.ColumnDefinitions.Add(new ColumnDefinition());
+        var body = new ContentPresenter { Style = Shared("ArticleQuoteBody"), Content = Flow(nodes) };
+        Grid.SetColumn(body, 1);
+        quote.Children.Add(new Border { Style = Shared("ArticleQuoteBar") });
+        quote.Children.Add(body);
+        return quote;
     }
 
     private TextBlock Text(IEnumerable<ArticleBlock> nodes, double? headingSize = null, bool compact = false)
@@ -173,37 +188,48 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
         return text;
     }
 
-    private ScrollViewer Code(string? value)
+    // On a surface panel, scrolling sideways when a line is wider than the column.
+    private Border Code(string? value)
     {
         var text = new TextBlock
         {
             Text = value ?? string.Empty, FontFamily = code, FontSize = 14,
-            IsTextSelectionEnabled = true, Margin = new Thickness(16, 12, 16, 12),
+            LineHeight = 23, LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+            IsTextSelectionEnabled = true, Margin = new Thickness(20, 16, 20, 16),
         };
         weights.Bind(text, TextBlock.FontWeightProperty, nameof(ReaderFontWeights.Code));
-        return new ScrollViewer
+        return new Border
         {
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            Content = text,
+            Style = Shared("ArticleCode"),
+            Child = new ScrollViewer
+            {
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollMode = ScrollMode.Auto,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                VerticalScrollMode = ScrollMode.Disabled,
+                Content = text,
+            },
         };
     }
 
     private StackPanel List(ArticleBlock node)
     {
-        var list = new StackPanel { Spacing = 8 };
+        var list = new StackPanel { Spacing = 6 };
         var index = 0;
         foreach (var item in node.Items ?? [])
         {
-            var row = new Grid { ColumnSpacing = 8 };
+            var row = new Grid { ColumnSpacing = 10 };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition());
+            // The marker shares the item text's font, size and line box, so both share a baseline.
             var marker = new TextBlock
             {
                 Text = node.Ordered == true ? (++index).ToString(CultureInfo.CurrentCulture) + "." : "•",
                 FontFamily = reading,
+                Style = Shared("ArticleListMarker"),
             };
             textStyle.BindSize(marker);
+            textStyle.BindLineHeight(marker);
             weights.Bind(marker, TextBlock.FontWeightProperty, nameof(ReaderFontWeights.Reading));
             var content = Flow(item);
             Grid.SetColumn(content, 1);
@@ -261,9 +287,18 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
 
         var panel = new StackPanel { Spacing = 8 };
         var label = string.IsNullOrWhiteSpace(node.Alt) ? "Image" : node.Alt;
-        var loadLabel = $"Load image · {label}";
-        var button = new Button { Content = loadLabel, FontFamily = ui, Height = 32 };
+        // The description on the left and the action on the right, as on macOS.
+        var description = new TextBlock { Text = label, TextTrimming = TextTrimming.CharacterEllipsis, MaxLines = 1 };
+        var action = new TextBlock { Style = Shared("ArticleImageAction"), Margin = new Thickness(12, 0, 0, 0) };
+        var row = new Grid();
+        row.ColumnDefinitions.Add(new ColumnDefinition());
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(action, 1);
+        row.Children.Add(description);
+        row.Children.Add(action);
+        var button = new Button { Style = Shared("ArticleImageLoad"), Content = row, FontFamily = ui };
         weights.Bind(button, Control.FontWeightProperty, nameof(ReaderFontWeights.Ui));
+        Show("Load", isEnabled: true);
         var image = new Image { Visibility = Visibility.Collapsed, Stretch = Stretch.Uniform, MaxHeight = 720 };
         var requested = false;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(image, label);
@@ -283,8 +318,7 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
 
             image.Source = null;
             image.Visibility = Visibility.Collapsed;
-            button.Content = "Image couldn’t load. Try again";
-            button.IsEnabled = true;
+            Show("Couldn’t load. Try again", isEnabled: true);
         };
         button.Click += (_, _) =>
         {
@@ -303,10 +337,16 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
 
         void Load()
         {
-            button.Content = "Loading image…";
-            button.IsEnabled = false;
+            Show("Loading…", isEnabled: false);
             image.Visibility = Visibility.Visible;
             image.Source = new BitmapImage(address);
+        }
+
+        void Show(string state, bool isEnabled)
+        {
+            action.Text = state;
+            button.IsEnabled = isEnabled;
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, $"Image: {label}. {state}");
         }
 
         void ApplyPreference(bool enabled)
@@ -324,8 +364,7 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
             {
                 image.Source = null;
                 image.Visibility = Visibility.Collapsed;
-                button.Content = loadLabel;
-                button.IsEnabled = true;
+                Show("Load", isEnabled: true);
                 button.Visibility = Visibility.Visible;
             }
         }

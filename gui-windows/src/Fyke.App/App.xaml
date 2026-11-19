@@ -12,6 +12,67 @@
                 <Setter Property="Background" Value="{ThemeResource HairlineBrush}" />
                 <Setter Property="Margin" Value="0,8" />
             </Style>
+            <!-- Article blocks, as the macOS reader draws them (gui/Sources/Reader/ReaderPane.swift). -->
+            <Style x:Key="ArticleQuoteBar" TargetType="Border">
+                <Setter Property="Width" Value="2" />
+                <Setter Property="Background" Value="{ThemeResource ControlBrush}" />
+            </Style>
+            <Style x:Key="ArticleQuoteBody" TargetType="ContentPresenter">
+                <Setter Property="Foreground" Value="{ThemeResource InkSoftBrush}" />
+            </Style>
+            <Style x:Key="ArticleCode" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource SurfaceBrush}" />
+                <Setter Property="CornerRadius" Value="8" />
+            </Style>
+            <Style x:Key="ArticleListMarker" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource MutedBrush}" />
+            </Style>
+            <Style x:Key="ArticleImageAction" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource UnreadBrush}" />
+            </Style>
+            <!-- A full-width row: the image's description on the left, the action on the right. -->
+            <Style x:Key="ArticleImageLoad" TargetType="Button">
+                <Setter Property="Background" Value="{ThemeResource SurfaceBrush}" />
+                <Setter Property="Foreground" Value="{ThemeResource MutedBrush}" />
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="Padding" Value="14,10" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="UseSystemFocusVisuals" Value="True" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Grid x:Name="Chrome" Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}">
+                                <ContentPresenter x:Name="Content" Padding="{TemplateBinding Padding}"
+                                                  Content="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}"
+                                                  HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalContentAlignment="Center" />
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal" />
+                                        <VisualState x:Name="PointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="Chrome.Background" Value="{ThemeResource SelectedBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <VisualState.Setters>
+                                                <Setter Target="Chrome.Background" Value="{ThemeResource SelectedStrongBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Disabled">
+                                            <VisualState.Setters>
+                                                <Setter Target="Content.Opacity" Value="0.6" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
             <Style x:Key="DiscussionReplyLine" TargetType="Border">
                 <Setter Property="Width" Value="1" />
                 <Setter Property="HorizontalAlignment" Value="Left" />
