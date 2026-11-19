@@ -119,6 +119,8 @@ General settings offer full-article fetching, automatic article image loading, O
 
 Reading offers Much lighter, Lighter, Normal, Bolder, and Much bolder for Reading, Titles, App, and Code. Each change patches only its named role under `ui.weights`. The open article and rendered discussion text bind to the same font-weight values as the other reader controls, so a confirmed change applies without reopening the article.
 
+Reading also controls body text size (14–28), line spacing (1.2–2.0), and article column width (480–800). The preview updates the existing article and discussion controls. Short bursts of slider movement save together through `ui_patch`; closing Settings or switching tabs submits pending values. The daemon preserves other interface settings and the app reads back the saved values.
+
 ## Background running and notifications
 
 Today `fyke service install` registers the daemon in the per-user Run key. The GUI keeps that: closing the window leaves the daemon running. Supervision after a crash, and notifications with every window closed, are planned slices (W4 below) with their own design.
@@ -185,7 +187,8 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W2d | OPML import and export | Operation and file-write tests, daemon round-trip with nested folders, manual Windows checks for picker cancellation and overwrite confirmation |
 | W2e.1 | Settings navigation and General preferences | Profile and daemon patch tests, Windows smoke coverage for changing settings and returning to the open article |
 | W2e.2a | Reading tab and saved font weights | Wire and write tests preserve other roles. The Windows smoke test changes the weight on an open article |
-| W2e.2b | Planned appearance, remaining reading preferences, and persistent folder disclosure | Reopen a profile with saved themes and collapsed folders. Compare narrow and wide layouts with macOS |
+| W2e.2b | Article text size, line spacing, and column width | Profile and patch tests. Windows smoke changes the sliders and verifies the saved values and the open article's text size |
+| W2e.2c | Planned appearance, remaining reading preferences, and persistent folder disclosure | Reopen a profile with saved themes and collapsed folders. Compare narrow and wide layouts with macOS |
 | W2e.3 | Planned Agents settings and MCP configuration | Detect installed Codex, exercise missing and signed-out states, and paste a working MCP configuration |
 | W2e.4 | Planned storage and data move | Clean-profile and existing-profile tests, failed moves leave existing data usable |
 | W2e.5 | Planned General background updating and link destination controls | Runtime and login behavior with W4, plus safe native link routing and browser fallback |

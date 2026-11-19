@@ -150,6 +150,8 @@ try {
 
     Assert-TextWeight $bodyText 500 'the article body'
     Assert-TextWeight $articleHeading 800 'the article heading'
+    $bodyRange = $bodyText.GetCurrentPattern([Windows.Automation.TextPattern]::Pattern).DocumentRange
+    $originalBodySize = $bodyRange.GetAttributeValue([Windows.Automation.TextPattern]::FontSizeAttribute)
     $imageButton = [Windows.Automation.PropertyCondition]::new(
         [Windows.Automation.AutomationElement]::NameProperty, ("Load image " + [char]0x00b7 + " Fixture illustration"))
     Wait-For 'the image load control' {
@@ -231,7 +233,24 @@ try {
         $weights = (Read-ReaderConfig $configPath).ui.weights
         if ($weights.reading -eq -2 -and $weights.title -eq 2 -and $weights.ui -eq -1 -and $weights.code -eq -2) { $true }
     } | Out-Null
+
+    function Set-ReadingSlider([string]$id, [double]$value) {
+        $slider = Wait-For "$id to be enabled" {
+            $control = Find-ById $id
+            if ($control -and $control.Current.IsEnabled) { $control }
+        }
+        $slider.GetCurrentPattern([Windows.Automation.RangeValuePattern]::Pattern).SetValue($value)
+    }
+
+    Set-ReadingSlider 'TextSizeSlider' 24
+    Set-ReadingSlider 'LineSpacingSlider' 1.8
+    Set-ReadingSlider 'ColumnWidthSlider' 720
     Invoke-Button 'CloseSettingsButton'
+    Wait-For 'article layout to persist alongside the updated font weight' {
+        $ui = (Read-ReaderConfig $configPath).ui
+        if ($ui.textSize -eq 24 -and [Math]::Abs($ui.lineSpacing - 1.8) -lt 0.001 -and
+            $ui.columnWidth -eq 720 -and $ui.weights.reading -eq -2) { $true }
+    } | Out-Null
     Wait-For 'Settings to return to the open article and its feed' {
         $heading = Find-ById 'ArticleHeading'
         $scope = Find-ById 'TimelineHeading'
@@ -244,6 +263,14 @@ try {
         if ($body -and !$body.Current.IsOffscreen) {
             $text = $body.GetCurrentPattern([Windows.Automation.TextPattern]::Pattern)
             if ($text.DocumentRange.GetAttributeValue([Windows.Automation.TextPattern]::FontWeightAttribute) -eq 200) { $true }
+        }
+    } | Out-Null
+    Wait-For 'the open article to use the changed text size' {
+        $body = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $paragraph)
+        if ($body -and !$body.Current.IsOffscreen) {
+            $range = $body.GetCurrentPattern([Windows.Automation.TextPattern]::Pattern).DocumentRange
+            $size = $range.GetAttributeValue([Windows.Automation.TextPattern]::FontSizeAttribute)
+            if ($size -is [double] -and [Math]::Abs($size - ($originalBodySize * 24 / 19)) -lt 0.1) { $true }
         }
     } | Out-Null
     Assert-TextWeight (Find-ById 'ArticleHeading') 800 'the unchanged article title weight'

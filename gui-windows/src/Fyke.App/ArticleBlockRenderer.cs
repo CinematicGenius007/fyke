@@ -13,7 +13,7 @@ namespace Fyke.App;
 
 /// <summary>Turns the daemon's article nodes into native controls.</summary>
 internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, FontFamily code,
-    ReaderFontWeights weights, double textSize = 20, Func<Uri, Action?>? linkAction = null, bool trackImages = false)
+    ReaderFontWeights weights, ReaderTextStyle textStyle, Func<Uri, Action?>? linkAction = null, bool trackImages = false)
 {
     private readonly List<Action<bool>> imagePreferences = [];
     private bool loadImages;
@@ -86,15 +86,28 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
         return panel;
     }
 
-    private TextBlock Text(IEnumerable<ArticleBlock> nodes, double? size = null, bool heading = false)
+    private TextBlock Text(IEnumerable<ArticleBlock> nodes, double? headingSize = null, bool compact = false)
     {
         var text = new TextBlock
         {
             FontFamily = reading,
-            FontSize = size ?? textSize,
             IsTextSelectionEnabled = true,
             TextWrapping = TextWrapping.Wrap,
         };
+        var heading = headingSize.HasValue;
+        if (headingSize is double size)
+        {
+            text.FontSize = size;
+        }
+        else
+        {
+            textStyle.BindSize(text, compact);
+            if (!compact)
+            {
+                textStyle.BindLineHeight(text);
+            }
+        }
+
         weights.Bind(text, TextBlock.FontWeightProperty, heading ? nameof(ReaderFontWeights.Title) : nameof(ReaderFontWeights.Reading));
         AppendInlines(text.Inlines, nodes, heading ? nameof(ReaderFontWeights.Title) : nameof(ReaderFontWeights.ReadingStrong));
         return text;
@@ -155,7 +168,7 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
     private TextBlock Heading(ArticleBlock node)
     {
         var level = node.Level ?? 2;
-        var text = Text(node.Children ?? [], level <= 2 ? 27 : level == 3 ? 23 : 20, heading: true);
+        var text = Text(node.Children ?? [], level <= 2 ? 27 : level == 3 ? 23 : 20);
         text.Margin = new Thickness(0, 8, 0, 0);
         return text;
     }
@@ -188,8 +201,9 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
             var marker = new TextBlock
             {
                 Text = node.Ordered == true ? (++index).ToString(CultureInfo.CurrentCulture) + "." : "•",
-                FontFamily = reading, FontSize = textSize,
+                FontFamily = reading,
             };
+            textStyle.BindSize(marker);
             weights.Bind(marker, TextBlock.FontWeightProperty, nameof(ReaderFontWeights.Reading));
             var content = Flow(item);
             Grid.SetColumn(content, 1);
@@ -216,7 +230,7 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
             table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             for (var column = 0; column < rows[row].Length; column++)
             {
-                var cell = Text(rows[row][column].SelectMany(block => block.Kind == "p" ? block.Children ?? [] : [block]), 17);
+                var cell = Text(rows[row][column].SelectMany(block => block.Kind == "p" ? block.Children ?? [] : [block]), compact: true);
                 Grid.SetRow(cell, row);
                 Grid.SetColumn(cell, column);
                 table.Children.Add(cell);

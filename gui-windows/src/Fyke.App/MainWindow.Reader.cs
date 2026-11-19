@@ -28,6 +28,7 @@ public sealed partial class MainWindow
     private int readerChangesPending;
     private ReaderData reader = null!;
     private ReaderFontWeights readerFonts = null!;
+    private readonly ReaderTextStyle readerTextStyle = new();
     private bool preferencesRead;
     private CancellationTokenSource? readerRequest;
     private CancellationTokenSource? articleRequest;
@@ -57,7 +58,8 @@ public sealed partial class MainWindow
         var reading = (FontFamily)resources["FontReading"];
         var code = (FontFamily)resources["FontCode"];
         readerFonts = (ReaderFontWeights)Root.Resources["ReaderFonts"];
-        articleRenderer = new ArticleBlockRenderer(reading, ui, code, readerFonts, linkAction: DiscussionLinkAction, trackImages: true);
+        articleRenderer = new ArticleBlockRenderer(reading, ui, code, readerFonts, readerTextStyle,
+            linkAction: DiscussionLinkAction, trackImages: true);
         InitializeSettings();
         InitializeDiscussion(reading, ui, code);
         InitializeSearch();
@@ -92,6 +94,8 @@ public sealed partial class MainWindow
             CloseAddFeed(restoreFocus: false);
             CloseCatalogEdit(restoreFocus: false);
             CloseSettings(restoreFocus: false);
+            textSaveTimer.Stop();
+            pendingTextChanges.Clear();
             preferencesRead = false;
             HideBulkNotice();
             readerReloadTimer.Stop();

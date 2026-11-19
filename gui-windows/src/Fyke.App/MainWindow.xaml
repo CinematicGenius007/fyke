@@ -239,7 +239,7 @@
                 <ScrollViewer x:Name="ArticleScroller" Grid.Row="1" IsTabStop="True" UseSystemFocusVisuals="True"
                                   AutomationProperties.Name="Article reader"
                               HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="24,20" Spacing="12" MaxWidth="640" HorizontalAlignment="Stretch"
+                    <StackPanel x:Name="ArticleColumn" Margin="24,20" Spacing="12" MaxWidth="640" HorizontalAlignment="Stretch"
                                 AutomationProperties.AutomationId="ArticlePane">
                         <TextBlock x:Name="ArticleHeading" FontSize="32" TextWrapping="Wrap" IsTextSelectionEnabled="True"
                                    FontFamily="{StaticResource FontReading}" FontWeight="{Binding Title, Source={StaticResource ReaderFonts}}"
@@ -447,6 +447,49 @@
                                 <ComboBox Grid.Column="1" x:Name="CodeWeightPicker" Style="{StaticResource WeightPicker}" IsEnabled="False"
                                           SelectionChanged="FontWeightChanged" AutomationProperties.Name="Code font weight"
                                           AutomationProperties.AutomationId="CodeWeightPicker" />
+                            </Grid>
+                            <TextBlock Text="Text" Style="{StaticResource SettingsTitle}" Margin="0,16,0,0"
+                                       AutomationProperties.HeadingLevel="Level2" />
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="2*" MinWidth="80" />
+                                    <ColumnDefinition Width="32" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Text size" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center" />
+                                <Slider Grid.Column="1" x:Name="TextSizeSlider" MaxWidth="200" HorizontalAlignment="Stretch"
+                                        IsEnabled="False" ValueChanged="TextLayoutChanged" AutomationProperties.Name="Text size"
+                                        AutomationProperties.AutomationId="TextSizeSlider" />
+                                <TextBlock Grid.Column="2" x:Name="TextSizeValue" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           Style="{StaticResource SettingsDetail}" />
+                            </Grid>
+                            <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="2*" MinWidth="80" />
+                                    <ColumnDefinition Width="32" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Line spacing" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center" />
+                                <Slider Grid.Column="1" x:Name="LineSpacingSlider" MaxWidth="200" HorizontalAlignment="Stretch"
+                                        IsEnabled="False" ValueChanged="TextLayoutChanged" AutomationProperties.Name="Line spacing"
+                                        AutomationProperties.AutomationId="LineSpacingSlider" />
+                                <TextBlock Grid.Column="2" x:Name="LineSpacingValue" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           Style="{StaticResource SettingsDetail}" />
+                            </Grid>
+                            <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="2*" MinWidth="80" />
+                                    <ColumnDefinition Width="32" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Column width" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center" />
+                                <Slider Grid.Column="1" x:Name="ColumnWidthSlider" MaxWidth="200" HorizontalAlignment="Stretch"
+                                        IsEnabled="False" ValueChanged="TextLayoutChanged" AutomationProperties.Name="Column width"
+                                        AutomationProperties.AutomationId="ColumnWidthSlider" />
+                                <TextBlock Grid.Column="2" x:Name="ColumnWidthValue" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           Style="{StaticResource SettingsDetail}" />
                             </Grid>
                         </StackPanel>
                     </Grid>

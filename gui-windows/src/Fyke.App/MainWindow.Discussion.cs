@@ -32,7 +32,7 @@ public sealed partial class MainWindow
     private void InitializeDiscussion(FontFamily reading, FontFamily ui, FontFamily code)
     {
         discussionUiFont = ui;
-        commentRenderer = new ArticleBlockRenderer(reading, ui, code, readerFonts, textSize: 17);
+        commentRenderer = new ArticleBlockRenderer(reading, ui, code, readerFonts, readerTextStyle);
         DiscussionComments.ElementClearing += (_, args) =>
         {
             if (args.Element is ContentPresenter presenter)

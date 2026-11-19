@@ -76,6 +76,7 @@ public sealed partial class MainWindow : Window
     {
         readerReloadTimer.Stop();
         bulkNoticeTimer.Stop();
+        textSaveTimer.Stop();
         await lifetime.CancelAsync();
         await connection;
         ViewModel.Dispose();

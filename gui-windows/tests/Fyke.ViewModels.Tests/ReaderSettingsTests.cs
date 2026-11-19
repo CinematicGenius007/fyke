@@ -67,4 +67,42 @@ public sealed class ReaderSettingsTests
         Assert.Equal(step, new ReaderTypography(1, 2, -1, -2).StepFor(role));
         await settings.SetFontWeightAsync(role, step, CancellationToken.None);
     }
+
+    [Theory]
+    [InlineData("{}", 19, 1.6, 640)]
+    [InlineData("{\"textSize\":24,\"lineSpacing\":1.8,\"columnWidth\":720}", 24, 1.8, 720)]
+    [InlineData("{\"textSize\":40,\"lineSpacing\":1e999,\"columnWidth\":\"720\"}", 28, 1.6, 640)]
+    public async Task ReadsAndBoundsSharedTextSettings(string ui, double size, double spacing, double width)
+    {
+        using var reply = JsonDocument.Parse($$"""{"full_text":true,"ui":{{ui}}}""");
+        var settings = new ReaderSettings(new FakeClient { OnCall = (_, _) => reply.RootElement });
+
+        var preferences = await settings.ReadAsync(CancellationToken.None);
+
+        Assert.Equal(new ReaderTextLayout(size, spacing, width), preferences.TextLayout);
+    }
+
+    [Fact]
+    public async Task TextLayoutPatchUsesOnlyEditedProfileKeys()
+    {
+        var wire = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
+        var settings = new ReaderSettings(new FakeClient
+        {
+            OnCall = (method, parameters) =>
+            {
+                Assert.Equal("config.set", method);
+                var patch = JsonSerializer.SerializeToElement(parameters, wire).GetProperty("ui_patch");
+                Assert.Equal(24, patch.GetProperty("textSize").GetDouble());
+                Assert.Equal(800, patch.GetProperty("columnWidth").GetDouble());
+                Assert.Equal(2, patch.EnumerateObject().Count());
+                return JsonSerializer.SerializeToElement(new { ok = true });
+            },
+        });
+
+        await settings.SetTextLayoutAsync(new Dictionary<ReaderTextSetting, double>
+        {
+            [ReaderTextSetting.Size] = 24,
+            [ReaderTextSetting.ColumnWidth] = 1000,
+        }, CancellationToken.None);
+    }
 }

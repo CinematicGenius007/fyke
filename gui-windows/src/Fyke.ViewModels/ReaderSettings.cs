@@ -3,7 +3,8 @@ using Fyke.Client;
 
 namespace Fyke.ViewModels;
 
-public sealed record ReaderPreferences(bool FullText, bool LoadImages, ReaderTypography Typography, bool InvalidConfig);
+public sealed record ReaderPreferences(bool FullText, bool LoadImages, ReaderTypography Typography,
+    ReaderTextLayout TextLayout, bool InvalidConfig);
 
 public sealed class ReaderSettings(IDaemonClient client)
 {
@@ -17,9 +18,11 @@ public sealed class ReaderSettings(IDaemonClient client)
         }
 
         var hasError = config.TryGetProperty("config_error", out var error) && error.ValueKind == JsonValueKind.String;
-        var autoImages = !hasError && config.TryGetProperty("ui", out var ui) && ui.ValueKind == JsonValueKind.Object
+        var ui = !hasError && config.TryGetProperty("ui", out var savedUi) ? savedUi : default;
+        var autoImages = ui.ValueKind == JsonValueKind.Object
             && ui.TryGetProperty("loadImages", out var images) && images.ValueKind == JsonValueKind.True;
-        return new ReaderPreferences(fullText.GetBoolean(), autoImages, ReaderTypography.FromConfig(config), hasError);
+        return new ReaderPreferences(fullText.GetBoolean(), autoImages, ReaderTypography.FromConfig(config),
+            ReaderTextLayout.FromUi(ui), hasError);
     }
 
     public Task SetFullTextAsync(bool enabled, CancellationToken ct) =>
@@ -27,6 +30,13 @@ public sealed class ReaderSettings(IDaemonClient client)
 
     public Task SetLoadImagesAsync(bool enabled, CancellationToken ct) =>
         client.CallAsync("config.set", new { UiPatch = new Dictionary<string, bool> { ["loadImages"] = enabled } }, ct);
+
+    public Task SetTextLayoutAsync(IReadOnlyDictionary<ReaderTextSetting, double> changes, CancellationToken ct) =>
+        client.CallAsync("config.set", new
+        {
+            UiPatch = changes.ToDictionary(change => ReaderTextLayout.WireName(change.Key),
+                change => ReaderTextLayout.Limit(change.Key, change.Value)),
+        }, ct);
 
     public Task SetFontWeightAsync(ReaderFontRole role, int step, CancellationToken ct)
     {

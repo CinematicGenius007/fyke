@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -29,6 +30,7 @@ public sealed partial class MainWindow
         readerSettings = new ReaderSettings(client);
         ReaderShell.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(SettingsKeyDown), true);
         Root.PreviewKeyDown += SettingsShortcutKeyDown;
+        InitializeTextLayoutSettings();
         SettingsTabs.SelectionChanged += SettingsTabChanged;
         SettingsTabs.SelectedItem = GeneralSettingsTab;
 
@@ -49,6 +51,10 @@ public sealed partial class MainWindow
         GeneralSettingsBody.Visibility = reading ? Visibility.Collapsed : Visibility.Visible;
         ReadingSettingsBody.Visibility = reading ? Visibility.Visible : Visibility.Collapsed;
         _ = SettingsScroll.ChangeView(null, 0, null, disableAnimation: true);
+        if (!reading)
+        {
+            FlushTextLayoutChanges();
+        }
     }
 
     private void SettingsClicked(object sender, RoutedEventArgs args) => ToggleSettings();
@@ -112,6 +118,7 @@ public sealed partial class MainWindow
         }
 
         focusBeforeSettings = null;
+        FlushTextLayoutChanges();
     }
 
     private void SettingsKeyDown(object sender, KeyRoutedEventArgs args)
@@ -166,11 +173,15 @@ public sealed partial class MainWindow
     {
         if (loaded.InvalidConfig && preferences is { } previous)
         {
-            loaded = loaded with { LoadImages = previous.LoadImages, Typography = previous.Typography };
+            loaded = loaded with
+            {
+                LoadImages = previous.LoadImages, Typography = previous.Typography, TextLayout = previous.TextLayout,
+            };
         }
 
         preferences = loaded;
         readerFonts.Apply(loaded.Typography);
+        ApplyReaderTextLayout(loaded.TextLayout);
         articleRenderer.SetAutomaticImages(loaded.LoadImages);
         ApplySettingsControls(loaded);
     }
@@ -179,6 +190,7 @@ public sealed partial class MainWindow
     {
         FullTextToggle.IsOn = loaded.FullText;
         LoadImagesToggle.IsOn = loaded.LoadImages;
+        ApplyTextLayoutControls(loaded.TextLayout);
         foreach (var (picker, role) in weightPickers)
         {
             picker.SelectedIndex = loaded.Typography.StepFor(role) + 2;
@@ -191,6 +203,10 @@ public sealed partial class MainWindow
         foreach (var picker in weightPickers.Keys)
         {
             picker.IsEnabled = enabled;
+        }
+        foreach (var slider in textSliders.Keys)
+        {
+            slider.IsEnabled = enabled;
         }
     }
 
@@ -240,9 +256,13 @@ public sealed partial class MainWindow
 
         readingSettings = true;
         var ct = lifetime.Token;
+        var layoutChanges = pendingTextChanges;
+        pendingTextChanges = [];
+        textSaveTimer.Stop();
+        var saving = save is not null || layoutChanges.Count > 0;
         try
         {
-            if (save is not null)
+            if (saving)
             {
                 // WinUI still uses the originating control until its selection event returns.
                 await Task.Yield();
@@ -253,7 +273,11 @@ public sealed partial class MainWindow
             }
 
             EnableSettingsControls(false);
-            ShowSettingsStatus(save is null ? "Loading settings…" : "Saving setting…");
+            ShowSettingsStatus(saving ? "Saving settings…" : "Loading settings…");
+            if (layoutChanges.Count > 0)
+            {
+                await SaveSettingAsync(token => readerSettings.SetTextLayoutAsync(layoutChanges, token), ct);
+            }
             if (save is not null)
             {
                 await SaveSettingAsync(save, ct);
@@ -263,7 +287,8 @@ public sealed partial class MainWindow
             ct.ThrowIfCancellationRequested();
             ApplyPreferences(loaded);
             preferencesRead = true;
-            var changeConfirmed = confirmed?.Invoke(loaded) ?? true;
+            var changeConfirmed = (confirmed?.Invoke(loaded) ?? true)
+                && layoutChanges.All(change => loaded.TextLayout.Get(change.Key) == change.Value);
             ShowSettingsStatus(loaded.InvalidConfig ? "config.json has a mistake. Fyke is using the last available settings."
                 : changeConfirmed ? null : "Fyke couldn’t save this setting. Check the current value and try again.",
                 retry: loaded.InvalidConfig);
@@ -278,7 +303,7 @@ public sealed partial class MainWindow
             {
                 if (preferences is { } saved)
                 {
-                    ApplySettingsControls(saved);
+                    ApplyPreferences(saved);
                 }
 
                 ShowSettingsStatus("Fyke couldn’t confirm your settings. Try again.", retry: true);
