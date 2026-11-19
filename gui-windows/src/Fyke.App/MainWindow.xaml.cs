@@ -79,7 +79,7 @@ public sealed partial class MainWindow : Window
         bulkNoticeTimer.Stop();
         textSaveTimer.Stop();
         systemAppearance.ColorValuesChanged -= SystemColorsChanged;
-        appearanceAccessibility.HighContrastChanged -= HighContrastChanged;
+        windowThemeSettings.Changed -= WindowThemeChanged;
         await lifetime.CancelAsync();
         await connection;
         ViewModel.Dispose();

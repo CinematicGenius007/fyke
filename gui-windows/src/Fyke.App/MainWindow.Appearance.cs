@@ -1,4 +1,5 @@
 using Fyke.ViewModels;
+using Microsoft.UI.System;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -9,14 +10,14 @@ namespace Fyke.App;
 public sealed partial class MainWindow
 {
     private UISettings systemAppearance = null!;
-    private AccessibilitySettings appearanceAccessibility = null!;
+    private ThemeSettings windowThemeSettings = null!;
 
     private void InitializeAppearance()
     {
         systemAppearance = new UISettings();
-        appearanceAccessibility = new AccessibilitySettings();
+        windowThemeSettings = ThemeSettings.CreateForWindowId(AppWindow.Id);
         systemAppearance.ColorValuesChanged += SystemColorsChanged;
-        appearanceAccessibility.HighContrastChanged += HighContrastChanged;
+        windowThemeSettings.Changed += WindowThemeChanged;
         string[] choices = ["Light", "Dark"];
         ThemePicker.ItemsSource = DayThemePicker.ItemsSource = NightThemePicker.ItemsSource = choices;
         ApplyAppearance(ReaderAppearance.Default);
@@ -24,7 +25,7 @@ public sealed partial class MainWindow
 
     private void SystemColorsChanged(UISettings sender, object args) => QueueAppearanceRefresh();
 
-    private void HighContrastChanged(AccessibilitySettings sender, object args) => QueueAppearanceRefresh();
+    private void WindowThemeChanged(ThemeSettings sender, object args) => QueueAppearanceRefresh();
 
     private void QueueAppearanceRefresh() => _ = DispatcherQueue.TryEnqueue(() =>
     {
@@ -36,7 +37,7 @@ public sealed partial class MainWindow
 
     private void ApplyAppearance(ReaderAppearance appearance)
     {
-        var highContrast = appearanceAccessibility.HighContrast;
+        var highContrast = windowThemeSettings.HighContrast;
         var foreground = systemAppearance.GetColorValue(UIColorType.Foreground);
         // The default foreground is light when Windows uses dark app mode.
         var systemIsDark = (5 * foreground.G + 2 * foreground.R + foreground.B) > 8 * 128;
