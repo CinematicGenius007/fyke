@@ -71,8 +71,13 @@ jobs:
             $out = Join-Path $env:RUNNER_TEMP ("publish-" + ($name -replace '\W', ''))
             dotnet publish src/Fyke.App -c Release -r win-x64 -p:Platform=x64 -o $out @($ways[$name]) 2>&1 | Select-Object -Last 3
             if ($LASTEXITCODE -ne 0) { $rows += "| $name | failed | | |"; continue }
-            $bytes = (Get-ChildItem $out -Recurse -File | Measure-Object Length -Sum).Sum
-            $files = (Get-ChildItem $out -Recurse -File).Count
+            $shipped = Get-ChildItem $out -Recurse -File | Where-Object Extension -ne '.pdb'
+            Get-ChildItem $out -Recurse -Filter *.pdb | Remove-Item
+            $bytes = ($shipped | Measure-Object Length -Sum).Sum
+            $files = $shipped.Count
+            "Largest files in '$name':"
+            $shipped | Sort-Object Length -Descending | Select-Object -First 12 |
+              ForEach-Object { "{0,8:N1} MB  {1}" -f ($_.Length / 1MB), $_.FullName.Substring($out.Length + 1) }
             $zip = "$out.zip"
             Compress-Archive "$out/*" $zip -CompressionLevel Optimal
             $rows += "| $name | {0:N1} MB | {1:N1} MB | $files |" -f ($bytes / 1MB), ((Get-Item $zip).Length / 1MB)

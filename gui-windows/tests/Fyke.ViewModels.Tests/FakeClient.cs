@@ -47,7 +47,7 @@ internal sealed class FakeClient : IDaemonClient
 
 internal static class SentParameters
 {
-    private static readonly JsonElement Null = JsonDocument.Parse("null").RootElement;
+    private static readonly JsonElement Null = JsonElement.Parse("null");
 
     /// <summary>A parameter the client may leave out, read as JSON null when it was not sent.</summary>
     public static JsonElement Optional(this JsonElement parameters, string name) =>
