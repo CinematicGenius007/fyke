@@ -21,10 +21,10 @@ public sealed class ReaderSearchTests
             OnCall = (method, parameters) =>
             {
                 Assert.Equal("entries.search", method);
-                var request = JsonSerializer.SerializeToElement(parameters);
-                Assert.Equal("zig", request.GetProperty("Query").GetString());
-                Assert.Equal(limit, request.GetProperty("Limit").GetInt32());
-                Assert.True(request.GetProperty("UnreadOnly").GetBoolean());
+                var request = parameters.GetValueOrDefault();
+                Assert.Equal("zig", request.GetProperty("query").GetString());
+                Assert.Equal(limit, request.GetProperty("limit").GetInt32());
+                Assert.True(request.GetProperty("unread_only").GetBoolean());
                 return response.RootElement;
             },
         };

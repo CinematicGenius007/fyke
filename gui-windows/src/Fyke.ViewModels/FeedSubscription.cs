@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Fyke.Client;
 
 namespace Fyke.ViewModels;
@@ -48,8 +49,6 @@ public sealed class FeedSubscriptionBatch(IEnumerable<FeedSubscriptionRequest> r
 
 public sealed class FeedSubscriptions(IDaemonClient client)
 {
-    private static readonly JsonSerializerOptions Wire = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
-
     public static Uri? Address(string input)
     {
         var address = input.Trim();
@@ -68,9 +67,10 @@ public sealed class FeedSubscriptions(IDaemonClient client)
 
     public async Task<IReadOnlyList<FeedCandidate>> DiscoverAsync(Uri address, bool allowPrivateNetwork, CancellationToken ct)
     {
-        var reply = await client.CallAsync("feeds.preview", new { Url = address.AbsoluteUri, AllowPrivateNetwork = allowPrivateNetwork }, ct)
+        var reply = await client.CallAsync("feeds.preview",
+                new JsonObject { ["url"] = address.AbsoluteUri, ["allow_private_network"] = allowPrivateNetwork }, ct)
             .ConfigureAwait(false);
-        var catalog = reply.Deserialize<FeedPreview>(Wire);
+        var catalog = reply.Deserialize(WireJson.Default.FeedPreview);
         if (catalog?.Items is not { } items)
         {
             throw new DaemonProtocolException("The daemon returned an incomplete feed preview.");
@@ -82,12 +82,17 @@ public sealed class FeedSubscriptions(IDaemonClient client)
 
     internal async Task<FeedRefresh> SubscribeAsync(FeedSubscriptionRequest request, bool allowPrivateNetwork, CancellationToken ct)
     {
-        var parameters = new { request.Candidate.Url, request.Title, AllowPrivateNetwork = allowPrivateNetwork };
+        var parameters = new JsonObject
+        {
+            ["url"] = request.Candidate.Url,
+            ["title"] = request.Title,
+            ["allow_private_network"] = allowPrivateNetwork,
+        };
         var reply = await client.CallAsync("feeds.add", parameters, ct).ConfigureAwait(false);
         return CatalogEdits.ReadRefresh(reply);
     }
 
     internal Task PlaceAsync(long id, long folderId, CancellationToken ct) => CatalogEdits.MoveFeedAsync(client, id, folderId, ct);
 
-    private sealed record FeedPreview(FeedCandidate[]? Items);
+    internal sealed record FeedPreview(FeedCandidate[]? Items);
 }

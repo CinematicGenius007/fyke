@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using System.Text.Json;
 using Fyke.Client;
 
@@ -15,7 +16,8 @@ internal sealed class FakeClient : IDaemonClient
     /// <summary>What <see cref="StartAsync"/> does: raise states, or throw.</summary>
     public Func<FakeClient, CancellationToken, Task> OnStart { get; set; } = (_, _) => Task.CompletedTask;
 
-    public Func<string, object?, JsonElement> OnCall { get; set; } =
+    /// <summary>Answers a call. Parameters arrive as the daemon would read them, or null when none were sent.</summary>
+    public Func<string, JsonElement?, JsonElement> OnCall { get; set; } =
         (_, _) => throw new NotSupportedException();
 
     public bool HasSubscribers => StateChanged is not null;
@@ -32,13 +34,22 @@ internal sealed class FakeClient : IDaemonClient
         await OnStart(this, ct);
     }
 
-    public Task<JsonElement> CallAsync(string method, object? parameters, CancellationToken ct)
+    public Task<JsonElement> CallAsync(string method, JsonObject? parameters, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        return Task.FromResult(OnCall(method, parameters));
+        return Task.FromResult(OnCall(method, parameters is null ? null : DaemonParameters.ToElement(parameters)));
     }
 
     public IAsyncEnumerable<DaemonEvent> EventsAsync(CancellationToken ct) => throw new NotSupportedException();
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+}
+
+internal static class SentParameters
+{
+    private static readonly JsonElement Null = JsonDocument.Parse("null").RootElement;
+
+    /// <summary>A parameter the client may leave out, read as JSON null when it was not sent.</summary>
+    public static JsonElement Optional(this JsonElement parameters, string name) =>
+        parameters.TryGetProperty(name, out var value) ? value : Null;
 }

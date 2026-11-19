@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Fyke.Client;
 
@@ -13,12 +14,6 @@ public sealed class DaemonClient : IDaemonClient
 {
     /// <summary><c>api_version</c> in src/ops.zig, the oldest daemon this app works with.</summary>
     public const long RequiredApiVersion = 2;
-
-    private static readonly JsonSerializerOptions ParameterOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-    };
 
     private readonly DaemonClientOptions _options;
     private readonly IDaemonProcessStarter _starter;
@@ -114,7 +109,7 @@ public sealed class DaemonClient : IDaemonClient
         }
     }
 
-    public async Task<JsonElement> CallAsync(string method, object? parameters, CancellationToken ct)
+    public async Task<JsonElement> CallAsync(string method, JsonObject? parameters, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrEmpty(method);
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -257,7 +252,7 @@ public sealed class DaemonClient : IDaemonClient
 
     // ----- calls -----
 
-    private byte[] BuildRequest(string method, object? parameters)
+    private byte[] BuildRequest(string method, JsonObject? parameters)
     {
         var id = Interlocked.Increment(ref _nextId);
         using var stream = new MemoryStream();
@@ -268,15 +263,7 @@ public sealed class DaemonClient : IDaemonClient
             writer.WriteNumber("id", id);
             writer.WriteString("method", method);
             writer.WritePropertyName("params");
-            if (parameters is null)
-            {
-                writer.WriteStartObject();
-                writer.WriteEndObject();
-            }
-            else
-            {
-                JsonSerializer.Serialize(writer, parameters, parameters.GetType(), ParameterOptions);
-            }
+            DaemonParameters.Write(writer, parameters);
 
             writer.WriteEndObject();
         }
@@ -795,7 +782,7 @@ public sealed class DaemonClient : IDaemonClient
                 since = _lastSeq ?? 0;
             }
 
-            var request = BuildRequest("events.subscribe", new { SinceSeq = since });
+            var request = BuildRequest("events.subscribe", new JsonObject { ["since_seq"] = since });
             _ = await ExchangeAsync(connection, request, "events.subscribe", _options.CallTimeout, ct).ConfigureAwait(false);
             return (connection, epoch);
         }

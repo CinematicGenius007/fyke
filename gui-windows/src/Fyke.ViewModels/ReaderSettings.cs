@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Fyke.Client;
 
 namespace Fyke.ViewModels;
@@ -65,26 +66,26 @@ public sealed class ReaderSettings(IDaemonClient client)
     }
 
     public Task SetFullTextAsync(bool enabled, CancellationToken ct) =>
-        client.CallAsync("config.set", new { FullText = enabled }, ct);
+        client.CallAsync("config.set", new JsonObject { ["full_text"] = enabled }, ct);
 
     public Task SetLoadImagesAsync(bool enabled, CancellationToken ct) =>
-        client.CallAsync("config.set", new { UiPatch = new Dictionary<string, bool> { ["loadImages"] = enabled } }, ct);
+        PatchUiAsync(new JsonObject { ["loadImages"] = enabled }, ct);
 
     public Task SetCollapsedFoldersAsync(IReadOnlyList<long> ids, CancellationToken ct) =>
-        client.CallAsync("config.set", new { UiPatch = new Dictionary<string, IReadOnlyList<long>> { ["collapsedFolders"] = ids } }, ct);
+        PatchUiAsync(new JsonObject { ["collapsedFolders"] = Wire.Ids(ids) }, ct);
 
     public Task SetFollowSystemAsync(bool enabled, CancellationToken ct) =>
-        client.CallAsync("config.set", new { UiPatch = new Dictionary<string, bool> { ["followSystem"] = enabled } }, ct);
+        PatchUiAsync(new JsonObject { ["followSystem"] = enabled }, ct);
 
     public Task SetThemeAsync(ReaderThemeSlot slot, string theme, CancellationToken ct)
     {
-        var patch = new Dictionary<string, object> { [ReaderAppearance.WireName(slot)] = theme };
+        var patch = new JsonObject { [ReaderAppearance.WireName(slot)] = theme };
         if (slot == ReaderThemeSlot.Fixed)
         {
             patch["followSystem"] = false;
         }
 
-        return client.CallAsync("config.set", new { UiPatch = patch }, ct);
+        return PatchUiAsync(patch, ct);
     }
 
     public Task SetScrollbarsAsync(ReaderScrollbarMode mode, CancellationToken ct)
@@ -96,15 +97,19 @@ public sealed class ReaderSettings(IDaemonClient client)
             ReaderScrollbarMode.Never => "never",
             _ => throw new ArgumentOutOfRangeException(nameof(mode)),
         };
-        return client.CallAsync("config.set", new { UiPatch = new { Scrollbars = value } }, ct);
+        return PatchUiAsync(new JsonObject { ["scrollbars"] = value }, ct);
     }
 
-    public Task SetTextLayoutAsync(IReadOnlyDictionary<ReaderTextSetting, double> changes, CancellationToken ct) =>
-        client.CallAsync("config.set", new
+    public Task SetTextLayoutAsync(IReadOnlyDictionary<ReaderTextSetting, double> changes, CancellationToken ct)
+    {
+        var patch = new JsonObject();
+        foreach (var (setting, value) in changes)
         {
-            UiPatch = changes.ToDictionary(change => ReaderTextLayout.WireName(change.Key),
-                change => ReaderTextLayout.Limit(change.Key, change.Value)),
-        }, ct);
+            patch[ReaderTextLayout.WireName(setting)] = ReaderTextLayout.Limit(setting, value);
+        }
+
+        return PatchUiAsync(patch, ct);
+    }
 
     public Task SetFontWeightAsync(ReaderFontRole role, int step, CancellationToken ct)
     {
@@ -118,6 +123,10 @@ public sealed class ReaderSettings(IDaemonClient client)
             ReaderFontRole.Code => "code",
             _ => throw new ArgumentOutOfRangeException(nameof(role)),
         };
-        return client.CallAsync("config.set", new { UiPatch = new { Weights = new Dictionary<string, int> { [name] = step } } }, ct);
+        return PatchUiAsync(new JsonObject { ["weights"] = new JsonObject { [name] = step } }, ct);
     }
+
+    // The ui section keeps the macOS app's camelCase keys, so a patch names them as written.
+    private Task<JsonElement> PatchUiAsync(JsonObject patch, CancellationToken ct) =>
+        client.CallAsync("config.set", new JsonObject { ["ui_patch"] = patch }, ct);
 }

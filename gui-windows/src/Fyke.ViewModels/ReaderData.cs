@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 using Fyke.Client;
 
 namespace Fyke.ViewModels;
@@ -42,15 +44,14 @@ public sealed record TimelinePage(IReadOnlyList<TimelineArticle> Articles, strin
 /// <summary>Uses the daemon's reader operations without owning stored state.</summary>
 public sealed class ReaderData(IDaemonClient client)
 {
-    private static readonly JsonSerializerOptions Wire = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
     public const int PageSize = 100;
     public const int SearchLimit = 100;
     public SavedViews Views { get; } = new(client);
 
     public async Task<IReadOnlyList<ReaderDestination>> DestinationsAsync(CancellationToken ct)
     {
-        var feeds = Read<CatalogItems<Feed>>(await client.CallAsync("feeds.list", null, ct).ConfigureAwait(false)).Items;
-        var folders = Read<CatalogItems<Folder>>(await client.CallAsync("folders.list", null, ct).ConfigureAwait(false)).Items;
+        var feeds = (await ReadAsync("feeds.list", null, WireJson.Default.CatalogItemsFeed, ct).ConfigureAwait(false)).Items;
+        var folders = (await ReadAsync("folders.list", null, WireJson.Default.CatalogItemsFolder, ct).ConfigureAwait(false)).Items;
         var views = await Views.ListAsync(ct).ConfigureAwait(false);
         var foldersByParent = folders.ToLookup(folder => folder.ParentId);
         var feedsByFolder = feeds.ToLookup(feed => feed.FolderId);
@@ -97,18 +98,18 @@ public sealed class ReaderData(IDaemonClient client)
     private async Task<EntryPage> EntryPageAsync(ReaderDestination destination, string? before, bool unreadOnly,
         int limit, CancellationToken ct)
     {
-        var filter = new
+        var filter = new JsonObject
         {
-            FeedId = destination.Scope == ReaderScope.Feed ? (long?)destination.Id : null,
-            FolderId = destination.Scope == ReaderScope.Folder ? (long?)destination.Id : null,
-            ViewId = destination.Scope == ReaderScope.View ? (long?)destination.Id : null,
-            StarredOnly = destination.Scope == ReaderScope.Starred ? (bool?)true : null,
+            ["feed_id"] = destination.Scope == ReaderScope.Feed ? destination.Id : null,
+            ["folder_id"] = destination.Scope == ReaderScope.Folder ? destination.Id : null,
+            ["view_id"] = destination.Scope == ReaderScope.View ? destination.Id : null,
+            ["starred_only"] = destination.Scope == ReaderScope.Starred ? true : null,
             // A saved view supplies its own reading-state filter.
-            UnreadOnly = unreadOnly && destination.Scope != ReaderScope.View,
-            Limit = Math.Clamp(limit, PageSize, 1000),
-            Before = before,
+            ["unread_only"] = unreadOnly && destination.Scope != ReaderScope.View,
+            ["limit"] = Math.Clamp(limit, PageSize, 1000),
+            ["before"] = before,
         };
-        return Read<EntryPage>(await client.CallAsync("entries.list", filter, ct).ConfigureAwait(false));
+        return await ReadAsync("entries.list", filter, WireJson.Default.EntryPage, ct).ConfigureAwait(false);
     }
 
     internal async Task<(IReadOnlyCollection<long> Ids, bool ReachedLimit)> UnreadScopeAsync(
@@ -147,8 +148,8 @@ public sealed class ReaderData(IDaemonClient client)
 
     internal async Task<long[]> SetReadBatchAsync(long[] ids, bool read, CancellationToken ct)
     {
-        var result = Read<BulkMarkReply>(await client.CallAsync("entries.mark_many", new { Ids = ids, Read = read }, ct)
-            .ConfigureAwait(false));
+        var result = await ReadAsync("entries.mark_many", new JsonObject { ["ids"] = Wire.Ids(ids), ["read"] = read },
+            WireJson.Default.BulkMarkReply, ct).ConfigureAwait(false);
         var previous = result.Previous;
         if (previous is null || previous.Any(entry => entry is null) || !previous.Select(entry => entry.Id).SequenceEqual(ids))
         {
@@ -166,23 +167,28 @@ public sealed class ReaderData(IDaemonClient client)
             return [];
         }
 
-        var parameters = new { Query = query.Trim(), Limit = Math.Clamp(limit, 1, SearchLimit), UnreadOnly = unreadOnly };
-        var result = Read<CatalogItems<Entry>>(
-            await client.CallAsync("entries.search", parameters, ct).ConfigureAwait(false));
+        var words = query.Trim();
+        var parameters = new JsonObject
+        {
+            ["query"] = words,
+            ["limit"] = Math.Clamp(limit, 1, SearchLimit),
+            ["unread_only"] = unreadOnly,
+        };
+        var result = await ReadAsync("entries.search", parameters, WireJson.Default.CatalogItemsEntry, ct).ConfigureAwait(false);
         if (result.Items is null)
         {
             throw new DaemonProtocolException("The daemon returned an incomplete search response.");
         }
 
         return result.Items.Select(entry => new SearchHit(ToTimelineArticle(entry),
-            SearchSnippet.Split(entry.Snippet ?? entry.Summary, parameters.Query), entry.SortAt)).ToArray();
+            SearchSnippet.Split(entry.Snippet ?? entry.Summary, words), entry.SortAt)).ToArray();
     }
 
     public async Task<ReaderArticle> ArticleAsync(long id, CancellationToken ct)
     {
-        var response = Read<ArticleBody>(
-            await client.CallAsync("entries.get", new { Id = id, Format = "blocks" }, ct).ConfigureAwait(false));
-        var blocks = JsonSerializer.Deserialize<ArticleBlock[]>(response.Body, Wire)
+        var response = await ReadAsync("entries.get", new JsonObject { ["id"] = id, ["format"] = "blocks" },
+            WireJson.Default.ArticleBody, ct).ConfigureAwait(false);
+        var blocks = JsonSerializer.Deserialize(response.Body, WireJson.Default.ArticleBlockArray)
             ?? throw new DaemonProtocolException("The daemon returned an empty article response.");
         return new ReaderArticle(response.Title, response.FeedTitle, response.Author, blocks,
             DiscussionLink.FromAddress(response.DiscussionUrl), response.Read, response.Starred);
@@ -190,8 +196,8 @@ public sealed class ReaderData(IDaemonClient client)
 
     public async Task<ArticleMarks> MarkAsync(long id, bool? read, bool? starred, CancellationToken ct)
     {
-        var response = Read<MarkReply>(await client.CallAsync("entries.mark",
-            new { Id = id, Read = read, Starred = starred }, ct).ConfigureAwait(false));
+        var response = await ReadAsync("entries.mark", new JsonObject { ["id"] = id, ["read"] = read, ["starred"] = starred },
+            WireJson.Default.MarkReply, ct).ConfigureAwait(false);
         var previous = response.Previous
             ?? throw new DaemonProtocolException("The daemon returned incomplete article marks.");
         return new ArticleMarks(read ?? previous.Read, starred ?? previous.Starred);
@@ -199,8 +205,8 @@ public sealed class ReaderData(IDaemonClient client)
 
     public async Task<DiscussionThread> DiscussionAsync(long id, CancellationToken ct)
     {
-        var thread = Read<DiscussionThread>(
-            await client.CallAsync("entries.discussion", new { Id = id }, ct).ConfigureAwait(false));
+        var thread = await ReadAsync("entries.discussion", new JsonObject { ["id"] = id },
+            WireJson.Default.DiscussionThread, ct).ConfigureAwait(false);
         if (thread.Comments is null || thread.Comments.Any(comment => comment is null || comment.Blocks is null))
         {
             throw new DaemonProtocolException("The daemon returned an incomplete discussion.");
@@ -209,22 +215,22 @@ public sealed class ReaderData(IDaemonClient client)
         return thread;
     }
 
-    private static T Read<T>(JsonElement result) =>
-        result.Deserialize<T>(Wire) ?? throw new DaemonProtocolException("The daemon returned an empty reader response.");
+    private async Task<T> ReadAsync<T>(string method, JsonObject? parameters, JsonTypeInfo<T> type, CancellationToken ct) =>
+        Wire.Read(await client.CallAsync(method, parameters, ct).ConfigureAwait(false), type, method);
 
     private static TimelineArticle ToTimelineArticle(Entry entry) => new(entry.Id,
         string.IsNullOrWhiteSpace(entry.Title) ? "Untitled article" : entry.Title, entry.FeedTitle,
         entry.Read, entry.Starred, entry.FeedId);
 
-    private sealed record CatalogItems<T>(T[] Items);
-    private sealed record Feed(long Id, long? FolderId, string? Title, string Url, long Unread, long Starred, long Entries);
-    private sealed record Folder(long Id, long? ParentId, string Name);
-    private sealed record Entry(long Id, string? Title, string? FeedTitle, bool Read, bool Starred,
+    internal sealed record CatalogItems<T>(T[] Items);
+    internal sealed record Feed(long Id, long? FolderId, string? Title, string Url, long Unread, long Starred, long Entries);
+    internal sealed record Folder(long Id, long? ParentId, string Name);
+    internal sealed record Entry(long Id, string? Title, string? FeedTitle, bool Read, bool Starred,
         string? Snippet, string? Summary, long SortAt, long? FeedId);
-    private sealed record ArticleBody(string? Title, string? FeedTitle, string? Author, string? DiscussionUrl, string Body, bool Read, bool Starred);
-    private sealed record MarkReply(MarkState? Previous);
-    private sealed record MarkState(bool Read, bool Starred);
-    private sealed record BulkMarkReply(PreviousRead[]? Previous);
-    private sealed record PreviousRead(long Id, bool Read);
-    private sealed record EntryPage(Entry[] Items, string? NextCursor);
+    internal sealed record ArticleBody(string? Title, string? FeedTitle, string? Author, string? DiscussionUrl, string Body, bool Read, bool Starred);
+    internal sealed record MarkReply(MarkState? Previous);
+    internal sealed record MarkState(bool Read, bool Starred);
+    internal sealed record BulkMarkReply(PreviousRead[]? Previous);
+    internal sealed record PreviousRead(long Id, bool Read);
+    internal sealed record EntryPage(Entry[] Items, string? NextCursor);
 }

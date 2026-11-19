@@ -52,7 +52,7 @@ public sealed class ReaderDiscussionTests
         {
             OnCall = (method, parameters) =>
             {
-                Assert.Equal(6, JsonSerializer.SerializeToElement(parameters).GetProperty("Id").GetInt64());
+                Assert.Equal(6, parameters.GetValueOrDefault().GetProperty("id").GetInt64());
                 calls.Add(method);
                 return method == "entries.get" ? article.RootElement : discussion.RootElement;
             },

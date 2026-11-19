@@ -17,10 +17,10 @@ public sealed class ReaderMarksTests
             OnCall = (method, parameters) =>
             {
                 Assert.Equal("entries.mark", method);
-                var sent = JsonSerializer.SerializeToElement(parameters);
-                Assert.Equal(42, sent.GetProperty("Id").GetInt64());
-                Assert.Equal(read, sent.GetProperty("Read").Deserialize<bool?>());
-                Assert.Equal(starred, sent.GetProperty("Starred").Deserialize<bool?>());
+                var sent = parameters.GetValueOrDefault();
+                Assert.Equal(42, sent.GetProperty("id").GetInt64());
+                Assert.Equal(read, sent.Optional("read").Deserialize<bool?>());
+                Assert.Equal(starred, sent.Optional("starred").Deserialize<bool?>());
                 return response.RootElement;
             },
         };

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Fyke.Client;
 
@@ -55,12 +56,13 @@ public interface IDaemonClient : IAsyncDisposable
     Task StartAsync(CancellationToken ct);
 
     /// <summary>
-    /// One request and its reply: the <c>result</c> member. Parameter names are written in
-    /// snake_case. Throws <see cref="DaemonRpcException"/> for an error reply,
-    /// <see cref="TimeoutException"/> when the daemon does not answer in time, and
-    /// <see cref="DaemonUnavailableException"/> when the daemon cannot be reached.
+    /// One request and its reply: the <c>result</c> member. Parameters use the daemon's
+    /// snake_case names, and members whose value is null are left out. Throws
+    /// <see cref="DaemonRpcException"/> for an error reply, <see cref="TimeoutException"/> when
+    /// the daemon does not answer in time, and <see cref="DaemonUnavailableException"/> when
+    /// the daemon cannot be reached.
     /// </summary>
-    Task<JsonElement> CallAsync(string method, object? parameters, CancellationToken ct);
+    Task<JsonElement> CallAsync(string method, JsonObject? parameters, CancellationToken ct);
 
     /// <summary>
     /// Live changes, resuming after the last event seen whenever the stream drops. The

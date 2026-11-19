@@ -26,13 +26,12 @@ public sealed class ReaderSettingsTests
     public async Task WritesOneSettingAtATimeAndPreservesTheSharedImageKey()
     {
         var calls = new List<string>();
-        var wire = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
         var settings = new ReaderSettings(new FakeClient
         {
             OnCall = (method, parameters) =>
             {
                 Assert.Equal("config.set", method);
-                calls.Add(JsonSerializer.Serialize(parameters, wire));
+                calls.Add(parameters.GetValueOrDefault().GetRawText());
                 return JsonSerializer.SerializeToElement(new { ok = true });
             },
         });
@@ -50,13 +49,12 @@ public sealed class ReaderSettingsTests
     [InlineData(ReaderFontRole.Code, "code", -2)]
     public async Task UpdatesOnlyTheChosenFontRole(ReaderFontRole role, string key, int step)
     {
-        var wire = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
         var settings = new ReaderSettings(new FakeClient
         {
             OnCall = (method, parameters) =>
             {
                 Assert.Equal("config.set", method);
-                var weights = JsonSerializer.SerializeToElement(parameters, wire).GetProperty("ui_patch").GetProperty("weights");
+                var weights = parameters.GetValueOrDefault().GetProperty("ui_patch").GetProperty("weights");
                 var field = Assert.Single(weights.EnumerateObject());
                 Assert.Equal(key, field.Name);
                 Assert.Equal(step, field.Value.GetInt32());
@@ -85,13 +83,12 @@ public sealed class ReaderSettingsTests
     [Fact]
     public async Task TextLayoutPatchUsesOnlyEditedProfileKeys()
     {
-        var wire = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
         var settings = new ReaderSettings(new FakeClient
         {
             OnCall = (method, parameters) =>
             {
                 Assert.Equal("config.set", method);
-                var patch = JsonSerializer.SerializeToElement(parameters, wire).GetProperty("ui_patch");
+                var patch = parameters.GetValueOrDefault().GetProperty("ui_patch");
                 Assert.Equal(24, patch.GetProperty("textSize").GetDouble());
                 Assert.Equal(800, patch.GetProperty("columnWidth").GetDouble());
                 Assert.Equal(2, patch.EnumerateObject().Count());
@@ -126,13 +123,12 @@ public sealed class ReaderSettingsTests
     [InlineData(ReaderScrollbarMode.Never, "never")]
     public async Task WritesOnlyTheSharedScrollbarField(ReaderScrollbarMode mode, string value)
     {
-        var wire = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
         var settings = new ReaderSettings(new FakeClient
         {
             OnCall = (method, parameters) =>
             {
                 Assert.Equal("config.set", method);
-                var patch = JsonSerializer.SerializeToElement(parameters, wire).GetProperty("ui_patch");
+                var patch = parameters.GetValueOrDefault().GetProperty("ui_patch");
                 var field = Assert.Single(patch.EnumerateObject());
                 Assert.Equal("scrollbars", field.Name);
                 Assert.Equal(value, field.Value.GetString());
@@ -157,13 +153,12 @@ public sealed class ReaderSettingsTests
     [Fact]
     public async Task CollapsedFolderWritesPatchTheSharedArray()
     {
-        var wire = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
         var settings = new ReaderSettings(new FakeClient
         {
             OnCall = (method, parameters) =>
             {
                 Assert.Equal("config.set", method);
-                var patch = JsonSerializer.SerializeToElement(parameters, wire).GetProperty("ui_patch");
+                var patch = parameters.GetValueOrDefault().GetProperty("ui_patch");
                 var field = Assert.Single(patch.EnumerateObject());
                 Assert.Equal("collapsedFolders", field.Name);
                 Assert.Equal([2L, 4294967296L], field.Value.EnumerateArray().Select(item => item.GetInt64()));
@@ -195,13 +190,12 @@ public sealed class ReaderSettingsTests
     public async Task WritesTheChosenAppearanceSlotAndPinsAnExplicitTheme()
     {
         var patches = new List<string>();
-        var wire = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
         var settings = new ReaderSettings(new FakeClient
         {
             OnCall = (method, parameters) =>
             {
                 Assert.Equal("config.set", method);
-                patches.Add(JsonSerializer.SerializeToElement(parameters, wire).GetProperty("ui_patch").GetRawText());
+                patches.Add(parameters.GetValueOrDefault().GetProperty("ui_patch").GetRawText());
                 return JsonSerializer.SerializeToElement(new { ok = true });
             },
         });

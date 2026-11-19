@@ -18,7 +18,7 @@ public sealed class OpmlTransferTests
             OnCall = (method, parameters) =>
             {
                 Assert.Equal("opml.import", method);
-                var fields = JsonSerializer.SerializeToElement(parameters).EnumerateObject().ToArray();
+                var fields = parameters.GetValueOrDefault().EnumerateObject().ToArray();
                 Assert.Single(fields);
                 Assert.Equal(path, fields[0].Value.GetString());
                 return JsonSerializer.SerializeToElement(new { added = 2, existing = 1 });

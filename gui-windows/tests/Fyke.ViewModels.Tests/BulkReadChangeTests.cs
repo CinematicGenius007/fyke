@@ -15,18 +15,18 @@ public sealed class BulkReadChangeTests
         {
             OnCall = (method, parameters) =>
             {
-                var sent = JsonSerializer.SerializeToElement(parameters);
+                var sent = parameters.GetValueOrDefault();
                 if (method == "entries.list")
                 {
-                    Assert.True(sent.GetProperty("UnreadOnly").GetBoolean());
-                    Assert.Equal(6, sent.GetProperty("FolderId").GetInt64());
-                    Assert.Equal(1000, sent.GetProperty("Limit").GetInt32());
-                    Assert.Equal(listCalls++ == 0 ? null : "next", sent.GetProperty("Before").GetString());
+                    Assert.True(sent.GetProperty("unread_only").GetBoolean());
+                    Assert.Equal(6, sent.GetProperty("folder_id").GetInt64());
+                    Assert.Equal(1000, sent.GetProperty("limit").GetInt32());
+                    Assert.Equal(listCalls++ == 0 ? null : "next", sent.Optional("before").GetString());
                     return listCalls == 1 ? Page([1], "next") : Page([2], null);
                 }
 
                 Assert.Equal("entries.mark_many", method);
-                var read = sent.GetProperty("Read").GetBoolean();
+                var read = sent.GetProperty("read").GetBoolean();
                 var ids = ReadIds(sent);
                 writes.Add((read, ids));
                 return Reply(ids, id => !read || id == 1);
@@ -60,16 +60,16 @@ public sealed class BulkReadChangeTests
         {
             OnCall = (method, parameters) =>
             {
-                var sent = JsonSerializer.SerializeToElement(parameters);
+                var sent = parameters.GetValueOrDefault();
                 if (method == "entries.list")
                 {
-                    return sent.GetProperty("Before").ValueKind == JsonValueKind.Null
+                    return !sent.TryGetProperty("before", out _)
                         ? Page(Enumerable.Range(1, 1000).Select(id => (long)id), "next")
                         : Page([1001], null);
                 }
 
                 var ids = ReadIds(sent);
-                var read = sent.GetProperty("Read").GetBoolean();
+                var read = sent.GetProperty("read").GetBoolean();
                 if (fail && ids.Length == 1 && read == interruptMark)
                 {
                     throw new DaemonProtocolException("Interrupted batch");
@@ -112,7 +112,7 @@ public sealed class BulkReadChangeTests
     }
 
     private static long[] ReadIds(JsonElement request) =>
-        request.GetProperty("Ids").EnumerateArray().Select(id => id.GetInt64()).ToArray();
+        request.GetProperty("ids").EnumerateArray().Select(id => id.GetInt64()).ToArray();
 
     private static JsonElement Page(IEnumerable<long> ids, string? cursor) =>
         JsonSerializer.SerializeToElement(new { items = ids.Select(id => new { id, read = false }), next_cursor = cursor });

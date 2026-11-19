@@ -34,7 +34,7 @@ public sealed class CatalogEditsTests
         {
             OnCall = (method, parameters) =>
             {
-                calls.Add((method, JsonSerializer.SerializeToElement(parameters)));
+                calls.Add((method, parameters.GetValueOrDefault()));
                 return JsonSerializer.SerializeToElement(new { ok = true });
             },
         };
@@ -51,12 +51,12 @@ public sealed class CatalogEditsTests
 
         Assert.Equal(["folders.add", "folders.rename", "folders.move", "feeds.update", "feeds.update"],
             calls.Select(call => call.Method));
-        Assert.Equal("Child", calls[0].Parameters.GetProperty("Name").GetString());
-        Assert.Equal(1, calls[0].Parameters.GetProperty("ParentId").GetInt64());
-        Assert.Equal("News", calls[1].Parameters.GetProperty("Name").GetString());
-        Assert.Equal(3, calls[2].Parameters.GetProperty("ParentId").GetInt64());
-        Assert.Equal(string.Empty, calls[3].Parameters.GetProperty("Title").GetString());
-        Assert.True(calls[4].Parameters.GetProperty("TopLevel").GetBoolean());
+        Assert.Equal("Child", calls[0].Parameters.GetProperty("name").GetString());
+        Assert.Equal(1, calls[0].Parameters.GetProperty("parent_id").GetInt64());
+        Assert.Equal("News", calls[1].Parameters.GetProperty("name").GetString());
+        Assert.Equal(3, calls[2].Parameters.GetProperty("parent_id").GetInt64());
+        Assert.Equal(string.Empty, calls[3].Parameters.GetProperty("title").GetString());
+        Assert.True(calls[4].Parameters.GetProperty("top_level").GetBoolean());
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public sealed class CatalogEditsTests
         {
             OnCall = (method, parameters) =>
             {
-                calls.Add((method, JsonSerializer.SerializeToElement(parameters)));
+                calls.Add((method, parameters.GetValueOrDefault()));
                 return method switch
                 {
                     "feeds.refresh" => JsonSerializer.SerializeToElement(new { id = 2, status = "updated", @new = 3, updated = 1 }),
@@ -103,9 +103,9 @@ public sealed class CatalogEditsTests
 
         Assert.Equal(["feeds.refresh", "feeds.refresh_all", "feeds.remove", "folders.remove", "folders.remove"],
             calls.Select(call => call.Method));
-        Assert.Equal(2, calls[0].Parameters.GetProperty("Id").GetInt64());
-        Assert.Equal(2, calls[2].Parameters.GetProperty("Id").GetInt64());
-        Assert.False(calls[3].Parameters.GetProperty("DeleteContents").GetBoolean());
-        Assert.True(calls[4].Parameters.GetProperty("DeleteContents").GetBoolean());
+        Assert.Equal(2, calls[0].Parameters.GetProperty("id").GetInt64());
+        Assert.Equal(2, calls[2].Parameters.GetProperty("id").GetInt64());
+        Assert.False(calls[3].Parameters.GetProperty("delete_contents").GetBoolean());
+        Assert.True(calls[4].Parameters.GetProperty("delete_contents").GetBoolean());
     }
 }

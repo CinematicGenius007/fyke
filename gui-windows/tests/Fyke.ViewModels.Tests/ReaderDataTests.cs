@@ -49,10 +49,10 @@ public sealed class ReaderDataTests
 
     [Theory]
     [InlineData(ReaderScope.All, null)]
-    [InlineData(ReaderScope.Starred, "StarredOnly")]
-    [InlineData(ReaderScope.Folder, "FolderId")]
-    [InlineData(ReaderScope.Feed, "FeedId")]
-    [InlineData(ReaderScope.View, "ViewId")]
+    [InlineData(ReaderScope.Starred, "starred_only")]
+    [InlineData(ReaderScope.Folder, "folder_id")]
+    [InlineData(ReaderScope.Feed, "feed_id")]
+    [InlineData(ReaderScope.View, "view_id")]
     public async Task TimelineSendsOnlyTheSelectedFilterAndKeepsTheCursor(ReaderScope scope, string? filter)
     {
         var fake = new FakeClient
@@ -60,13 +60,14 @@ public sealed class ReaderDataTests
             OnCall = (method, parameters) =>
             {
                 Assert.Equal("entries.list", method);
-                var sent = JsonSerializer.SerializeToElement(parameters);
-                Assert.Equal("prior", sent.GetProperty("Before").GetString());
-                Assert.Equal(ReaderData.PageSize, sent.GetProperty("Limit").GetInt32());
-                foreach (var name in new[] { "FeedId", "FolderId", "StarredOnly", "ViewId" })
+                var sent = parameters.GetValueOrDefault();
+                Assert.Equal("prior", sent.GetProperty("before").GetString());
+                Assert.Equal(ReaderData.PageSize, sent.GetProperty("limit").GetInt32());
+                foreach (var name in new[] { "feed_id", "folder_id", "starred_only", "view_id" })
                 {
-                    var value = sent.GetProperty(name);
-                    if (name == filter)
+                    var given = sent.TryGetProperty(name, out var value);
+                    Assert.Equal(name == filter, given);
+                    if (given)
                     {
                         if (scope == ReaderScope.Starred)
                         {
@@ -76,10 +77,6 @@ public sealed class ReaderDataTests
                         {
                             Assert.Equal(42, value.GetInt64());
                         }
-                    }
-                    else
-                    {
-                        Assert.Equal(JsonValueKind.Null, value.ValueKind);
                     }
                 }
 
@@ -103,9 +100,9 @@ public sealed class ReaderDataTests
             OnCall = (method, parameters) =>
             {
                 Assert.Equal("entries.get", method);
-                var sent = JsonSerializer.SerializeToElement(parameters);
-                Assert.Equal(9, sent.GetProperty("Id").GetInt64());
-                Assert.Equal("blocks", sent.GetProperty("Format").GetString());
+                var sent = parameters.GetValueOrDefault();
+                Assert.Equal(9, sent.GetProperty("id").GetInt64());
+                Assert.Equal("blocks", sent.GetProperty("format").GetString());
                 return JsonSerializer.SerializeToElement(new
                 {
                     title = "Reader fixture", feed_title = "News", author = "Alex",

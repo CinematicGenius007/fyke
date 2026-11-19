@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 using Fyke.Client;
 
 namespace Fyke.ViewModels;
@@ -31,13 +33,11 @@ public sealed record ViewRemoval(bool Ok, string? Kind, long[]? RoutineIds);
 /// <summary>Uses the same view operations as the macOS GUI and MCP.</summary>
 public sealed class SavedViews(IDaemonClient client)
 {
-    private static readonly JsonSerializerOptions Wire = new() { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower };
-
     public async Task<IReadOnlyList<SavedView>> ListAsync(CancellationToken ct)
     {
         try
         {
-            return (await ReadAsync<ViewList>("views.list", null, ct).ConfigureAwait(false)).Items;
+            return (await ReadAsync("views.list", null, WireJson.Default.ViewList, ct).ConfigureAwait(false)).Items;
         }
         catch (DaemonRpcException error) when (error.IsUnknownMethod)
         {
@@ -45,25 +45,30 @@ public sealed class SavedViews(IDaemonClient client)
         }
     }
 
-    public Task<SavedView> GetAsync(long id, CancellationToken ct) => ReadAsync<SavedView>("views.get", new { Id = id }, ct);
+    public Task<SavedView> GetAsync(long id, CancellationToken ct) =>
+        ReadAsync("views.get", new JsonObject { ["id"] = id }, WireJson.Default.SavedView, ct);
 
     public Task<ViewPreview> PreviewAsync(ViewRule rule, CancellationToken ct) =>
-        ReadAsync<ViewPreview>("views.preview", new { Rule = rule, Limit = 1 }, ct);
+        ReadAsync("views.preview", new JsonObject { ["rule"] = Wire.Node(rule, WireJson.Default.ViewRule), ["limit"] = 1 },
+            WireJson.Default.ViewPreview, ct);
 
     public Task<SavedView> SaveAsync(string name, ViewRule rule, SavedView? previous, CancellationToken ct) =>
-        ReadAsync<SavedView>("views.put", new { Name = name.Trim(), Rule = rule, Id = previous?.Id, ExpectedRevision = previous?.Revision }, ct);
+        ReadAsync("views.put", new JsonObject
+        {
+            ["name"] = name.Trim(),
+            ["rule"] = Wire.Node(rule, WireJson.Default.ViewRule),
+            ["id"] = previous?.Id,
+            ["expected_revision"] = previous?.Revision,
+        }, WireJson.Default.SavedView, ct);
 
     public Task MoveAsync(long id, int position, CancellationToken ct) =>
-        client.CallAsync("views.move", new { Id = id, Position = position }, ct);
+        client.CallAsync("views.move", new JsonObject { ["id"] = id, ["position"] = position }, ct);
 
     public Task<ViewRemoval> RemoveAsync(long id, bool detach, CancellationToken ct) =>
-        ReadAsync<ViewRemoval>("views.remove", new { Id = id, Detach = detach }, ct);
+        ReadAsync("views.remove", new JsonObject { ["id"] = id, ["detach"] = detach }, WireJson.Default.ViewRemoval, ct);
 
-    private async Task<T> ReadAsync<T>(string method, object? parameters, CancellationToken ct)
-    {
-        var reply = await client.CallAsync(method, parameters, ct).ConfigureAwait(false);
-        return reply.Deserialize<T>(Wire) ?? throw new DaemonProtocolException($"The daemon returned no result for {method}.");
-    }
+    private async Task<T> ReadAsync<T>(string method, JsonObject? parameters, JsonTypeInfo<T> type, CancellationToken ct) =>
+        Wire.Read(await client.CallAsync(method, parameters, ct).ConfigureAwait(false), type, method);
 
-    private sealed record ViewList(SavedView[] Items);
+    internal sealed record ViewList(SavedView[] Items);
 }

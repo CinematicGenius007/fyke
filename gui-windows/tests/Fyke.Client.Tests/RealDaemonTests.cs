@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using System.Diagnostics;
 
 namespace Fyke.Client.Tests;
@@ -26,7 +27,7 @@ public sealed class RealDaemonTests
             Assert.Equal(ConnectionState.Connected, client.State);
             Assert.True(client.DaemonApiVersion >= DaemonClient.RequiredApiVersion);
 
-            var view = await client.CallAsync("views.put", new { Name = "Windows smoke", Rule = new { } }, deadline.Token);
+            var view = await client.CallAsync("views.put", new JsonObject { ["name"] = "Windows smoke", ["rule"] = new JsonObject() }, deadline.Token);
             var id = view.GetProperty("id").GetInt64();
 
             // The write precedes subscription, so the event must arrive through replay.
@@ -82,7 +83,7 @@ public sealed class RealDaemonTests
             await using (var original = new DaemonClient(options))
             {
                 await original.StartAsync(deadline.Token);
-                var view = await original.CallAsync("views.put", new { Name = "Before move", Rule = new { } }, deadline.Token);
+                var view = await original.CallAsync("views.put", new JsonObject { ["name"] = "Before move", ["rule"] = new JsonObject() }, deadline.Token);
                 viewId = view.GetProperty("id").GetInt64();
             }
 
@@ -90,7 +91,7 @@ public sealed class RealDaemonTests
 
             await using var moved = new DaemonClient(options);
             await moved.StartAsync(deadline.Token);
-            var preserved = await moved.CallAsync("views.get", new { Id = viewId }, deadline.Token);
+            var preserved = await moved.CallAsync("views.get", new JsonObject { ["id"] = viewId }, deadline.Token);
             Assert.Equal("Before move", preserved.GetProperty("name").GetString());
             Assert.True(File.Exists(FykeHome.SocketPath(target)));
             Assert.Equal(new[] { FykeHome.LocationFileName }, Directory.GetFileSystemEntries(Path.Combine(profile, "Fyke")).Select(Path.GetFileName));

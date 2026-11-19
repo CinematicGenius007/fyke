@@ -32,9 +32,9 @@ public sealed class FeedSubscriptionTests
             OnCall = (method, parameters) =>
             {
                 Assert.Equal("feeds.preview", method);
-                var request = JsonSerializer.SerializeToElement(parameters);
-                Assert.Equal("https://example.org/", request.GetProperty("Url").GetString());
-                Assert.False(request.GetProperty("AllowPrivateNetwork").GetBoolean());
+                var request = parameters.GetValueOrDefault();
+                Assert.Equal("https://example.org/", request.GetProperty("url").GetString());
+                Assert.False(request.GetProperty("allow_private_network").GetBoolean());
                 return response.RootElement;
             },
         };
@@ -55,17 +55,17 @@ public sealed class FeedSubscriptionTests
         {
             OnCall = (method, parameters) =>
             {
-                var request = JsonSerializer.SerializeToElement(parameters);
+                var request = parameters.GetValueOrDefault();
                 if (method == "feeds.add")
                 {
-                    Assert.True(request.GetProperty("AllowPrivateNetwork").GetBoolean());
-                    additions.Add(request.GetProperty("Url").GetString());
-                    Assert.Equal(additions.Count == 1 ? "Renamed" : null, request.GetProperty("Title").GetString());
+                    Assert.True(request.GetProperty("allow_private_network").GetBoolean());
+                    additions.Add(request.GetProperty("url").GetString());
+                    Assert.Equal(additions.Count == 1 ? "Renamed" : null, request.Optional("title").GetString());
                     return JsonSerializer.SerializeToElement(new { id = 40 + additions.Count, status = "updated" });
                 }
 
                 Assert.Equal("feeds.update", method);
-                placements.Add((request.GetProperty("Id").GetInt64(), request.GetProperty("FolderId").GetInt64()));
+                placements.Add((request.GetProperty("id").GetInt64(), request.GetProperty("folder_id").GetInt64()));
                 if (placements.Count == 1)
                 {
                     throw new DaemonRpcException("NoSuchFolder", -32000, "NoSuchFolder", null);

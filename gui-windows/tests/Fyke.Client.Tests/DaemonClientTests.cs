@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using System.Text.Json;
 
 namespace Fyke.Client.Tests;
@@ -40,7 +41,7 @@ public sealed class DaemonClientTests
         await using var client = new DaemonClient(TestSupport.Options(fake));
         await client.StartAsync(CancellationToken.None);
 
-        var result = await client.CallAsync("entries.get", new { Id = 42 }, CancellationToken.None);
+        var result = await client.CallAsync("entries.get", new JsonObject { ["id"] = 42 }, CancellationToken.None);
 
         Assert.Equal(42, result.GetProperty("id").GetInt64());
         Assert.Equal("Hello", result.GetProperty("title").GetString());
@@ -55,7 +56,7 @@ public sealed class DaemonClientTests
         await using var client = new DaemonClient(TestSupport.Options(fake));
         await client.StartAsync(CancellationToken.None);
 
-        var echoed = await client.CallAsync("echo", new { FeedId = 7, UnreadOnly = true, Before = (long?)null }, CancellationToken.None);
+        var echoed = await client.CallAsync("echo", new JsonObject { ["feed_id"] = 7, ["unread_only"] = true, ["before"] = null }, CancellationToken.None);
         var none = await client.CallAsync("echo", null, CancellationToken.None);
 
         Assert.Equal("""{"feed_id":7,"unread_only":true}""", TestSupport.Json(echoed));
@@ -71,7 +72,7 @@ public sealed class DaemonClientTests
         await using var client = new DaemonClient(TestSupport.Options(fake));
         await client.StartAsync(CancellationToken.None);
 
-        var failure = await Assert.ThrowsAsync<DaemonRpcException>(() => client.CallAsync("entries.get", new { Id = 1 }, CancellationToken.None));
+        var failure = await Assert.ThrowsAsync<DaemonRpcException>(() => client.CallAsync("entries.get", new JsonObject { ["id"] = 1 }, CancellationToken.None));
 
         Assert.Equal(-32000, failure.Code);
         Assert.Equal("NoSuchEntry", failure.Kind);
@@ -94,7 +95,7 @@ public sealed class DaemonClientTests
         await using var client = new DaemonClient(TestSupport.Options(fake));
         await client.StartAsync(CancellationToken.None);
 
-        var failure = await Assert.ThrowsAsync<DaemonRpcException>(() => client.CallAsync("views.put", new { Id = 3 }, CancellationToken.None));
+        var failure = await Assert.ThrowsAsync<DaemonRpcException>(() => client.CallAsync("views.put", new JsonObject { ["id"] = 3 }, CancellationToken.None));
 
         Assert.True(failure.Is("RevisionConflict"));
         Assert.Equal(9, failure.ErrorData!.Value.GetProperty("current").GetProperty("revision").GetInt64());
@@ -185,7 +186,7 @@ public sealed class DaemonClientTests
         await client.StartAsync(CancellationToken.None);
 
         await Assert.ThrowsAsync<DaemonProtocolException>(() =>
-            client.CallAsync("put", new { Text = new string('x', 1024 * 1024) }, CancellationToken.None));
+            client.CallAsync("put", new JsonObject { ["text"] = new string('x', 1024 * 1024) }, CancellationToken.None));
 
         Assert.Equal(ConnectionState.Connected, client.State);
     }
