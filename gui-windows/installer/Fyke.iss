@@ -199,6 +199,8 @@ end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
-  if CurUninstallStep = usPostUninstall then
+  { Before the files go, so that the uninstaller has finished with PATH when it reports
+    itself done. }
+  if CurUninstallStep = usUninstall then
     RemoveFromPath(ExpandConstant('{app}'));
 end;

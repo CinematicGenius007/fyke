@@ -149,8 +149,10 @@ check("it leaves Apps and features", wait_for(lambda: installed_version() is Non
 check("it removes the program files", wait_for(lambda: not os.path.exists(FYKE), 30),
       os.listdir(INSTALL) if os.path.isdir(INSTALL) else "")
 check("it removes the Start menu entry", not os.path.exists(START_MENU))
-check("it removes the PATH entry", all(entry.lower() != INSTALL.lower() for entry in user_path()), user_path())
-check("it removes the sign-in entry", read(RUN, "Fyke") is None, read(RUN, "Fyke"))
+# The uninstaller finishes on its own after the entry in Apps goes, so wait for each step.
+check("it removes the PATH entry",
+      wait_for(lambda: all(entry.lower() != INSTALL.lower() for entry in user_path()), 30), user_path())
+check("it removes the sign-in entry", wait_for(lambda: read(RUN, "Fyke") is None, 30), read(RUN, "Fyke"))
 check("it stops the daemon and its supervisor", wait_for(lambda: not daemons(), 20), daemons())
 check("it keeps the database", os.path.isfile(os.path.join(home, "fyke.db")))
 check("it keeps the person's files", os.path.isfile(os.path.join(home, "kept.txt")))
