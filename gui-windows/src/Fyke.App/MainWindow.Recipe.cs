@@ -476,10 +476,9 @@ public sealed partial class MainWindow
                 Style = AppResources.FromApp<Style>("RecipeRevisionRow"),
                 Content = row,
             };
+            // A Button has no expand pattern, so the name says whether the text is shown.
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(toggle,
-                $"{RecipeText.Revision(revision)}{(revision.Revision == current ? ", current" : string.Empty)}, {revision.Note}");
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetExpandCollapseState(toggle, open
-                ? Microsoft.UI.Xaml.Automation.ExpandCollapseState.Expanded : Microsoft.UI.Xaml.Automation.ExpandCollapseState.Collapsed);
+                $"{RecipeText.Revision(revision)}{(revision.Revision == current ? ", current" : string.Empty)}, {revision.Note}, {(open ? "shown" : "hidden")}");
             var number = revision.Revision;
             toggle.Click += (_, _) => _ = ToggleRevisionAsync(revision);
             RecipeHistoryPage.Children.Add(toggle);
