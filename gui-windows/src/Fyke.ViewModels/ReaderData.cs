@@ -17,8 +17,16 @@ public enum ReaderScope
 }
 
 public sealed record ReaderDestination(ReaderScope Scope, long Id, string Title, int Depth, long Count,
-    long? ParentId = null, long Entries = 0, long Starred = 0, string? RuleSummary = null, TodayBadge Badge = TodayBadge.None)
+    long? ParentId = null, long Entries = 0, long Starred = 0, string? RuleSummary = null, TodayBadge Badge = TodayBadge.None,
+    FeedHealth? Health = null)
 {
+    /// <summary>A feed whose fetches fail; its row shows a warning in place of its count.</summary>
+    public bool IsFailing => Health?.IsFailing == true;
+
+    public string HealthTip => $"{Title} is not loading";
+
+    public string HealthName => $"{Title} is not loading. Show why";
+
     public string Glyph => Scope switch
     {
         ReaderScope.All => "\uE8B7",
@@ -29,14 +37,15 @@ public sealed record ReaderDestination(ReaderScope Scope, long Id, string Title,
         _ => "\uE8A1",
     };
 
-    public string CountText => Badge switch
+    public string CountText => IsFailing ? string.Empty : Badge switch
     {
         TodayBadge.Writing => "Writing…",
         TodayBadge.NewBrief => "\u25CF",
         _ => Count > 0 ? Count.ToString(CultureInfo.CurrentCulture) : string.Empty,
     };
 
-    public string AccessibleName => Badge != TodayBadge.None
+    public string AccessibleName => IsFailing ? $"{Title}, not loading"
+        : Badge != TodayBadge.None
         ? $"{Title}, {(Badge == TodayBadge.Writing ? "writing a brief" : "new brief")}"
         : Count > 0
         ? string.Format(CultureInfo.CurrentCulture, "{0}, {1} {2}", Title, Count, Scope == ReaderScope.Starred ? "starred" : "unread")
@@ -92,7 +101,8 @@ public sealed class ReaderData(IDaemonClient client)
             foreach (var feed in feedsByFolder[parent])
             {
                 rows.Add(new(ReaderScope.Feed, feed.Id, string.IsNullOrWhiteSpace(feed.Title) ? feed.Url : feed.Title,
-                    depth, feed.Unread, feed.FolderId, feed.Entries, feed.Starred));
+                    depth, feed.Unread, feed.FolderId, feed.Entries, feed.Starred,
+                    Health: new FeedHealth(feed.ErrorCount, feed.LastError, feed.SiteUrl)));
                 unread += feed.Unread;
             }
 
@@ -281,7 +291,8 @@ public sealed class ReaderData(IDaemonClient client)
         entry.Read, entry.Starred, entry.FeedId);
 
     internal sealed record CatalogItems<T>(T[] Items);
-    internal sealed record Feed(long Id, long? FolderId, string? Title, string Url, long Unread, long Starred, long Entries);
+    internal sealed record Feed(long Id, long? FolderId, string? Title, string Url, long Unread, long Starred, long Entries,
+        long ErrorCount = 0, string? LastError = null, string? SiteUrl = null);
     internal sealed record Folder(long Id, long? ParentId, string Name);
     internal sealed record Entry(long Id, string? Title, string? FeedTitle, bool Read, bool Starred,
         string? Snippet, string? Summary, long SortAt, long? FeedId);

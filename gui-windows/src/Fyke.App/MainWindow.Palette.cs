@@ -92,7 +92,7 @@ public sealed partial class MainWindow
         var query = PaletteQuery.Text.Trim();
         var maximum = query.Length == 0 ? 8 : 5;
         var commands = MatchPaletteItems(PaletteDestinations(), query, maximum)
-            .Concat(MatchPaletteItems(PaletteActions().Concat(PaletteRoutines()), query, maximum)).ToArray();
+            .Concat(MatchPaletteItems(PaletteActions().Concat(PaletteActivity()).Concat(PaletteRoutines()), query, maximum)).ToArray();
         if (query.Length >= 2)
         {
             commands = [.. commands, new PaletteResult("ask.query", $"Ask your feeds: “{query}”", "Answers only from your feeds",

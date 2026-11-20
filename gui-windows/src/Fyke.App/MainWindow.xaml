@@ -39,6 +39,7 @@
                 <KeyboardAccelerator Key="R" Modifiers="Control" Invoked="WriteBriefShortcut" />
                 <KeyboardAccelerator Key="J" Modifiers="Control" Invoked="CatchUpShortcut" />
                 <KeyboardAccelerator Key="Number4" Modifiers="Control" Invoked="RoutinesShortcut" />
+                <KeyboardAccelerator Key="Number0" Modifiers="Control" Invoked="ActivityShortcut" />
                 <KeyboardAccelerator Key="A" Modifiers="Control,Shift" Invoked="AskShortcut" />
                 <KeyboardAccelerator Key="K" Modifiers="Control,Shift" Invoked="MarkAllReadShortcut" />
                 <KeyboardAccelerator Key="Z" Modifiers="Control" Invoked="UndoBulkShortcut" />
@@ -133,13 +134,20 @@
                                 <TextBlock Grid.Column="2" Text="{x:Bind CountText}" VerticalAlignment="Center"
                                            FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                                            Foreground="{ThemeResource UnreadBrush}" />
+                                <!-- A failing feed shows why when its warning is pressed, as on macOS. -->
+                                <Button Grid.Column="2" Width="20" Height="20" Padding="0" Visibility="{x:Bind IsFailing}"
+                                        Background="Transparent" BorderThickness="0" CornerRadius="{StaticResource RadiusControl}"
+                                        Click="FeedHealthClicked" ToolTipService.ToolTip="{x:Bind HealthTip}"
+                                        AutomationProperties.Name="{x:Bind HealthName}">
+                                    <FontIcon Glyph="&#xE7BA;" FontSize="11" Foreground="{ThemeResource InkBrush}" />
+                                </Button>
                             </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
                 <Grid Grid.Row="2" ColumnSpacing="8" Padding="0,4,0,0">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                     <!-- Routines, at the foot of the sidebar as on macOS, with the soonest run. Built in MainWindow.Routines.cs. -->
                     <Button Grid.ColumnSpan="2" x:Name="RoutinesButton" Height="32" Padding="10,0" Margin="0,0,0,4"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="RoutinesClicked"
@@ -160,11 +168,59 @@
                                        AutomationProperties.AutomationId="RoutinesNext" />
                         </Grid>
                     </Button>
-                    <TextBlock Grid.Row="1" x:Name="SubscriptionStatus" Visibility="Collapsed" Margin="10,0,0,0" VerticalAlignment="Center"
+                    <TextBlock Grid.Row="1" Grid.ColumnSpan="2" x:Name="SubscriptionStatus" Visibility="Collapsed" Margin="10,0,0,4" VerticalAlignment="Center"
                            FontSize="12" TextWrapping="Wrap" FontFamily="{StaticResource FontUi}"
                            FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                            Foreground="{ThemeResource MutedBrush}" AutomationProperties.LiveSetting="Polite" />
-                    <Button Grid.Row="1" Grid.Column="1" x:Name="SettingsButton" Width="32" Height="32" Padding="0"
+                    <!-- The one line of background work, as on macOS. It opens Activity. Built in MainWindow.Activity.cs. -->
+                    <Button Grid.Row="2" x:Name="ActivityButton" Height="32" Padding="10,0"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                            Background="Transparent" BorderThickness="0" CornerRadius="{StaticResource RadiusControl}"
+                            AutomationProperties.AutomationId="ActivityButton" AutomationProperties.HelpText="Shows background work"
+                            AutomationProperties.AcceleratorKey="Ctrl+0" ToolTipService.ToolTip="Activity (Ctrl+0)">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="14" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                            <Ellipse x:Name="ActivityDot" Style="{StaticResource ActivityQuietDot}" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                            <ProgressRing x:Name="ActivitySpinner" Width="10" Height="10" MinWidth="0" MinHeight="0" IsActive="False"
+                                          Visibility="Collapsed" Foreground="{ThemeResource UnreadBrush}" />
+                            <TextBlock Grid.Column="1" x:Name="ActivityWords" VerticalAlignment="Center" FontSize="12"
+                                       TextTrimming="CharacterEllipsis" FontFamily="{StaticResource FontUi}"
+                                       Foreground="{ThemeResource MutedBrush}" AutomationProperties.AutomationId="ActivityWords" />
+                        </Grid>
+                        <Button.Flyout>
+                            <Flyout x:Name="ActivityFlyout" Placement="TopEdgeAlignedLeft" FlyoutPresenterStyle="{StaticResource ActivityPopover}"
+                                    Opening="ActivityOpening" Closed="ActivityClosed">
+                                <Grid Width="360" AutomationProperties.Name="Activity" AutomationProperties.AutomationId="ActivityPanel">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="44" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" /><RowDefinition Height="44" />
+                                    </Grid.RowDefinitions>
+                                    <Grid Padding="16,0,8,0">
+                                        <TextBlock Text="Activity" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"
+                                                   FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource InkBrush}"
+                                                   AutomationProperties.HeadingLevel="Level1" />
+                                        <Button Content="Refresh feeds" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                Style="{StaticResource BriefQuietAction}" Click="ActivityRefreshClicked"
+                                                AutomationProperties.AutomationId="ActivityRefresh" />
+                                    </Grid>
+                                    <Border Grid.Row="1" Height="1" Style="{StaticResource SettingsHairline}" />
+                                    <ScrollViewer Grid.Row="2" MaxHeight="420" HorizontalScrollMode="Disabled">
+                                        <StackPanel x:Name="ActivityGroups" Padding="0,0,0,8" />
+                                    </ScrollViewer>
+                                    <Border Grid.Row="3" Height="1" Style="{StaticResource SettingsHairline}" />
+                                    <Grid Grid.Row="4" Padding="8,0,16,0" ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                        <HyperlinkButton Content="Routines" VerticalAlignment="Center" Click="ActivityRoutinesClicked"
+                                                         AutomationProperties.AutomationId="ActivityRoutines" />
+                                        <TextBlock Grid.Column="1" x:Name="ActivityNext" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                   FontSize="12" TextTrimming="CharacterEllipsis" FontFamily="{StaticResource FontUi}"
+                                                   Foreground="{ThemeResource MutedBrush}" />
+                                    </Grid>
+                                </Grid>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                    <Button Grid.Row="2" Grid.Column="1" x:Name="SettingsButton" Width="32" Height="32" Padding="0"
                             Click="SettingsClicked" CornerRadius="{StaticResource RadiusControl}"
                             AutomationProperties.AutomationId="SettingsButton" AutomationProperties.Name="Settings"
                             AutomationProperties.AcceleratorKey="Ctrl+," ToolTipService.ToolTip="Settings (Ctrl+,)">
@@ -646,8 +702,14 @@
                                                    Foreground="{ThemeResource InkBrush}" />
                                         <TextBlock Text="{x:Bind Line}" FontSize="13" TextTrimming="CharacterEllipsis"
                                                    FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource InkSoftBrush}" />
-                                        <TextBlock Text="{x:Bind Status}" FontSize="12" TextTrimming="CharacterEllipsis"
+                                        <TextBlock Text="{x:Bind Status}" FontSize="12" TextTrimming="CharacterEllipsis" Visibility="{x:Bind Working}"
                                                    FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource MutedBrush}" />
+                                        <!-- A failed run, until something runs again, as Activity lists it. -->
+                                        <StackPanel Orientation="Horizontal" Spacing="4" Visibility="{x:Bind Failed}">
+                                            <FontIcon Glyph="&#xE7BA;" FontSize="10" Foreground="{ThemeResource InkBrush}" />
+                                            <TextBlock Text="{x:Bind Status}" FontSize="12" TextTrimming="CharacterEllipsis"
+                                                       FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource InkBrush}" />
+                                        </StackPanel>
                                     </StackPanel>
                                     <!-- Toggles without choosing the row. -->
                                     <ToggleSwitch Grid.Column="1" IsOn="{x:Bind Enabled}" Visibility="{x:Bind CanToggle}"

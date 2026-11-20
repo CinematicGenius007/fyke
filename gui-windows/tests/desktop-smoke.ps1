@@ -171,10 +171,14 @@ try {
 
     $opml = Join-Path $testHome 'fixture.opml'
     $urlAttribute = [Security.SecurityElement]::Escape($FeedUrl)
+    # A feed whose address answers 404, so Activity and the sidebar have a failing feed to show.
+    $brokenAttribute = [Security.SecurityElement]::Escape([Uri]::new([Uri]$FeedUrl, '/broken-feed').AbsoluteUri)
     [IO.File]::WriteAllText($opml, @"
 <opml version="2.0"><body><outline text="Fixture folder">
 <outline type="rss" text="Desktop fixture" xmlUrl="$urlAttribute"/>
-</outline></body></opml>
+</outline>
+<outline type="rss" text="Broken fixture" xmlUrl="$brokenAttribute"/>
+</body></opml>
 "@)
     & $daemonPath import $opml --allow-private
     if ($LASTEXITCODE -ne 0) { throw 'Could not import the reader fixture feed' }
@@ -760,6 +764,34 @@ try {
         $heading = Find-ById 'TimelineHeading'
         if ($heading.Current.Name -eq 'Renamed fixture view' -and (Find-ByName $timeline 'Native reader fixture') -and
             !(Find-ByName $timeline 'Live reader update')) { $true }
+    } | Out-Null
+
+    # Activity: the status line opens the panel. The broken feed failed when it was imported and
+    # again on every refresh since; Show opens what happened beside its row.
+    Wait-For 'the broken feed warning in the sidebar' {
+        Find-ByName $items 'Broken fixture is not loading. Show why'
+    } | Out-Null
+    Wait-For 'the status line to ask for attention' {
+        $words = Find-ById 'ActivityWords'
+        if ($words -and $words.Current.Name -eq '1 thing needs you') { $true }
+    } | Out-Null
+    Invoke-Button 'ActivityButton'
+    Wait-For 'the Activity panel' {
+        $panel = Find-ById 'ActivityPanel'
+        if ($panel -and (Find-ByName $panel 'Now') -and (Find-ByName $panel 'Needs you') -and
+            (Find-ByName $panel 'Broken fixture is not loading') -and
+            (Find-ByName $panel 'Their articles so far are kept. Fyke keeps trying on its own.')) { $true }
+    } | Out-Null
+    Invoke-Button 'ActivityShowFeed'
+    Wait-For 'the broken feed health panel' {
+        $health = Find-ById 'FeedHealth'
+        $healthError = Find-ById 'FeedHealthError'
+        if ($health -and $health.Current.Name -eq 'Broken fixture is not loading' -and $healthError -and $healthError.Current.Name) { $true }
+    } | Out-Null
+    Invoke-Button 'FeedHealthRefresh'
+    Wait-For 'the health panel to close' {
+        $health = Find-ById 'FeedHealth'
+        if (!$health -or $health.Current.IsOffscreen) { $true }
     } | Out-Null
 
     # Routines: start one from the view, save it, see its dry run, then remove it and undo.

@@ -264,6 +264,7 @@ public sealed partial class MainWindow
     private void RenderRoutines()
     {
         RoutinesNext.Text = RoutineText.SidebarNext(routineEditing.Saved) ?? string.Empty;
+        RenderActivity();
         if (!IsRoutinesShown)
         {
             return;
@@ -276,7 +277,8 @@ public sealed partial class MainWindow
     private void RenderRoutineRows()
     {
         var now = DateTimeOffset.Now;
-        var rows = routineEditing.Rows.Select(routine => RoutineListItem.From(routine, now)).ToList();
+        var rows = routineEditing.Rows
+            .Select(routine => RoutineListItem.From(routine, now, routine.Id is { } id ? activity.FailedRun(id, now) : null)).ToList();
         applyingRoutine = true;
         try
         {
@@ -716,7 +718,7 @@ public sealed partial class MainWindow
 
     private void RunRoutineClicked(object sender, RoutedEventArgs args) => _ = RunRoutineAsync(routineEditing.Editing);
 
-    /// <summary>Captures the matches now and queues the actions; what they make shows in Today.</summary>
+    /// <summary>Captures the matches now and queues the actions, then opens Activity; what they make shows in Today.</summary>
     private async Task RunRoutineAsync(Routine? routine)
     {
         if (routine?.Id is not { } id)
@@ -727,7 +729,9 @@ public sealed partial class MainWindow
         try
         {
             await routines.RunAsync(id, lifetime.Token);
-            ShowBulkNotice($"Running “{routine.Name}” now.");
+            // As on macOS, Activity shows the run, and later whether it failed.
+            await LoadActivityAsync();
+            OpenActivity();
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
         {

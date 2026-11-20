@@ -405,7 +405,8 @@ internal sealed class BriefRenderer(FontFamily reading, FontFamily ui, ReaderFon
         return button;
     }
 
-    private TextBlock Label(string text, double size, string style, string weight = nameof(ReaderFontWeights.Ui), int spacing = 0)
+    /// <summary>A line of interface text in the UI face, with the weight the reader settings choose.</summary>
+    public TextBlock Label(string text, double size, string style, string weight = nameof(ReaderFontWeights.Ui), int spacing = 0)
     {
         var label = new TextBlock { Text = text, FontFamily = ui, FontSize = size, Style = Shared(style), CharacterSpacing = spacing };
         weights.Bind(label, TextBlock.FontWeightProperty, weight);

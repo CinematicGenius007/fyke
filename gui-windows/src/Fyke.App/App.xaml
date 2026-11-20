@@ -270,6 +270,29 @@
             <Style x:Key="RoutineBarEmpty" TargetType="Border" BasedOn="{StaticResource RoutineBar}">
                 <Setter Property="Background" Value="{ThemeResource HairlineBrush}" />
             </Style>
+            <!-- Activity: the panel the status line opens, and the failed work in it. -->
+            <Style x:Key="ActivityPopover" TargetType="FlyoutPresenter" BasedOn="{StaticResource BriefPopover}">
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="MaxWidth" Value="420" />
+            </Style>
+            <Style x:Key="ActivityFailure" TargetType="Border">
+                <Setter Property="Padding" Value="12" />
+                <Setter Property="Margin" Value="8,0" />
+                <Setter Property="CornerRadius" Value="{StaticResource RadiusControl}" />
+                <Setter Property="Background" Value="{ThemeResource SelectedBrush}" />
+            </Style>
+            <Style x:Key="ActivityDot" TargetType="Ellipse">
+                <Setter Property="Width" Value="6" />
+                <Setter Property="Height" Value="6" />
+                <Setter Property="Fill" Value="{ThemeResource UnreadBrush}" />
+            </Style>
+            <Style x:Key="ActivityQuietDot" TargetType="Ellipse" BasedOn="{StaticResource ActivityDot}">
+                <Setter Property="Fill" Value="{ThemeResource ControlBrush}" />
+            </Style>
+            <Style x:Key="ActivityError" TargetType="Border">
+                <Setter Property="Padding" Value="16,12" />
+                <Setter Property="Background" Value="{ThemeResource SurfaceBrush}" />
+            </Style>
             <Style x:Key="CatchUpSheet" TargetType="Border">
                 <Setter Property="Background" Value="{ThemeResource GroundBrush}" />
                 <Setter Property="BorderBrush" Value="{ThemeResource HairlineBrush}" />

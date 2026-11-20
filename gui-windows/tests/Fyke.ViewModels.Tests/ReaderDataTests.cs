@@ -16,7 +16,8 @@ public sealed class ReaderDataTests
                 "feeds.list" => """
                     {"items":[
                       {"id":8,"folder_id":4,"title":"Café","url":"https://example.org","unread":3,"starred":1},
-                      {"id":2,"folder_id":1,"title":"Systems","url":"https://example.net","unread":2,"starred":0},
+                      {"id":2,"folder_id":1,"title":"Systems","url":"https://example.net","unread":2,"starred":0,
+                       "error_count":4,"last_error":"HTTP 503","site_url":"https://example.net/blog"},
                       {"id":3,"folder_id":null,"title":null,"url":"https://example.com","unread":1,"starred":3}
                     ]}
                     """,
@@ -47,6 +48,15 @@ public sealed class ReaderDataTests
             destinations.Select(row => (row.Scope, row.Title, row.Depth, row.Count)));
         var view = Assert.Single(destinations, row => row.Scope == ReaderScope.View);
         Assert.Equal("Articles about zig", view.RuleSummary);
+
+        // A failing feed shows a warning in place of its count.
+        var failing = Assert.Single(destinations, row => row.IsFailing);
+        Assert.Equal("Systems", failing.Title);
+        Assert.Equal(new FeedHealth(4, "HTTP 503", "https://example.net/blog"), failing.Health);
+        Assert.Equal(string.Empty, failing.CountText);
+        Assert.Equal("Systems, not loading", failing.AccessibleName);
+        Assert.Equal("Systems is not loading. Show why", failing.HealthName);
+        Assert.False(destinations.Single(row => row.Title == "Café").IsFailing);
     }
 
     [Theory]

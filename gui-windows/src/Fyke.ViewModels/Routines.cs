@@ -319,8 +319,11 @@ public static class RoutineText
 }
 
 /// <summary>One row of the routine list.</summary>
-public sealed record RoutineListItem(Routine Routine, string Status)
+/// <param name="Failed">The last run failed and nothing has run since; <paramref name="Status"/> then says why.</param>
+public sealed record RoutineListItem(Routine Routine, string Status, bool Failed = false)
 {
+    public bool Working => !Failed;
+
     public string Name => RoutineText.ListName(Routine);
     public string Line => RoutineText.Line(Routine);
     public bool CanToggle => Routine.IsSaved;
@@ -332,7 +335,11 @@ public sealed record RoutineListItem(Routine Routine, string Status)
     public string ToggleName => $"{(Routine.Enabled ? "Pause" : "Resume")} {Routine.Name}";
     public string AccessibleName => $"{Name}. {Line}. {Status}";
 
-    public static RoutineListItem From(Routine routine, DateTimeOffset now) => new(routine, RoutineText.Status(routine, now));
+    /// <param name="failed">The routine's failed run that Activity lists under Needs you, if any.</param>
+    public static RoutineListItem From(Routine routine, DateTimeOffset now, WriterJob? failed = null) =>
+        failed is null
+            ? new(routine, RoutineText.Status(routine, now))
+            : new(routine, string.IsNullOrWhiteSpace(failed.Error) ? "Last run failed" : failed.Error.Trim(), Failed: true);
 }
 
 /// <summary>
