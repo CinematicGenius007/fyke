@@ -370,6 +370,20 @@ try {
             !(Find-ById 'StorageConfirm')) { $true }
     } | Out-Null
 
+    # A daemon that goes away and comes back (as after a data move) keeps Settings open.
+    $beforeRestart = Get-CompanionProcess | Select-Object -First 1
+    Stop-Process -Id $beforeRestart.ProcessId -Force
+    Wait-For 'a replacement companion while Settings is open' {
+        Get-CompanionProcess | Where-Object { $_.ProcessId -ne $beforeRestart.ProcessId } | Select-Object -First 1
+    } | Out-Null
+    Wait-For 'Settings to stay open and measure again after the reconnect' {
+        $checked = Find-ById 'StorageChecked'
+        $close = Find-ById 'CloseSettingsButton'
+        $banner = Find-ById 'ReconnectingBanner'
+        if ($checked -and $checked.Current.Name -eq 'Checked just now' -and $close -and !$close.Current.IsOffscreen -and
+            (Find-ById 'FreeCopies') -and (!$banner -or $banner.Current.IsOffscreen)) { $true }
+    } | Out-Null
+
     Invoke-Button 'CloseSettingsButton'
     Wait-For 'article layout to persist alongside the updated font weight' {
         $ui = (Read-ReaderConfig $configPath).ui

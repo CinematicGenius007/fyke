@@ -102,6 +102,17 @@ public sealed partial class MainWindow
 
     private void StorageRefreshClicked(object sender, RoutedEventArgs args) => _ = MeasureStorageAsync();
 
+    /// While the daemon is away the numbers may be stale (a move changes the folder), so they
+    /// give way to the measuring skeleton until it is back.
+    private void HoldStorage()
+    {
+        storageRequest?.Cancel();
+        storageUse = null;
+        storageCheckedAt = null;
+        storageConfirming = null;
+        RenderStorage();
+    }
+
     private async Task FreeStorageAsync(Func<CancellationToken, Task<StorageFreed>> free)
     {
         storageConfirming = null;
@@ -136,7 +147,7 @@ public sealed partial class MainWindow
         retentionPicker = null;
         if (storageUse is not { } use)
         {
-            StorageDetails.Children.Add(StorageLabel(StorageText.Measuring, 13, "BriefMuted"));
+            StorageDetails.Children.Add(StorageSkeleton());
             return;
         }
 
@@ -410,6 +421,36 @@ public sealed partial class MainWindow
         return panel;
     }
 
+    /// The shape of the measured page in quiet blocks: the total, its bar and three sections,
+    /// so the page does not jump when the numbers arrive.
+    private StackPanel StorageSkeleton()
+    {
+        var skeleton = new StackPanel { Spacing = 12 };
+        AutomationProperties.SetName(skeleton, StorageText.Measuring);
+        skeleton.Children.Add(SkeletonLine(96, 13, trailing: 56));
+        skeleton.Children.Add(new Border { Height = 6, Style = AppResources.FromApp<Style>("StorageSegment") });
+        foreach (var width in (double[])[120, 104, 136])
+        {
+            skeleton.Children.Add(SkeletonLine(width, 13, trailing: 48));
+        }
+
+        skeleton.Children.Add(StorageLabel(StorageText.Measuring, 13, "BriefMuted"));
+        return skeleton;
+    }
+
+    private static Grid SkeletonLine(double width, double height, double trailing)
+    {
+        var line = new Grid();
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var style = AppResources.FromApp<Style>("StorageSegment");
+        line.Children.Add(new Border { Width = width, Height = height, HorizontalAlignment = HorizontalAlignment.Left, Style = style });
+        var end = new Border { Width = trailing, Height = height, Style = style };
+        Grid.SetColumn(end, 1);
+        line.Children.Add(end);
+        return line;
+    }
+
     private TextBlock StorageLabel(string text, double size, string style, string weight = nameof(ReaderFontWeights.Ui))
     {
         var label = briefRenderer.Label(text, size, style, weight);
@@ -505,7 +546,12 @@ public sealed partial class MainWindow
             return;
         }
 
-        DataMoveHeading.Text = dataMovePhase == MovePhase.Moving ? "Moving your data" : "Move your data?";
+        DataMoveHeading.Text = dataMovePhase switch
+        {
+            MovePhase.Moving => "Moving your data",
+            MovePhase.Failed => DataMoves.FailureHeading(text ?? string.Empty),
+            _ => "Move your data?",
+        };
         DataMoveText.Inlines.Clear();
         if (dataMovePhase == MovePhase.Asking)
         {

@@ -79,7 +79,12 @@ public sealed partial class MainWindow
     private void ShowReaderConnection()
     {
         var connected = ViewModel.IsConnected;
-        ReaderShell.Visibility = connected ? Visibility.Visible : Visibility.Collapsed;
+        var held = ViewModel.HoldsReader;
+        ReaderShell.Visibility = connected || held ? Visibility.Visible : Visibility.Collapsed;
+        // Held while it reconnects: what was on screen stays, dimmed and still.
+        ReaderShell.IsHitTestVisible = connected;
+        ReaderShell.Opacity = connected ? 1 : 0.55;
+        ReconnectingBanner.Visibility = held ? Visibility.Visible : Visibility.Collapsed;
         if (readerConnected == connected)
         {
             return;
@@ -95,6 +100,7 @@ public sealed partial class MainWindow
             _ = LoadTodayAsync();
             _ = LoadRoutinesAsync();
             _ = LoadActivityAsync();
+            RefreshOpenSettings();
         }
         else
         {
@@ -110,7 +116,17 @@ public sealed partial class MainWindow
             ClosePalette(restoreFocus: false);
             CloseAddFeed(restoreFocus: false);
             CloseCatalogEdit(restoreFocus: false);
-            CloseSettings(restoreFocus: false);
+            if (held)
+            {
+                // Settings stays open, still, until the daemon is back (RefreshOpenSettings).
+                EnableSettingsControls(false);
+                HoldStorage();
+            }
+            else
+            {
+                CloseSettings(restoreFocus: false);
+            }
+
             textSaveTimer.Stop();
             pendingTextChanges.Clear();
             preferencesRead = false;

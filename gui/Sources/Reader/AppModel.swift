@@ -744,7 +744,7 @@ final class AppModel {
             } else {
                 // Past "starting" the data and the link are in place, and only the restart failed.
                 let moved = result.output.contains("starting")
-                move.phase = .failed(moved ? "Your data moved, but Fyke could not restart. Opening Fyke again usually fixes this." : Self.moveFailure(result.errors))
+                move.phase = .failed(moved ? Self.movedButNotRestarted : Self.moveFailure(result.errors))
                 await reload()
             }
         }
@@ -775,6 +775,13 @@ final class AppModel {
             let errors = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
             return (process.terminationStatus, seen.value, errors)
         }.value
+    }
+
+    static let movedButNotRestarted = "Your data moved, but Fyke could not restart. Opening Fyke again usually fixes this."
+
+    /// A failed move says what happened, not what was asked: the data stayed, or only the restart failed.
+    static func moveFailureHeading(_ reason: String) -> String {
+        reason == movedButNotRestarted ? "Fyke didn\u{2019}t restart" : "Your data wasn\u{2019}t moved"
     }
 
     /// The command names what stopped it, and only a few of these a person can cause.

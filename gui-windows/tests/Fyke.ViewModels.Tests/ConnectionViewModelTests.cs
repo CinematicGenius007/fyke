@@ -53,6 +53,27 @@ public sealed class ConnectionViewModelTests
     }
 
     [Fact]
+    public void AReaderThatWorkedIsHeldWhileItReconnects()
+    {
+        var client = new FakeClient();
+        using var model = new ConnectionViewModel(client);
+        client.Raise(ConnectionState.Reconnecting);
+        Assert.False(model.HoldsReader);
+
+        client.Raise(ConnectionState.Connected);
+        client.Raise(ConnectionState.Reconnecting);
+
+        Assert.True(model.HoldsReader);
+        Assert.False(model.ShowsInlineState);
+        Assert.Equal("Reconnecting…", model.Message);
+
+        // A failure falls back to the inline state, with what to do.
+        client.Raise(ConnectionState.Failed, FailureReason.ProgramMissing);
+        Assert.False(model.HoldsReader);
+        Assert.True(model.ShowsInlineState);
+    }
+
+    [Fact]
     public void AFailureSaysWhatToDoAndOtherStatesSayNothingMore()
     {
         var client = new FakeClient();

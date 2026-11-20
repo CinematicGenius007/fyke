@@ -691,7 +691,7 @@ struct MoveDialog: View {
         ZStack {
             p.scrim.ignoresSafeArea()
             VStack(alignment: .leading, spacing: 0) {
-                Text(move.phase == .asking || isFailed ? "Move your data?" : "Moving your data")
+                Text(heading)
                     .font(.title(family, 22, .semibold)).tracking(-0.22).padding(.bottom, 6)
                 switch move.phase {
                 case .asking: asking
@@ -709,9 +709,12 @@ struct MoveDialog: View {
         }
     }
 
-    private var isFailed: Bool {
-        if case .failed = move.phase { return true }
-        return false
+    private var heading: String {
+        switch move.phase {
+        case .asking: "Move your data?"
+        case .moving: "Moving your data"
+        case .failed(let reason): AppModel.moveFailureHeading(reason)
+        }
     }
 
     private var summary: some View {

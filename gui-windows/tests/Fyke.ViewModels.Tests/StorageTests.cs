@@ -160,6 +160,8 @@ public sealed class StorageTests
             DataMoves.Failure("stopping\n", "fyke: data: TargetNotEmpty\n"));
         Assert.Equal("Something went wrong. Your data is where it was.", DataMoves.Failure(string.Empty, "fyke: data: Unexpected"));
         Assert.Equal(DataMoves.MovedButNotRestarted, DataMoves.Failure("stopping\ncopying\nverifying\nlinking\nstarting\n", "fyke: data: Timeout"));
+        Assert.Equal("Fyke didn\u2019t restart", DataMoves.FailureHeading(DataMoves.MovedButNotRestarted));
+        Assert.Equal("Your data wasn\u2019t moved", DataMoves.FailureHeading("That folder is not empty. Your data is where it was."));
     }
 
     [Fact]

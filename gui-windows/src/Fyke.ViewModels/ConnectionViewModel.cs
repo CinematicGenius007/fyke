@@ -13,6 +13,7 @@ public sealed class ConnectionViewModel : ObservableObject, IDisposable
     private readonly IDaemonClient _client;
     private readonly Action<Action> _dispatch;
     private ConnectionState _state;
+    private bool _hasConnected;
     private string? _reason;
     private string _message;
     private string _detail;
@@ -28,6 +29,7 @@ public sealed class ConnectionViewModel : ObservableObject, IDisposable
         _client = client;
         _dispatch = dispatch ?? (action => action());
         _state = client.State;
+        _hasConnected = _state == ConnectionState.Connected;
         _message = ConnectionMessages.For(_state, null);
         _detail = ConnectionMessages.DetailFor(_state, null);
         RetryCommand = new AsyncRelayCommand(RetryAsync, () => CanRetry);
@@ -47,8 +49,18 @@ public sealed class ConnectionViewModel : ObservableObject, IDisposable
 
     public bool IsConnected => _state == ConnectionState.Connected;
 
-    /// <summary>The inline state is quiet until it matters: hidden while connected.</summary>
-    public bool ShowsInlineState => _state != ConnectionState.Connected;
+    /// <summary>
+    /// The inline state is quiet until it matters: hidden while connected, and while a
+    /// reader that was already shown waits for its daemon to come back.
+    /// </summary>
+    public bool ShowsInlineState => _state != ConnectionState.Connected && !HoldsReader;
+
+    /// <summary>
+    /// True while the connection is coming back after it worked, as after a data move or a
+    /// daemon restart. The window keeps what it shows, Settings included, dimmed and still,
+    /// and says it is reconnecting, instead of falling back to the start screen.
+    /// </summary>
+    public bool HoldsReader => _state == ConnectionState.Reconnecting && _hasConnected;
 
     public bool CanRetry => _state == ConnectionState.Failed;
 
@@ -80,12 +92,14 @@ public sealed class ConnectionViewModel : ObservableObject, IDisposable
     private void Apply(ConnectionState state, string? reason)
     {
         var reasonNow = state == ConnectionState.Failed ? reason : null;
+        _hasConnected |= state == ConnectionState.Connected;
         SetProperty(ref _state, state, nameof(State));
         SetProperty(ref _reason, reasonNow, nameof(Reason));
         SetProperty(ref _message, ConnectionMessages.For(state, reasonNow), nameof(Message));
         SetProperty(ref _detail, ConnectionMessages.DetailFor(state, reasonNow), nameof(Detail));
         OnPropertyChanged(nameof(IsConnected));
         OnPropertyChanged(nameof(ShowsInlineState));
+        OnPropertyChanged(nameof(HoldsReader));
         OnPropertyChanged(nameof(CanRetry));
         RetryCommand.NotifyCanExecuteChanged();
     }

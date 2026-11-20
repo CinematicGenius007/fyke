@@ -178,6 +178,10 @@ public static class DataMoves
 
     public const string MovedButNotRestarted = "Your data moved, but Fyke could not restart. Opening Fyke again usually fixes this.";
 
+    /// <summary>A failed move's heading says what happened: the data stayed, or only the restart failed.</summary>
+    public static string FailureHeading(string reason) =>
+        reason == MovedButNotRestarted ? "Fyke didn\u2019t restart" : "Your data wasn\u2019t moved";
+
     private static readonly (string Name, string Words)[] Stages =
     [
         ("stopping", "Stopping…"),

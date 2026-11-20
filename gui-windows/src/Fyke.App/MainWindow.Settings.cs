@@ -119,6 +119,26 @@ public sealed partial class MainWindow
         CloseSettingsButton.Focus(FocusState.Programmatic);
     }
 
+    /// After a reconnect, Settings that stayed open reads everything again: a data move or a
+    /// restarted daemon may have changed the folder, the settings or the writers.
+    private void RefreshOpenSettings()
+    {
+        if (!IsSettingsOpen)
+        {
+            return;
+        }
+
+        _ = ReadSettingsAsync();
+        if (SettingsTabs.SelectedItem == AgentsSettingsTab)
+        {
+            _ = LoadWritersAsync();
+        }
+        else if (SettingsTabs.SelectedItem == StorageSettingsTab)
+        {
+            ShowStorage();
+        }
+    }
+
     private void CloseSettingsClicked(object sender, RoutedEventArgs args) => CloseSettings();
 
     private void DestinationClicked(object sender, ItemClickEventArgs args)
