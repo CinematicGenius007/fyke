@@ -38,6 +38,7 @@
                 <KeyboardAccelerator Key="R" Invoked="RefreshSubscriptionsShortcut" />
                 <KeyboardAccelerator Key="R" Modifiers="Control" Invoked="WriteBriefShortcut" />
                 <KeyboardAccelerator Key="J" Modifiers="Control" Invoked="CatchUpShortcut" />
+                <KeyboardAccelerator Key="Number4" Modifiers="Control" Invoked="RoutinesShortcut" />
                 <KeyboardAccelerator Key="A" Modifiers="Control,Shift" Invoked="AskShortcut" />
                 <KeyboardAccelerator Key="K" Modifiers="Control,Shift" Invoked="MarkAllReadShortcut" />
                 <KeyboardAccelerator Key="Z" Modifiers="Control" Invoked="UndoBulkShortcut" />
@@ -138,11 +139,32 @@
                 </ListView>
                 <Grid Grid.Row="2" ColumnSpacing="8" Padding="0,4,0,0">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                    <TextBlock x:Name="SubscriptionStatus" Visibility="Collapsed" Margin="10,0,0,0" VerticalAlignment="Center"
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                    <!-- Routines, at the foot of the sidebar as on macOS, with the soonest run. Built in MainWindow.Routines.cs. -->
+                    <Button Grid.ColumnSpan="2" x:Name="RoutinesButton" Height="32" Padding="10,0" Margin="0,0,0,4"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Click="RoutinesClicked"
+                            Background="Transparent" BorderThickness="0" CornerRadius="{StaticResource RadiusControl}"
+                            AutomationProperties.AutomationId="RoutinesButton" AutomationProperties.Name="Routines"
+                            AutomationProperties.AcceleratorKey="Ctrl+4" ToolTipService.ToolTip="Routines (Ctrl+4)">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="14" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon Glyph="&#xE823;" FontSize="14" Foreground="{ThemeResource InkSoftBrush}" />
+                            <TextBlock Grid.Column="1" Text="Routines" VerticalAlignment="Center" FontFamily="{StaticResource FontUi}"
+                                       FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}" Foreground="{ThemeResource InkBrush}" />
+                            <TextBlock Grid.Column="2" x:Name="RoutinesNext" VerticalAlignment="Center" FontSize="12"
+                                       FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource MutedBrush}"
+                                       AutomationProperties.AutomationId="RoutinesNext" />
+                        </Grid>
+                    </Button>
+                    <TextBlock Grid.Row="1" x:Name="SubscriptionStatus" Visibility="Collapsed" Margin="10,0,0,0" VerticalAlignment="Center"
                            FontSize="12" TextWrapping="Wrap" FontFamily="{StaticResource FontUi}"
                            FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
                            Foreground="{ThemeResource MutedBrush}" AutomationProperties.LiveSetting="Polite" />
-                    <Button Grid.Column="1" x:Name="SettingsButton" Width="32" Height="32" Padding="0"
+                    <Button Grid.Row="1" Grid.Column="1" x:Name="SettingsButton" Width="32" Height="32" Padding="0"
                             Click="SettingsClicked" CornerRadius="{StaticResource RadiusControl}"
                             AutomationProperties.AutomationId="SettingsButton" AutomationProperties.Name="Settings"
                             AutomationProperties.AcceleratorKey="Ctrl+," ToolTipService.ToolTip="Settings (Ctrl+,)">
@@ -535,9 +557,14 @@
                                 <TextBlock x:Name="AskBackText" Text="Back" />
                             </StackPanel>
                         </Button>
-                        <Button Grid.Column="1" x:Name="AskCopy" Visibility="Collapsed" Click="AskCopyClicked"
-                                Style="{StaticResource BriefQuietAction}" Content="Copy"
-                                AutomationProperties.Name="Copy the answer" AutomationProperties.AutomationId="AskCopy" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                            <Button x:Name="AskCopy" Visibility="Collapsed" Click="AskCopyClicked"
+                                    Style="{StaticResource BriefQuietAction}" Content="Copy"
+                                    AutomationProperties.Name="Copy the answer" AutomationProperties.AutomationId="AskCopy" />
+                            <Button x:Name="AskRoutine" Visibility="Collapsed" Click="AskRoutineClicked"
+                                    Style="{StaticResource BriefQuietAction}" Content="Make it a routine"
+                                    AutomationProperties.AutomationId="AskRoutine" />
+                        </StackPanel>
                     </Grid>
                     <ScrollViewer Grid.Row="1" x:Name="AskScroller" IsTabStop="True" UseSystemFocusVisuals="True"
                                   AutomationProperties.Name="Answer" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
@@ -562,6 +589,180 @@
                             </Grid>
                         </StackPanel>
                     </ScrollViewer>
+                </Grid>
+            </Grid>
+            <!-- Routines: the list, then When / Look in / Then for the chosen one, as on macOS
+                 (gui/Sources/Reader/Routines.swift). Built in MainWindow.Routines.cs. -->
+            <Grid Grid.Column="2" Grid.ColumnSpan="3" x:Name="RoutinesPane" Visibility="Collapsed"
+                  Background="{ThemeResource GroundBrush}" KeyDown="RoutinesKeyDown"
+                  AutomationProperties.Name="Routines" AutomationProperties.AutomationId="RoutinesPane">
+                <Grid.KeyboardAccelerators>
+                    <KeyboardAccelerator Key="S" Modifiers="Control" Invoked="SaveRoutineShortcut" />
+                </Grid.KeyboardAccelerators>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="RoutineListColumn" Width="368" />
+                    <ColumnDefinition Width="1" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="1" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Grid Margin="20,16,16,12" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBlock Text="Routines" FontSize="20" CharacterSpacing="-10" VerticalAlignment="Center"
+                                   FontFamily="{StaticResource FontUi}" FontWeight="SemiBold" Foreground="{ThemeResource InkBrush}"
+                                   AutomationProperties.HeadingLevel="Level1" />
+                        <Button Grid.Column="1" x:Name="NewRoutineButton" Width="32" Height="32" Padding="0" Click="NewRoutineClicked"
+                                CornerRadius="{StaticResource RadiusControl}" AutomationProperties.AutomationId="NewRoutine"
+                                AutomationProperties.Name="New routine" ToolTipService.ToolTip="New routine">
+                            <FontIcon Glyph="&#xE710;" FontSize="14" />
+                        </Button>
+                    </Grid>
+                    <Border Grid.Row="1" Background="{ThemeResource HairlineBrush}" />
+                    <ListView Grid.Row="2" x:Name="RoutineRows" Margin="8,8,8,0" SelectionChanged="RoutineRowChanged"
+                              AutomationProperties.Name="Routines" AutomationProperties.AutomationId="RoutineList">
+                        <ListView.Header>
+                            <TextBlock x:Name="RoutinesEmpty" Visibility="Collapsed" Margin="12" FontSize="13" TextWrapping="Wrap"
+                                       FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource MutedBrush}"
+                                       AutomationProperties.AutomationId="RoutinesEmpty" />
+                        </ListView.Header>
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="CornerRadius" Value="{StaticResource RadiusControl}" />
+                                <Setter Property="Margin" Value="0,2" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="vm:RoutineListItem">
+                                <Grid Padding="4,12" ColumnSpacing="12" AutomationProperties.Name="{x:Bind AccessibleName}">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="{x:Bind Name}" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                                   Opacity="{x:Bind NameOpacity}" FontFamily="{StaticResource FontUi}"
+                                                   Foreground="{ThemeResource InkBrush}" />
+                                        <TextBlock Text="{x:Bind Line}" FontSize="13" TextTrimming="CharacterEllipsis"
+                                                   FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource InkSoftBrush}" />
+                                        <TextBlock Text="{x:Bind Status}" FontSize="12" TextTrimming="CharacterEllipsis"
+                                                   FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource MutedBrush}" />
+                                    </StackPanel>
+                                    <!-- Toggles without choosing the row. -->
+                                    <ToggleSwitch Grid.Column="1" IsOn="{x:Bind Enabled}" Visibility="{x:Bind CanToggle}"
+                                                  OnContent="" OffContent="" MinWidth="0" VerticalAlignment="Top"
+                                                  Toggled="RoutineEnabledToggled" AutomationProperties.Name="{x:Bind ToggleName}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Grid>
+                <Border Grid.Column="1" Background="{ThemeResource HairlineBrush}" />
+                <Grid Grid.Column="2">
+                    <ScrollViewer x:Name="RoutineScroller" IsTabStop="False" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="40,64,40,96" MaxWidth="640" HorizontalAlignment="Stretch">
+                            <!-- Nothing chosen, or no routines yet. -->
+                            <StackPanel x:Name="RoutineNone" Visibility="Collapsed" Margin="0,32,0,0" />
+                            <StackPanel x:Name="RoutineEditor" Visibility="Collapsed">
+                                <Button x:Name="RoutineTitleButton" Click="RenameRoutineClicked" Padding="0" Background="Transparent" BorderThickness="0"
+                                        HorizontalAlignment="Left" ToolTipService.ToolTip="Rename" AutomationProperties.AutomationId="RoutineTitle"
+                                        AutomationProperties.HelpText="Rename the routine">
+                                    <TextBlock x:Name="RoutineTitle" FontSize="34" CharacterSpacing="-15" TextWrapping="Wrap"
+                                               FontFamily="{StaticResource FontReading}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Title, Mode=OneWay}"
+                                               Foreground="{ThemeResource InkBrush}" />
+                                </Button>
+                                <TextBox x:Name="RoutineNameBox" Visibility="Collapsed" FontSize="28" MaxLength="200"
+                                         FontFamily="{StaticResource FontReading}" KeyDown="RoutineNameKeyDown" LostFocus="RoutineNameLostFocus"
+                                         PlaceholderText="Routine name" AutomationProperties.Name="Routine name"
+                                         AutomationProperties.AutomationId="RoutineNameBox" />
+                                <TextBlock x:Name="RoutineBackground" FontSize="13" Margin="0,8,0,24" TextWrapping="Wrap"
+                                           FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource MutedBrush}" />
+                                <Border BorderBrush="{ThemeResource HairlineBrush}" BorderThickness="1" CornerRadius="{StaticResource RadiusPanel}">
+                                    <StackPanel>
+                                        <Grid Padding="16,12" ColumnSpacing="0" AutomationProperties.Name="When">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="84" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                            <TextBlock Text="When" FontSize="13" FontWeight="Medium" VerticalAlignment="Center"
+                                                       FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource InkSoftBrush}" />
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                                <ComboBox x:Name="RoutineRepeat" MinWidth="168" SelectionChanged="RoutineRepeatChanged"
+                                                          AutomationProperties.Name="Repeat" AutomationProperties.AutomationId="RoutineRepeat" />
+                                                <TextBlock x:Name="RoutineAt" Text="at" FontSize="13" VerticalAlignment="Center"
+                                                           FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource MutedBrush}" />
+                                                <ComboBox x:Name="RoutineTime" MinWidth="96" MaxDropDownHeight="320" SelectionChanged="RoutineTimeChanged"
+                                                          AutomationProperties.Name="Time" AutomationProperties.AutomationId="RoutineTime" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                                        <Grid Padding="16,12" AutomationProperties.Name="Look in">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="84" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                            <TextBlock Text="Look in" FontSize="13" FontWeight="Medium" VerticalAlignment="Center"
+                                                       FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource InkSoftBrush}" />
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                                <ComboBox x:Name="RoutineView" MinWidth="168" PlaceholderText="Choose a view" SelectionChanged="RoutineViewChanged"
+                                                          AutomationProperties.Name="View" AutomationProperties.AutomationId="RoutineView" />
+                                                <TextBlock x:Name="RoutineLookIn" FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap"
+                                                           FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource MutedBrush}" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                                        <Grid Padding="16,12" AutomationProperties.Name="Then">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="84" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                            <TextBlock Text="Then" FontSize="13" FontWeight="Medium" Margin="0,10,0,0"
+                                                       FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource InkSoftBrush}" />
+                                            <StackPanel Grid.Column="1" Spacing="4">
+                                                <StackPanel x:Name="RoutineActions" Spacing="4" />
+                                                <DropDownButton x:Name="AddRoutineAction" Style="{StaticResource BriefQuietAction}" Margin="-10,0,0,0"
+                                                                AutomationProperties.AutomationId="AddRoutineAction" AutomationProperties.Name="Add action">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                        <FontIcon Glyph="&#xE710;" FontSize="11" />
+                                                        <TextBlock Text="Add action" />
+                                                    </StackPanel>
+                                                    <DropDownButton.Flyout>
+                                                        <MenuFlyout x:Name="AddRoutineActionMenu" Placement="BottomEdgeAlignedLeft" />
+                                                    </DropDownButton.Flyout>
+                                                </DropDownButton>
+                                            </StackPanel>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                                <Grid Margin="0,36,0,0" ColumnSpacing="24">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="8" VerticalAlignment="Bottom">
+                                        <TextBlock Text="DRY RUN · LAST WEEK" FontSize="11" CharacterSpacing="60"
+                                                   FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.SectionLabel, Mode=OneWay}"
+                                                   Foreground="{ThemeResource MutedBrush}" AutomationProperties.HeadingLevel="Level2" />
+                                        <ProgressRing x:Name="RoutineDryRunLoading" Width="12" Height="12" HorizontalAlignment="Left" IsActive="False" Visibility="Collapsed" />
+                                        <TextBlock x:Name="RoutineDryRunSummary" FontSize="19" TextWrapping="Wrap" FontFamily="{StaticResource FontReading}"
+                                                   Foreground="{ThemeResource InkBrush}" AutomationProperties.AutomationId="RoutineDryRun"
+                                                   AutomationProperties.LiveSetting="Polite" />
+                                        <StackPanel x:Name="RoutineDryRunActions" Spacing="2" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" x:Name="RoutineDryRunBars" Orientation="Horizontal" Spacing="8"
+                                                Height="60" VerticalAlignment="Bottom" />
+                                </Grid>
+                                <Border Height="1" Margin="0,24,0,0" Background="{ThemeResource HairlineBrush}" />
+                                <Grid Margin="0,16,0,0" ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="RoutineFooter" FontSize="13" TextWrapping="Wrap" VerticalAlignment="Center"
+                                               FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource MutedBrush}"
+                                               AutomationProperties.LiveSetting="Polite" AutomationProperties.AutomationId="RoutineFooter" />
+                                    <Button Grid.Column="1" x:Name="RunRoutine" Content="Run now" Click="RunRoutineClicked"
+                                            Style="{StaticResource BriefSecondaryAction}" AutomationProperties.AutomationId="RunRoutine" />
+                                    <Button Grid.Column="2" x:Name="SaveRoutine" Content="Save" Click="SaveRoutineClicked" IsEnabled="False"
+                                            Style="{StaticResource BriefPrimaryAction}" AutomationProperties.AutomationId="SaveRoutine"
+                                            AutomationProperties.AcceleratorKey="Ctrl+S" ToolTipService.ToolTip="Save (Ctrl+S)" />
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <Button x:Name="RemoveRoutine" Content="Remove" Click="RemoveRoutineClicked" Visibility="Collapsed"
+                            Style="{StaticResource BriefQuietAction}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,12,16,0"
+                            AutomationProperties.Name="Remove routine" AutomationProperties.AutomationId="RemoveRoutine" />
                 </Grid>
             </Grid>
             <Grid Grid.Column="2" Grid.ColumnSpan="3" x:Name="SettingsPane" Visibility="Collapsed"

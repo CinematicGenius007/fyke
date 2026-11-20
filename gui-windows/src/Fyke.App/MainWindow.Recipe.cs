@@ -43,6 +43,7 @@ public sealed partial class MainWindow
         }
 
         CloseAsk(restoreFocus: false);
+        CloseRoutines(restoreFocus: false);
         briefRenderer.ClosePopover();
         recipeId = id;
         recipeBrief = briefId is not null && shownBrief?.Id == briefId ? shownBrief : null;

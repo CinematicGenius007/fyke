@@ -7,6 +7,7 @@ using Fyke.Client;
 using Fyke.ViewModels;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 
 namespace Fyke.App;
@@ -117,11 +118,22 @@ public sealed partial class MainWindow
         ShowBulkNotice(message, offerUndo: true);
     }
 
-    private void UndoBulkClicked(object sender, RoutedEventArgs args) => StartBulkUndo();
+    private void UndoBulkClicked(object sender, RoutedEventArgs args)
+    {
+        if (!StartRoutineUndo())
+        {
+            StartBulkUndo();
+        }
+    }
 
     private void UndoBulkShortcut(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
-        if (!IsReaderCovered && StartBulkUndo())
+        // A text field keeps Ctrl+Z for its own text.
+        if (FocusManager.GetFocusedElement(Root.XamlRoot) is not TextBox && StartRoutineUndo())
+        {
+            args.Handled = true;
+        }
+        else if (!IsReaderCovered && StartBulkUndo())
         {
             args.Handled = true;
         }
@@ -199,6 +211,8 @@ public sealed partial class MainWindow
 
     private void ShowBulkNotice(string message, bool offerUndo = false, bool temporary = true)
     {
+        // A routine's undo belongs to the notice that offered it.
+        routineUndo = null;
         UpdateBulkButton();
         bulkNoticeTimer.Stop();
         BulkNoticeText.Text = message;
@@ -212,6 +226,7 @@ public sealed partial class MainWindow
 
     private void HideBulkNotice()
     {
+        routineUndo = null;
         bulkNoticeTimer.Stop();
         BulkNotice.Visibility = Visibility.Collapsed;
     }

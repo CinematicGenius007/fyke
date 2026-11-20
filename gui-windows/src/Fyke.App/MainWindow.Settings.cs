@@ -90,6 +90,7 @@ public sealed partial class MainWindow
 
         ClosePalette();
         CloseSearch();
+        CloseRoutines(restoreFocus: false);
         if (!IsSettingsOpen)
         {
             focusBeforeSettings = FocusManager.GetFocusedElement(Root.XamlRoot) as Control;
@@ -110,7 +111,7 @@ public sealed partial class MainWindow
 
     private void DestinationClicked(object sender, ItemClickEventArgs args)
     {
-        if (IsSettingsOpen && args.ClickedItem is ReaderDestination item)
+        if ((IsSettingsOpen || IsRoutinesShown) && args.ClickedItem is ReaderDestination item)
         {
             NavigateToDestination(item);
         }

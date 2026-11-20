@@ -760,8 +760,40 @@ try {
             !(Find-ByName $timeline 'Live reader update')) { $true }
     } | Out-Null
 
+    # Routines: start one from the view, save it, see its dry run, then remove it and undo.
+    $dot = [char]0x00b7
+    $routineName = 'Morning renamed fixture view'
+    Invoke-Button 'RoutinesButton'
+    Invoke-Button 'NewRoutine'
+    Wait-For 'the new routine draft' {
+        $title = Find-ById 'RoutineTitle'
+        $draft = Find-ByName $root "$routineName (not saved). Weekdays 07:30 $dot brief $dot notify. Not run yet"
+        if ($title -and $title.Current.Name -eq "$routineName, rename" -and $draft) { $true }
+    } | Out-Null
+    Invoke-Button 'SaveRoutine'
+    Wait-For 'the saved routine and its dry run' {
+        $remove = Find-ById 'RemoveRoutine'
+        $dryRun = Find-ById 'RoutineDryRun'
+        $row = Find-ByName $root "$routineName. Weekdays 07:30 $dot brief $dot notify. Not run yet"
+        if ($remove -and !$remove.Current.IsOffscreen -and $row -and $dryRun -and
+            $dryRun.Current.Name -match '^(Would have caught|Nothing would have matched)') { $true }
+    } | Out-Null
+    Wait-For 'the next run in the sidebar' {
+        $next = Find-ById 'RoutinesNext'
+        if ($next -and $next.Current.Name -like 'Next *') { $true }
+    } | Out-Null
+    Invoke-Button 'RemoveRoutine'
+    Invoke-Button 'BulkNoticeUndo'
+    Wait-For 'the removed routine to come back' {
+        $row = Find-ByName $root "$routineName. Weekdays 07:30 $dot brief $dot notify. Not run yet"
+        $remove = Find-ById 'RemoveRoutine'
+        if ($row -and $remove -and !$remove.Current.IsOffscreen) { $true }
+    } | Out-Null
+
     Invoke-PaletteResult 'Delete Renamed fixture view' 'Delete Renamed fixture view'
     Invoke-ViewDialogButton 'Delete view'
+    # The routine uses the view, so deleting it asks to turn the routine off.
+    Invoke-ViewDialogButton 'Delete view and turn off routines'
     Wait-For 'All to reopen after deleting the active view' {
         $heading = Find-ById 'TimelineHeading'
         if ($heading.Current.Name -eq 'All' -and !(Find-ByName $items 'Renamed fixture view')) { $true }
@@ -769,7 +801,7 @@ try {
 
     & $daemonPath status
     if ($LASTEXITCODE -ne 0) { throw 'The companion daemon did not answer status' }
-    Write-Host 'WinUI verified daemon recovery, reading, search, the palette, bulk undo, subscription management, folder disclosure across relaunch, and saved views.'
+    Write-Host 'WinUI verified daemon recovery, reading, search, the palette, bulk undo, subscription management, folder disclosure across relaunch, saved views, and routines.'
 } catch {
     Write-Host $_.ScriptStackTrace
     if ($window -and $window.HasExited) {

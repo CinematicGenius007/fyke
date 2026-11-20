@@ -39,6 +39,7 @@ public sealed partial class MainWindow
         }
 
         CloseSettings(restoreFocus: false);
+        CloseRoutines(restoreFocus: false);
         CloseRecipe(restoreFocus: false);
         var view = destination is { Scope: ReaderScope.View } current ? current : null;
         askViewName = view?.Title;
@@ -156,7 +157,8 @@ public sealed partial class MainWindow
         briefRenderer.ClosePopover();
         AskColumn.Children.Clear();
         var latest = askSession.Latest;
-        AskCopy.Visibility = latest?.Answer is null ? Visibility.Collapsed : Visibility.Visible;
+        AskCopy.Visibility = AskRoutine.Visibility = latest?.Answer is null ? Visibility.Collapsed : Visibility.Visible;
+        AskRoutine.IsEnabled = HasRoutineViews;
         AskSubmit.IsEnabled = !askSession.IsAsking && AskQuery.Text.Trim().Length > 0;
         if (latest is null)
         {

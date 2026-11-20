@@ -12,6 +12,7 @@ using WinRT;
 [assembly: GeneratedWinRTExposedExternalType(typeof(ObservableCollection<PaletteResult>))]
 [assembly: GeneratedWinRTExposedExternalType(typeof(ObservableCollection<DiscussionRow>))]
 [assembly: GeneratedWinRTExposedExternalType(typeof(ObservableCollection<BriefListItem>))]
+[assembly: GeneratedWinRTExposedExternalType(typeof(ObservableCollection<RoutineListItem>))]
 [assembly: GeneratedWinRTExposedExternalType(typeof(List<FolderChoice>))]
 [assembly: GeneratedWinRTExposedExternalType(typeof(List<ViewEditor.Source>))]
 [assembly: GeneratedWinRTExposedExternalType(typeof(FeedCandidate[]))]

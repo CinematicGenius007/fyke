@@ -16,7 +16,8 @@ public sealed partial class MainWindow
         || IsCatchUpOpen;
 
     // Ask covers the article, so single-key commands neither act on it unseen nor fire while a question is typed.
-    private bool IsReaderCovered => IsReaderOverlayOpen || IsSettingsOpen || IsAskShown || IsRecipeShown;
+    private bool IsReaderCovered => IsReaderOverlayOpen || IsSettingsOpen || IsAskShown || IsRecipeShown
+        || IsRoutinesShown;
 
     private void ShowReaderOverlay(Grid overlay, Control initialFocus)
     {
@@ -70,12 +71,24 @@ public sealed partial class MainWindow
 
         var reverse = sender.Modifiers == VirtualKeyModifiers.Shift;
         var pane = FocusManager.GetFocusedElement(Root.XamlRoot) as DependencyObject;
-        while (pane is UIElement && pane != SidebarPane && pane != TimelinePane && pane != ArticlePane && pane != SettingsPane)
+        while (pane is UIElement && pane != SidebarPane && pane != TimelinePane && pane != ArticlePane && pane != SettingsPane
+            && pane != RoutinesPane)
         {
             pane = VisualTreeHelper.GetParent(pane);
         }
 
-        if (IsSettingsOpen)
+        if (IsRoutinesShown)
+        {
+            if (pane == SidebarPane)
+            {
+                FocusList(RoutineRows);
+            }
+            else
+            {
+                FocusSidebar();
+            }
+        }
+        else if (IsSettingsOpen)
         {
             if (pane == SidebarPane)
             {

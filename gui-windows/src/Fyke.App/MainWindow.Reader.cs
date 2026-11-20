@@ -68,6 +68,7 @@ public sealed partial class MainWindow
         InitializeBulkMarks();
         InitializeKeys();
         InitializeToday(reading, ui);
+        InitializeRoutines();
         asking = new Asking(client);
         recipes = new Recipes(client);
         ShowArticle(null);
@@ -91,10 +92,12 @@ public sealed partial class MainWindow
             TrySaveFolderDisclosure();
             _ = LoadReaderAsync(refreshCatalog: true);
             _ = LoadTodayAsync();
+            _ = LoadRoutinesAsync();
         }
         else
         {
             StopToday();
+            StopRoutines();
             CloseCatchUp(restoreFocus: false);
             CloseAsk(restoreFocus: false);
             CloseRecipe(restoreFocus: false);
@@ -119,6 +122,7 @@ public sealed partial class MainWindow
     private void QueueReaderChange(DaemonEvent change)
     {
         QueueTodayChange(change);
+        QueueRoutineChange(change);
         // Gap events also cover replay after pruned or reset daemon history.
         if ((change.IsGap || change.Type.StartsWith("entry.", StringComparison.Ordinal)
             || change.Type.StartsWith("feed.", StringComparison.Ordinal)
@@ -234,6 +238,7 @@ public sealed partial class MainWindow
     private void NavigateToDestination(ReaderDestination selected, bool refreshCatalog = false)
     {
         CloseSettings(restoreFocus: false);
+        CloseRoutines(restoreFocus: false);
         CloseAsk(restoreFocus: false);
         CloseRecipe(restoreFocus: false);
         if (destination is { } current && current.Scope == selected.Scope && current.Id == selected.Id)
@@ -294,6 +299,7 @@ public sealed partial class MainWindow
 
                 catalog = rows;
                 UpdateFolderCatalog(rows);
+                RefreshRoutineViews();
                 if (IsAddFeedOpen && !addingFeeds)
                 {
                     PopulateAddFeedFolders((AddFeedFolder.SelectedItem as FolderChoice)?.Id);
