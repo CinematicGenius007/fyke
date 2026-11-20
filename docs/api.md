@@ -144,7 +144,7 @@ fyke service uninstall
 fyke service status
 ```
 
-Clients start the daemon when none is running, and give up on a daemon that does not answer within 120 s. `fyke service install` runs it from login, replacing any daemon already running: a launch agent on macOS, a `systemd` user unit (`fyke.service`) on Linux. Either restarts it after a crash and not after a clean `fyke daemon stop`, which returns once the daemon has exited. On Linux the unit starts with the first login session, and starting at boot needs `loginctl enable-linger`, which `fyke` does not run for you. Other systems report `Unsupported`. Planned: `fyke digest`.
+Clients start the daemon when none is running, and give up on a daemon that does not answer within 120 s. `fyke service install` runs it from login, replacing any daemon already running: a launch agent on macOS, a `systemd` user unit (`fyke.service`) on Linux, and on Windows a `Run` key value that starts `fyke daemon --supervise`. Each restarts it after a crash and not after a clean `fyke daemon stop`, which returns once the daemon has exited. On Linux the unit starts with the first login session, and starting at boot needs `loginctl enable-linger`, which `fyke` does not run for you. Other systems report `Unsupported`. Planned: `fyke digest`.
 
 ## MCP server
 

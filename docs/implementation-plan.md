@@ -28,7 +28,7 @@ The [v2 design page](https://app.paper.design/file/01M6R7CJ81MKH0TMWJ8KNC6QGX/p-
 - `src/service.zig` owns worker/scheduler state. `src/pipeline.zig` owns ingest; pure parsers remain free of I/O.
 - `src/client.zig` and `src/daemon.zig` use newline-delimited JSON-RPC over `AF_UNIX`, including on Windows. Reuse the protocol before introducing another transport.
 - `src/main.zig` resolves Windows data under `%LOCALAPPDATA%\Fyke` and follows the `location` pointer used by data moves. Other systems retain the existing home-directory layout.
-- `src/windows_startup.zig` uses `HKCU` Run for sign-in startup. It does not supervise crashes. `src/systemd.zig` and `src/launchd.zig` use service managers.
+- `src/windows_startup.zig` uses `HKCU` Run for sign-in startup, through the per-user supervisor in `src/supervise.zig`. `src/systemd.zig` and `src/launchd.zig` use service managers.
 - `gui/Sources/Reader/Daemon.swift` provides socket calls and events. `AppModel.swift`, `Sidebar.swift`, and `RootView.swift` own navigation/view state; `ReaderPane.swift` renders blocks.
 - `gui/tokens.css` is exported from Paper. `tools/gen_tokens.py` generates Swift tokens. Do not edit `Tokens.swift` or silently change the bundled reading default.
 - Windows CI compiles the WinUI scaffold and runs the client and view-model suites. Desktop execution and GUI packaging are tracked in [the Windows delivery plan](windows-gui.md).
@@ -129,7 +129,7 @@ W0/W1 can begin while shared features are implemented. W3 waits for their operat
 
 ### Lifecycle, notifications, and packaging
 
-Retain sign-in/session scope: no requirement for a machine-wide Windows service or administrator rights. The current Run key is not crash supervision. Prototype either a per-user Task Scheduler entry with failure restart or a small per-user supervisor; select one after testing clean stop versus crash, sign-out, upgrades, and data moves. Remove the old Run registration when changing the mechanism, atomically enough to avoid competing launches. Lock ownership still enforces one daemon.
+Retain sign-in/session scope: no requirement for a machine-wide Windows service or administrator rights. The Run key starts a small per-user supervisor (`fyke daemon --supervise`), chosen over a Task Scheduler entry because it needs no other tool and behaves the same in tests. It restarts the daemon after a crash with growing delays and ends on a clean stop. Reinstalling stops the running daemon and waits for its lock before starting the new one, so two never compete. Lock ownership still enforces one daemon.
 
 Use a small native notification delivery mode/helper that connects to the daemon outbox. It presents local app notifications and routes activation by stable run IDs. Keep domain state and all SQLite access in the daemon. Microsoft documents [desktop app notifications](https://learn.microsoft.com/en-us/windows/apps/develop/notifications/) and [registration/activation for console applications](https://learn.microsoft.com/windows/apps/develop/notifications/app-notifications/app-notifications-console). Task Scheduler documents [failure restarts](https://learn.microsoft.com/en-us/windows/win32/taskschd/taskschedulerschema-restartonfailure-settingstype-element); the prototype still needs to prove the intended Fyke lifecycle.
 

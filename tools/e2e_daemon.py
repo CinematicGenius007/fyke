@@ -139,7 +139,7 @@ if os.name != "nt":
   check("data directory is owner-only", stat.S_IMODE(os.stat(home).st_mode) == 0o700, oct(os.stat(home).st_mode))
   check("socket is owner-only", stat.S_IMODE(os.stat(home + "/fyked.sock").st_mode) == 0o600)
 p = subprocess.run([RSS, "daemon"], env=env, capture_output=True, text=True, timeout=10)
-check("a second daemon refuses to start", p.returncode == 1 and "AlreadyRunning" in p.stderr, p.stderr)
+check("a second daemon refuses to start", p.returncode == 3 and "AlreadyRunning" in p.stderr, p.stderr)
 check("first daemon survives that", rss("status").returncode == 0)
 
 # Protocol
