@@ -277,6 +277,7 @@ public sealed partial class MainWindow
     private void RenderRoutineRows()
     {
         var now = DateTimeOffset.Now;
+        var activity = Activity;
         var rows = routineEditing.Rows
             .Select(routine => RoutineListItem.From(routine, now, routine.Id is { } id ? activity.FailedRun(id, now) : null)).ToList();
         applyingRoutine = true;
