@@ -304,7 +304,10 @@ public sealed partial class MainWindow
         confirm.Click += (_, _) => _ = FreeStorageAsync(free);
         Grid.SetColumn(confirm, 2);
         row.Children.Add(confirm);
-        return new Border { Child = row, Style = AppResources.FromApp<Style>("StorageConfirm") };
+        var border = new Border { Child = row, Style = AppResources.FromApp<Style>("StorageConfirm") };
+        // The question opens under its button, which can be the foot of the page, so it scrolls into view.
+        border.Loaded += (_, _) => border.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
+        return border;
     }
 
     private StackPanel StorageSection(string id, string title, long bytes, string detail, UIElement? details)
