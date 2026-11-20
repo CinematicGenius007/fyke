@@ -73,7 +73,7 @@ public sealed partial class MainWindow
     }
 
     private void NotificationInvoked(AppNotificationManager sender, AppNotificationActivatedEventArgs args) =>
-        DispatcherQueue.TryEnqueue(() => Activate());
+        DispatcherQueue.TryEnqueue(BringForward);
 
     private void CloseNotifications()
     {
@@ -86,8 +86,8 @@ public sealed partial class MainWindow
         try
         {
             AppNotificationManager.Default.NotificationInvoked -= NotificationInvoked;
-            // An unpackaged app removes its registration, so a click after it closes does not
-            // start a second copy before W4 brings single-instance activation.
+            // An unpackaged app removes its registration, so a click after the window closes
+            // starts nothing, as on macOS; a notification with the window closed is W4.
             AppNotificationManager.Default.Unregister();
         }
         catch (Exception e) when (e is System.Runtime.InteropServices.COMException or InvalidOperationException)

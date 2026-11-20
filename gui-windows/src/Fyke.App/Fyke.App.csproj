@@ -17,6 +17,8 @@
          so fails the build, for any type it would miss. Its generated code needs unsafe blocks. -->
     <CsWinRTAotWarningLevel>2</CsWinRTAotWarningLevel>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Program.cs is the entry point: a second launch hands itself to the open window first. -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <!-- The Windows App SDK's components, not its metapackage: the app is self-contained, so every

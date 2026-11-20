@@ -710,6 +710,13 @@ try {
     $handle = Wait-For 'the relaunched main window' { if ($window.MainWindowHandle -ne [IntPtr]::Zero) { $window.MainWindowHandle } }
     $root = [Windows.Automation.AutomationElement]::FromHandle($handle)
     $items = Wait-For 'the relaunched sidebar' { Find-ById 'ReaderDestinations' }
+    # One window per data folder: a second launch hands itself to this one and exits.
+    $second = [Diagnostics.Process]::Start($start)
+    $secondErrors = $second.StandardError.ReadToEndAsync()
+    if (!$second.WaitForExit(15000)) { $second.Kill(); throw 'A second launch opened a second window.' }
+    if ($second.ExitCode -ne 0) { throw "A second launch failed: $($secondErrors.Result)" }
+    $second.Dispose()
+    if ($window.HasExited) { throw 'The open window closed when Fyke was launched again.' }
     Wait-For 'the saved collapsed folder to return without its feed' {
         if ((Find-ByName $items 'Expand Fixture folder') -and !(Find-ByName $items 'Desktop fixture')) { $true }
     } | Out-Null

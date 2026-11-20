@@ -48,6 +48,7 @@ public sealed partial class MainWindow : Window
         AppWindow.Closing += FinishFolderDisclosureBeforeClose;
         Closed += OnClosed;
         InitializeNotifications();
+        InitializeActivation();
         connection = KeepConnectionAsync(lifetime.Token);
     }
 
@@ -88,6 +89,7 @@ public sealed partial class MainWindow : Window
         systemAppearance.ColorValuesChanged -= SystemColorsChanged;
         windowThemeSettings.Changed -= WindowThemeChanged;
         CloseNotifications();
+        CloseActivation();
         try
         {
             await lifetime.CancelAsync();
