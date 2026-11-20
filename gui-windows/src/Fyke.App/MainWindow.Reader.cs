@@ -69,6 +69,7 @@ public sealed partial class MainWindow
         InitializeKeys();
         InitializeToday(reading, ui);
         asking = new Asking(client);
+        recipes = new Recipes(client);
         ShowArticle(null);
         UpdateMarkControls();
     }
@@ -96,6 +97,7 @@ public sealed partial class MainWindow
             StopToday();
             CloseCatchUp(restoreFocus: false);
             CloseAsk(restoreFocus: false);
+            CloseRecipe(restoreFocus: false);
             CloseSearch(restoreFocus: false);
             ClosePalette(restoreFocus: false);
             CloseAddFeed(restoreFocus: false);
@@ -231,6 +233,7 @@ public sealed partial class MainWindow
     {
         CloseSettings(restoreFocus: false);
         CloseAsk(restoreFocus: false);
+        CloseRecipe(restoreFocus: false);
         if (destination is { } current && current.Scope == selected.Scope && current.Id == selected.Id)
         {
             return;
@@ -443,6 +446,7 @@ public sealed partial class MainWindow
         if (article is not null)
         {
             CloseAsk(restoreFocus: false);
+            CloseRecipe(restoreFocus: false);
         }
 
         articleRequest?.Cancel();

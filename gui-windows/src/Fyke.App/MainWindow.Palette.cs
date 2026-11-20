@@ -171,6 +171,12 @@ public sealed partial class MainWindow
         yield return new("search", "Search articles", null, "Ctrl+F", OpenSearch);
         yield return new("add-feed", "Add feed", null, "Ctrl+N", () => OpenAddFeed());
         yield return new("ask", "Ask your feeds", null, "Ctrl+Shift+A", () => StartAsk());
+        foreach (var recipe in today.Recipes)
+        {
+            yield return new($"recipe.{recipe.Id}", $"Edit the {recipe.Name ?? "unnamed"} recipe", "Recipe", null,
+                () => OpenRecipe(recipe.Id, null));
+        }
+
         if (destination is { } place)
         {
             yield return new("catch-up", $"Catch up on {CatchUpText.Title(place)}", null, "Ctrl+J", () => OpenCatchUp(place));

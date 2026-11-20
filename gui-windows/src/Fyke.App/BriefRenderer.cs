@@ -40,14 +40,14 @@ internal sealed class BriefRenderer(FontFamily reading, FontFamily ui, ReaderFon
 
     /// <summary>The brief, its sources and what made it, in place of what the column held.</summary>
     public void ShowBrief(Panel column, Brief brief, string header, string? recipeName, DateTimeOffset now,
-        Action<BriefCitation> open)
+        Action<BriefCitation> open, Action? openRecipe = null)
     {
         ClosePopover();
         column.Children.Clear();
         column.Children.Add(Tag("AI BRIEF", header));
         column.Children.Add(Title(brief.DisplayTitle, 40, "BriefTitle"));
         AppendBody(column, brief, now, open);
-        column.Children.Add(MadeWith(brief, recipeName));
+        column.Children.Add(MadeWith(brief, recipeName, openRecipe));
     }
 
     /// <summary>Writing, failed, empty or unavailable, said where the brief would be.</summary>
@@ -374,7 +374,8 @@ internal sealed class BriefRenderer(FontFamily reading, FontFamily ui, ReaderFon
     }
 
     // "Written by Codex with your Morning brief recipe · rev 3".
-    private StackPanel MadeWith(Brief brief, string? recipeName)
+    // "Written by Codex with your Morning brief recipe · rev 3", and Edit recipe, which opens it.
+    private StackPanel MadeWith(Brief brief, string? recipeName, Action? openRecipe)
     {
         var (before, recipe, after) = BriefText.MadeWith(brief, recipeName);
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
@@ -386,6 +387,14 @@ internal sealed class BriefRenderer(FontFamily reading, FontFamily ui, ReaderFon
         text.Inlines.Add(new Run { Text = after });
         AutomationProperties.SetAutomationId(text, "BriefMadeWith");
         row.Children.Add(text);
+        if (openRecipe is not null)
+        {
+            var edit = Action("Edit recipe", openRecipe, "BriefQuietAction");
+            edit.VerticalAlignment = VerticalAlignment.Center;
+            AutomationProperties.SetAutomationId(edit, "BriefEditRecipe");
+            row.Children.Add(edit);
+        }
+
         return row;
     }
 

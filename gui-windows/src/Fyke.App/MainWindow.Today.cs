@@ -129,6 +129,7 @@ public sealed partial class MainWindow
                 request.Token.ThrowIfCancellationRequested();
                 UpdateTodayBadge();
                 _ = FollowAskAsync(today.Jobs);
+                _ = FollowRecipeAsync(today);
             }
 
             if (IsTodayShown)
@@ -166,6 +167,7 @@ public sealed partial class MainWindow
         WritingDetail.Text = writing is null ? string.Empty : BriefText.WritingDetail(writing, now);
         BriefListEmpty.Visibility = today.Briefs.Count == 0 && writing is null ? Visibility.Visible : Visibility.Collapsed;
         WriteBriefButton.IsEnabled = today.Available && writing is null;
+        TodayRecipeButton.IsEnabled = today.Available && today.Recipes.Count > 0;
 
         switch (today.State(selectedBriefId, now))
         {
@@ -219,7 +221,8 @@ public sealed partial class MainWindow
 
         shownTodayKey = key;
         briefRenderer.ShowBrief(TodayColumn, shownBrief, BriefText.Header(shownBrief, ViewName),
-            today.RecipeName(shownBrief.RecipeId), now, OpenBriefSource);
+            today.RecipeName(shownBrief.RecipeId), now, OpenBriefSource,
+            shownBrief.RecipeId is { } recipe ? () => OpenRecipe(recipe, summary.Id) : null);
         _ = TodayScroller.ChangeView(null, 0, null, disableAnimation: true);
     }
 

@@ -31,6 +31,8 @@ namespace Fyke.ViewModels;
 [JsonSerializable(typeof(ReaderData.CatalogItems<ReaderData.Folder>))]
 [JsonSerializable(typeof(ReaderData.EntryPage))]
 [JsonSerializable(typeof(ReaderData.MarkReply))]
+[JsonSerializable(typeof(Recipe))]
+[JsonSerializable(typeof(Recipes.RevisionList))]
 [JsonSerializable(typeof(SavedView))]
 [JsonSerializable(typeof(SavedViews.ViewList))]
 [JsonSerializable(typeof(ViewPreview))]

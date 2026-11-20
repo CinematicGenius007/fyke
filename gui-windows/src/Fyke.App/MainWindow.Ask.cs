@@ -39,6 +39,7 @@ public sealed partial class MainWindow
         }
 
         CloseSettings(restoreFocus: false);
+        CloseRecipe(restoreFocus: false);
         var view = destination is { Scope: ReaderScope.View } current ? current : null;
         askViewName = view?.Title;
         askSession.Start(view?.Id);

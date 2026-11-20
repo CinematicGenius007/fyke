@@ -16,7 +16,7 @@ public sealed partial class MainWindow
         || IsCatchUpOpen;
 
     // Ask covers the article, so single-key commands neither act on it unseen nor fire while a question is typed.
-    private bool IsReaderCovered => IsReaderOverlayOpen || IsSettingsOpen || IsAskShown;
+    private bool IsReaderCovered => IsReaderOverlayOpen || IsSettingsOpen || IsAskShown || IsRecipeShown;
 
     private void ShowReaderOverlay(Grid overlay, Control initialFocus)
     {

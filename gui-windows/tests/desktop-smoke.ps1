@@ -124,6 +124,27 @@ try {
         $title = Find-ByName $root 'No brief yet'
         if ($title -and !$title.Current.IsOffscreen) { $true }
     } | Out-Null
+    # The Recipe button opens the built-in recipe in place of the brief, and Back closes it.
+    $recipeButton = Wait-For 'the Today recipe button' {
+        $button = $root.FindFirst([Windows.Automation.TreeScope]::Descendants,
+            [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::AutomationIdProperty, 'TodayRecipeButton'))
+        if ($button -and $button.Current.IsEnabled) { $button }
+    }
+    $recipeButton.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    $recipeEditor = Wait-For 'the recipe editor' {
+        $editor = $root.FindFirst([Windows.Automation.TreeScope]::Descendants,
+            [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::AutomationIdProperty, 'RecipeEditor'))
+        if ($editor -and !$editor.Current.IsOffscreen) { $editor }
+    }
+    $recipeText = $recipeEditor.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value
+    if ([string]::IsNullOrWhiteSpace($recipeText)) { throw 'The recipe editor opened without the recipe text' }
+    $root.FindFirst([Windows.Automation.TreeScope]::Descendants,
+        [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::AutomationIdProperty, 'RecipeBack')
+    ).GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'the recipe to close' {
+        $title = Find-ByName $root 'No brief yet'
+        if ($title -and !$title.Current.IsOffscreen) { $true }
+    } | Out-Null
     Select-ReaderItem $items 'Starred'
     Wait-For 'the Starred timeline after Today' {
         $heading = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $headingId)

@@ -44,6 +44,7 @@ public sealed partial class MainWindow
 
         CloseSettings(restoreFocus: false);
         CloseAsk(restoreFocus: false);
+        CloseRecipe(restoreFocus: false);
         catchUpPlace = place;
         catchUp = null;
         catchUpMarked = false;
