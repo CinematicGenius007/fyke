@@ -291,6 +291,8 @@ public sealed partial class MainWindow
     }
 
     // The newest brief's title is drawn as unread, the older ones as read.
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1822:Mark members as static",
+        Justification = "XAML connects event handlers to the window instance.")]
     private void BriefTitleChanged(FrameworkElement sender, DataContextChangedEventArgs args)
     {
         if (sender is TextBlock title && args.NewValue is BriefListItem row)
