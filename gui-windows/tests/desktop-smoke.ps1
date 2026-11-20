@@ -346,9 +346,10 @@ try {
     $storageTab = Wait-For 'the Storage settings tab' { Find-ById 'StorageSettingsTab' }
     $storageTab.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
     Wait-For 'the disk use to be measured' {
-        $details = Find-ById 'StorageDetails'
+        # Panels have no automation peer, so the measured rows are found from the window.
+        $checked = Find-ById 'StorageChecked'
         $folder = Find-ById 'DataFolderPath'
-        if ($details -and (Find-ByName $details 'Articles and search') -and $folder -and
+        if ($checked -and $checked.Current.Name -like 'Checked*' -and (Find-ByName $root 'Feed copies') -and $folder -and
             $folder.Current.Name -like "*$(Split-Path $testHome -Leaf)") { $true }
     } | Out-Null
     $change = Find-ById 'ChangeDataFolder'
