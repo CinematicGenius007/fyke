@@ -12,7 +12,8 @@ namespace Fyke.ViewModels;
 /// </summary>
 public sealed record Writer
 {
-    /// <summary><c>codex</c> or <c>claude</c>.</summary>
+    /// <summary><c>codex</c> or <c>claude</c>; the daemon names it <c>writer</c>.</summary>
+    [JsonPropertyName("writer")]
     public string Id { get; init; } = string.Empty;
 
     /// <summary>On this PC, whether or not it is signed in.</summary>
@@ -67,6 +68,12 @@ public static class WriterText
     /// <summary>The writer's problem, "Not found on this PC", or "Ready · version · found at path".</summary>
     public static string Status(Writer writer, string? home = null)
     {
+        // The daemon's own words for a missing writer name a Mac.
+        if (!writer.Installed)
+        {
+            return "Not found on this PC";
+        }
+
         if (!string.IsNullOrWhiteSpace(writer.Problem))
         {
             return writer.Problem.Trim();
@@ -74,7 +81,7 @@ public static class WriterText
 
         if (!writer.Available)
         {
-            return "Not found on this PC";
+            return "Not signed in";
         }
 
         var status = "Ready";

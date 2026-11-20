@@ -9,8 +9,8 @@ public sealed class WritersTests
     // writers.list as the daemon writes it (src/runner.zig).
     private const string ListReply = """
         {"items":[
-          {"id":"codex","installed":true,"signed_in":true,"available":true,"version":"0.9.1","path":"C:\\Users\\me\\bin\\codex.exe","problem":null,"checked_at":1,"selected":false},
-          {"id":"claude","installed":true,"signed_in":false,"available":false,"version":null,"path":"C:\\tools\\claude.exe","profile":"C:\\Users\\me\\.claude_personal","problem":"Sign in with claude /login.","checked_at":1,"selected":true}
+          {"writer":"codex","installed":true,"signed_in":true,"available":true,"version":"0.9.1","path":"C:\\Users\\me\\bin\\codex.exe","problem":null,"checked_at":1,"selected":false},
+          {"writer":"claude","installed":true,"signed_in":false,"available":false,"version":null,"path":"C:\\tools\\claude.exe","profile":"C:\\Users\\me\\.claude_personal","problem":"Sign in with claude /login.","checked_at":1,"selected":true}
         ]}
         """;
 
@@ -68,7 +68,8 @@ public sealed class WritersTests
         const string home = @"C:\Users\me";
         var codex = new Writer { Id = "codex", Installed = true, Available = true, Version = "0.9.1", Path = @"C:\Users\me\bin\codex.exe" };
         Assert.Equal(@"Ready · 0.9.1 · found at ~\bin\codex.exe", WriterText.Status(codex, home));
-        Assert.Equal("Not found on this PC", WriterText.Status(new Writer { Id = "codex" }, home));
+        Assert.Equal("Not found on this PC",
+            WriterText.Status(new Writer { Id = "codex", Problem = "Not found on this Mac" }, home));
         Assert.Equal("Sign in first.", WriterText.Status(codex with { Problem = " Sign in first. " }, home));
         Assert.Equal(WriterText.DefaultProfile, WriterText.Profile(new Writer { Id = "claude" }, home));
         Assert.Equal(@"~\.claude_personal", WriterText.Profile(new Writer { Id = "claude", Profile = @"C:\Users\me\.claude_personal" }, home));
