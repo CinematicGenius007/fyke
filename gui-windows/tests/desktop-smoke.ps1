@@ -621,7 +621,13 @@ try {
         $heading = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $headingId)
         if ($heading -and $heading.Current.Name -eq 'Desktop fixture') { $true }
     } | Out-Null
-    if (!(Find-ByName $items 'Expand Fixture folder')) { throw 'The palette expanded the folder.' }
+    # The sidebar reloads as the feed opens, so wait for the folder row to be back before
+    # reading which way it points.
+    $folderState = Wait-For 'the folder row after palette navigation' {
+        if (Find-ByName $items 'Collapse Fixture folder') { 'expanded' }
+        elseif (Find-ByName $items 'Expand Fixture folder') { 'collapsed' }
+    }
+    if ($folderState -ne 'collapsed') { throw 'The palette expanded the folder.' }
 
     Invoke-PaletteResult 'Live reader' 'Live reader update'
     Wait-For 'the article opened directly from the palette' {
