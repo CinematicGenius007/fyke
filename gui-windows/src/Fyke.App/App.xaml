@@ -211,6 +211,50 @@
                 <Setter Property="CornerRadius" Value="{StaticResource RadiusControl}" />
                 <Setter Property="Background" Value="{ThemeResource SurfaceBrush}" />
             </Style>
+            <Style x:Key="SettingsHairline" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource HairlineBrush}" />
+            </Style>
+            <Style x:Key="WriterBadge" TargetType="Border">
+                <Setter Property="Width" Value="28" />
+                <Setter Property="Height" Value="28" />
+                <Setter Property="CornerRadius" Value="7" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Background" Value="{ThemeResource ControlBrush}" />
+            </Style>
+            <Style x:Key="WriterBadgeFound" TargetType="Border" BasedOn="{StaticResource WriterBadge}">
+                <Setter Property="Background" Value="{ThemeResource InkSoftBrush}" />
+            </Style>
+            <Style x:Key="WriterBadgeSelected" TargetType="Border" BasedOn="{StaticResource WriterBadge}">
+                <Setter Property="Background" Value="{ThemeResource InkBrush}" />
+            </Style>
+            <Style x:Key="WriterBadgeText" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource FontUi}" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{ThemeResource GroundBrush}" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style x:Key="WriterProblem" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource FontUi}" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Foreground" Value="{ThemeResource InkBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="MaxLines" Value="2" />
+            </Style>
+            <Style x:Key="WriterDefaultTag" TargetType="Border">
+                <Setter Property="Height" Value="22" />
+                <Setter Property="Padding" Value="8,0" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="CornerRadius" Value="{StaticResource RadiusControl}" />
+                <Setter Property="Background" Value="{ThemeResource SelectedBrush}" />
+            </Style>
+            <Style x:Key="WriterDefaultText" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="{StaticResource FontUi}" />
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="Foreground" Value="{ThemeResource MutedBrush}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
             <Style x:Key="CatchUpSheet" TargetType="Border">
                 <Setter Property="Background" Value="{ThemeResource GroundBrush}" />
                 <Setter Property="BorderBrush" Value="{ThemeResource HairlineBrush}" />

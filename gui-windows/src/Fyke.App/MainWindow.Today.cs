@@ -118,6 +118,7 @@ public sealed partial class MainWindow
             return;
         }
 
+        ListWritersOnce();
         todayRequest?.Cancel();
         using var request = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         todayRequest = request;
@@ -187,7 +188,7 @@ public sealed partial class MainWindow
                 var failed = today.Failed(now)!;
                 ShowTodayState($"failed:{failed.Id}", new InlineStateView(InlineTone.Failed, "Brief not written",
                     $"{BriefText.JobWriter(failed.Writer)} could not write the brief", BriefText.FailedDetail(failed),
-                    ("Try again", () => _ = WriteBriefAsync())));
+                    ("Try again", () => _ = WriteBriefAsync()), ("Choose a writer", OpenAgentsSettings)));
                 return;
             case TodayState.Empty:
                 ShowTodayState("empty", new InlineStateView(InlineTone.Empty, "Today", "No brief yet",

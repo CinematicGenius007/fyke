@@ -605,6 +605,9 @@
                         <SelectorBarItem x:Name="ReadingSettingsTab" Text="Reading" AutomationProperties.AutomationId="ReadingSettingsTab">
                             <SelectorBarItem.Icon><FontIcon Glyph="&#xE8D2;" FontSize="14" /></SelectorBarItem.Icon>
                         </SelectorBarItem>
+                        <SelectorBarItem x:Name="AgentsSettingsTab" Text="Agents" AutomationProperties.AutomationId="AgentsSettingsTab">
+                            <SelectorBarItem.Icon><FontIcon Glyph="&#xE99A;" FontSize="14" /></SelectorBarItem.Icon>
+                        </SelectorBarItem>
                     </SelectorBar>
                     <Button x:Name="CloseSettingsButton" HorizontalAlignment="Right" Width="32" Height="32" Padding="0"
                             Click="CloseSettingsClicked" CornerRadius="{StaticResource RadiusControl}" VerticalAlignment="Center"
@@ -812,6 +815,46 @@
                                           SelectionChanged="ScrollbarsChanged" AutomationProperties.Name="Show scrollbars"
                                           AutomationProperties.AutomationId="ScrollbarsPicker" />
                             </Grid>
+                        </StackPanel>
+                        <StackPanel x:Name="AgentsSettingsBody" MaxWidth="640" Spacing="24" Visibility="Collapsed">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Who writes your briefs" Style="{StaticResource SettingsTitle}" AutomationProperties.HeadingLevel="Level2" />
+                                <TextBlock x:Name="WritersDetail" Style="{StaticResource SettingsDetail}" />
+                                <TextBlock x:Name="WritersEmpty" Style="{StaticResource SettingsDetail}" FontSize="13" Margin="0,12" />
+                                <StackPanel x:Name="WriterRows" AutomationProperties.Name="Writers" />
+                                <TextBlock x:Name="WritersProblem" Style="{StaticResource SettingsLabel}" FontSize="12" Visibility="Collapsed"
+                                           AutomationProperties.AutomationId="WritersProblem" AutomationProperties.LiveSetting="Assertive" />
+                            </StackPanel>
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Let agents use Fyke" Style="{StaticResource SettingsTitle}" AutomationProperties.HeadingLevel="Level2" />
+                                <TextBlock x:Name="AgentsDetail" Style="{StaticResource SettingsDetail}" />
+                                <Grid ColumnSpacing="12" MinHeight="40">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Read articles, views and briefs" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="Always on" Style="{StaticResource SettingsDetail}" FontSize="13" VerticalAlignment="Center" />
+                                </Grid>
+                                <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="4" VerticalAlignment="Center">
+                                        <TextBlock Text="Make changes" Style="{StaticResource SettingsLabel}" />
+                                        <TextBlock Text="Mark read and star; or also edit views, recipes and routines" Style="{StaticResource SettingsDetail}" />
+                                    </StackPanel>
+                                    <ComboBox Grid.Column="1" x:Name="AgentTierPicker" Style="{StaticResource SettingsPicker}" MinWidth="180" IsEnabled="False"
+                                              SelectionChanged="AgentTierChanged" AutomationProperties.Name="What agents may change"
+                                              AutomationProperties.AutomationId="AgentTierPicker" VerticalAlignment="Center" />
+                                </Grid>
+                                <Grid ColumnSpacing="12" Margin="0,4,0,0">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Add Fyke to another agent with this configuration." Style="{StaticResource SettingsDetail}" VerticalAlignment="Center" />
+                                    <Button Grid.Column="1" x:Name="CopyMcpConfig" Content="Copy MCP config" Click="CopyMcpConfigClicked"
+                                            Style="{StaticResource SettingsAction}" AutomationProperties.AutomationId="CopyMcpConfig" />
+                                </Grid>
+                                <Border Padding="16,12" CornerRadius="{StaticResource RadiusControl}" Background="{ThemeResource SurfaceBrush}">
+                                    <TextBlock x:Name="McpConfigText" FontFamily="{StaticResource FontCode}" FontSize="12" IsTextSelectionEnabled="True"
+                                               TextWrapping="Wrap" Foreground="{ThemeResource InkSoftBrush}" AutomationProperties.Name="MCP configuration" />
+                                </Border>
+                            </StackPanel>
                         </StackPanel>
                     </Grid>
                 </ScrollViewer>

@@ -13,6 +13,9 @@ public sealed record ReaderPreferences(bool FullText, bool LoadImages, ReaderTyp
     /// <summary>The themes the user made, on this machine or on a Mac sharing the config.</summary>
     public IReadOnlyList<ReaderCustomTheme> Themes { get; init; } = [];
 
+    /// <summary>What agents connected over MCP may change.</summary>
+    public AgentTier AgentTier { get; init; }
+
     /// <summary>The colours on screen now.</summary>
     public ReaderPalette Palette(bool systemIsDark) => ReaderPalette.Resolve(Appearance.ActiveTheme(systemIsDark), Themes);
 }
@@ -36,6 +39,7 @@ public sealed class ReaderSettings(IDaemonClient client)
             ReaderTextLayout.FromUi(ui), ReadScrollbars(ui), ReadCollapsedFolders(ui), ReaderAppearance.FromUi(ui), hasError)
         {
             Themes = ReaderCustomTheme.FromUi(ui),
+            AgentTier = AgentAccess.FromUi(ui),
         };
     }
 

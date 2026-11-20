@@ -32,6 +32,7 @@ public sealed partial class MainWindow
         Root.PreviewKeyDown += SettingsShortcutKeyDown;
         InitializeTextLayoutSettings();
         InitializeAppearance();
+        InitializeWriters();
         SettingsTabs.SelectionChanged += SettingsTabChanged;
         SettingsTabs.SelectedItem = GeneralSettingsTab;
 
@@ -50,12 +51,19 @@ public sealed partial class MainWindow
     private void SettingsTabChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
     {
         var reading = sender.SelectedItem == ReadingSettingsTab;
-        GeneralSettingsBody.Visibility = reading ? Visibility.Collapsed : Visibility.Visible;
+        var agents = sender.SelectedItem == AgentsSettingsTab;
+        GeneralSettingsBody.Visibility = reading || agents ? Visibility.Collapsed : Visibility.Visible;
         ReadingSettingsBody.Visibility = reading ? Visibility.Visible : Visibility.Collapsed;
+        AgentsSettingsBody.Visibility = agents ? Visibility.Visible : Visibility.Collapsed;
         _ = SettingsScroll.ChangeView(null, 0, null, disableAnimation: true);
         if (!reading)
         {
             FlushTextLayoutChanges();
+        }
+
+        if (agents && IsSettingsOpen)
+        {
+            _ = LoadWritersAsync();
         }
     }
 
@@ -89,6 +97,10 @@ public sealed partial class MainWindow
             TimelinePane.Visibility = TimelineDivider.Visibility = ArticlePane.Visibility = Visibility.Collapsed;
             SettingsPane.Visibility = Visibility.Visible;
             _ = ReadSettingsAsync();
+            if (SettingsTabs.SelectedItem == AgentsSettingsTab)
+            {
+                _ = LoadWritersAsync();
+            }
         }
 
         CloseSettingsButton.Focus(FocusState.Programmatic);
@@ -180,6 +192,7 @@ public sealed partial class MainWindow
             {
                 LoadImages = previous.LoadImages, Typography = previous.Typography, TextLayout = previous.TextLayout,
                 Scrollbars = previous.Scrollbars, Appearance = previous.Appearance, Themes = previous.Themes,
+                AgentTier = previous.AgentTier,
             };
         }
 
@@ -203,6 +216,7 @@ public sealed partial class MainWindow
         ApplyAppearanceControls(loaded);
         ApplyTextLayoutControls(loaded.TextLayout);
         ScrollbarsPicker.SelectedIndex = (int)loaded.Scrollbars;
+        ApplyAgentControls(loaded);
         foreach (var (picker, role) in weightPickers)
         {
             picker.SelectedIndex = loaded.Typography.StepFor(role) + 2;
@@ -211,7 +225,7 @@ public sealed partial class MainWindow
 
     private void EnableSettingsControls(bool enabled)
     {
-        FullTextToggle.IsEnabled = LoadImagesToggle.IsEnabled = ScrollbarsPicker.IsEnabled = enabled;
+        FullTextToggle.IsEnabled = LoadImagesToggle.IsEnabled = ScrollbarsPicker.IsEnabled = AgentTierPicker.IsEnabled = enabled;
         FollowSystemToggle.IsEnabled = ThemePicker.IsEnabled = DayThemePicker.IsEnabled = NightThemePicker.IsEnabled = enabled;
         foreach (var picker in weightPickers.Keys)
         {

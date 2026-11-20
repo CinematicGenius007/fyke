@@ -98,6 +98,8 @@ public sealed partial class MainWindow
             CloseCatchUp(restoreFocus: false);
             CloseAsk(restoreFocus: false);
             CloseRecipe(restoreFocus: false);
+            // A restarted service may be a different version with different writers.
+            writersListed = writersUnavailable = false;
             CloseSearch(restoreFocus: false);
             ClosePalette(restoreFocus: false);
             CloseAddFeed(restoreFocus: false);

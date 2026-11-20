@@ -323,6 +323,17 @@ try {
         } | Out-Null
     }
 
+    $agentsTab = Wait-For 'the Agents settings tab' { Find-ById 'AgentsSettingsTab' }
+    $agentsTab.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    Wait-For 'the writers to be listed with a Check button each' {
+        if ((Find-ById 'CheckWriter_codex') -and (Find-ById 'CheckWriter_claude')) { $true }
+    } | Out-Null
+    Select-SettingsOption 'AgentTierPicker' 'Reading state only'
+    Wait-For 'the agent tier to persist beside the other interface settings' {
+        $ui = (Read-ReaderConfig $configPath).ui
+        if ($ui.agentTier -eq 'annotate' -and $ui.scrollbars -eq 'never') { $true }
+    } | Out-Null
+
     Invoke-Button 'CloseSettingsButton'
     Wait-For 'article layout to persist alongside the updated font weight' {
         $ui = (Read-ReaderConfig $configPath).ui

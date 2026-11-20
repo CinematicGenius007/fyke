@@ -153,7 +153,7 @@ public sealed partial class MainWindow
 
         RecipeTitle.Text = recipe.DisplayName;
         RecipeBarName.Text = $"{recipe.DisplayName} recipe";
-        RecipeSubtitle.Text = RecipeText.Subtitle(recipe, null, DateTimeOffset.Now);
+        RecipeSubtitle.Text = RecipeText.Subtitle(recipe, CurrentWriterName, DateTimeOffset.Now);
         var conflict = recipeDraft.Conflict;
         RecipeConflict.Visibility = conflict is null ? Visibility.Collapsed : Visibility.Visible;
         if (conflict is not null)

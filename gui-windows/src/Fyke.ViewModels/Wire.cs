@@ -39,6 +39,7 @@ namespace Fyke.ViewModels;
 [JsonSerializable(typeof(ViewRemoval))]
 [JsonSerializable(typeof(ViewRule))]
 [JsonSerializable(typeof(WriterJob))]
+[JsonSerializable(typeof(Writers.WriterList))]
 internal sealed partial class WireJson : JsonSerializerContext;
 
 internal static class Wire
