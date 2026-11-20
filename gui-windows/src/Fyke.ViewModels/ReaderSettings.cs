@@ -19,6 +19,12 @@ public sealed record ReaderPreferences(bool FullText, bool LoadImages, ReaderTyp
     /// <summary>Read articles are removed after this many days. Zero keeps them.</summary>
     public long RemoveReadAfterDays { get; init; }
 
+    /// <summary>Fonts chosen in Settings on top of the active theme, saved under <c>ui.fonts</c>.</summary>
+    public ReaderFonts ChosenFonts { get; init; } = new();
+
+    /// <summary>The typefaces and corner radii on screen now.</summary>
+    public ReaderLook Look(bool systemIsDark) => ReaderLook.Resolve(Appearance.ActiveTheme(systemIsDark), Themes, ChosenFonts);
+
     /// <summary>The colours on screen now.</summary>
     public ReaderPalette Palette(bool systemIsDark) => ReaderPalette.Resolve(Appearance.ActiveTheme(systemIsDark), Themes);
 }
@@ -42,6 +48,9 @@ public sealed class ReaderSettings(IDaemonClient client)
             ReaderTextLayout.FromUi(ui), ReadScrollbars(ui), ReadCollapsedFolders(ui), ReaderAppearance.FromUi(ui), hasError)
         {
             Themes = ReaderCustomTheme.FromUi(ui),
+            ChosenFonts = ui.ValueKind == JsonValueKind.Object && ui.TryGetProperty("fonts", out var chosen)
+                ? ReaderFonts.FromJson(chosen)
+                : new(),
             AgentTier = AgentAccess.FromUi(ui),
             RemoveReadAfterDays = config.TryGetProperty("remove_read_after_days", out var days) && days.ValueKind == JsonValueKind.Number
                 && days.TryGetInt64(out var kept)

@@ -225,7 +225,7 @@ public sealed partial class MainWindow
             {
                 LoadImages = previous.LoadImages, Typography = previous.Typography, TextLayout = previous.TextLayout,
                 Scrollbars = previous.Scrollbars, Appearance = previous.Appearance, Themes = previous.Themes,
-                AgentTier = previous.AgentTier,
+                ChosenFonts = previous.ChosenFonts, AgentTier = previous.AgentTier,
             };
         }
 

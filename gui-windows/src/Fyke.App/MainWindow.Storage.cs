@@ -216,14 +216,13 @@ public sealed partial class MainWindow
             labels.Add(choice.Label);
         }
 
-        var picker = new ComboBox
+        var picker = ReaderFaces.Shared.Bind(new ComboBox
         {
             ItemsSource = labels,
             MinWidth = 120,
             MinHeight = 32,
-            FontFamily = AppResources.FromApp<FontFamily>("FontUi"),
             IsEnabled = preferences is { InvalidConfig: false },
-        };
+        }, nameof(ReaderFaces.Ui));
         for (var index = 0; index < choices.Count; index++)
         {
             if (choices[index].Days == days)
@@ -274,13 +273,12 @@ public sealed partial class MainWindow
 
     private Button FreeButton(string section, string name)
     {
-        var button = new Button
+        var button = ReaderFaces.Shared.Bind(new Button
         {
             Content = "Free up space…",
             IsEnabled = !storageWorking,
             Style = AppResources.FromApp<Style>("BriefSecondaryAction"),
-            FontFamily = AppResources.FromApp<FontFamily>("FontUi"),
-        };
+        }, nameof(ReaderFaces.Ui));
         AutomationProperties.SetName(button, name);
         AutomationProperties.SetAutomationId(button, section == "articles" ? "FreeArticles" : "FreeCopies");
         button.Click += (_, _) =>
@@ -557,13 +555,12 @@ public sealed partial class MainWindow
         {
             var user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             DataMoveText.Inlines.Add(new Run { Text = DataMoves.Summary(plan) });
-            DataMoveText.Inlines.Add(new Run
+            DataMoveText.Inlines.Add(ReaderFaces.Shared.Bind(new Run
             {
                 Text = StorageText.Tilde(plan.Target, user),
-                FontFamily = AppResources.FromApp<FontFamily>("FontCode"),
                 FontSize = 13,
                 Foreground = AppResources.FromApp<Brush>("InkBrush"),
-            });
+            }, nameof(ReaderFaces.Code)));
             DataMoveText.Inlines.Add(new Run { Text = DataMoves.SummaryEnd });
         }
         else

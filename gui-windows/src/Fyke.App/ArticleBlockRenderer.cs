@@ -12,7 +12,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 namespace Fyke.App;
 
 /// <summary>Turns the daemon's article nodes into native controls.</summary>
-internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, FontFamily code,
+internal sealed class ArticleBlockRenderer(ReaderFaces faces,
     ReaderFontWeights weights, ReaderTextStyle textStyle, Func<Uri, Action?>? linkAction = null, bool trackImages = false)
 {
     private readonly List<Action<bool>> imagePreferences = [];
@@ -103,13 +103,13 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
 
     private TextBlock Text(IEnumerable<ArticleBlock> nodes, double? headingSize = null, bool compact = false)
     {
-        var text = new TextBlock
+        var heading = headingSize.HasValue;
+        // Headings are in the title face, as ReaderPane.swift sets them.
+        var text = faces.Bind(new TextBlock
         {
-            FontFamily = reading,
             IsTextSelectionEnabled = true,
             TextWrapping = TextWrapping.Wrap,
-        };
-        var heading = headingSize.HasValue;
+        }, heading ? nameof(ReaderFaces.Title) : nameof(ReaderFaces.Reading));
         if (headingSize is double size)
         {
             text.FontSize = size;
@@ -139,7 +139,7 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
                     target.Add(new Run { Text = node.Text ?? string.Empty });
                     break;
                 case "code":
-                    var run = new Run { Text = node.Text ?? string.Empty, FontFamily = code };
+                    var run = faces.Bind(new Run { Text = node.Text ?? string.Empty }, nameof(ReaderFaces.Code));
                     weights.Bind(run, TextElement.FontWeightProperty, nameof(ReaderFontWeights.Code));
                     target.Add(run);
                     break;
@@ -191,12 +191,12 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
     // On a surface panel, scrolling sideways when a line is wider than the column.
     private Border Code(string? value)
     {
-        var text = new TextBlock
+        var text = faces.Bind(new TextBlock
         {
-            Text = value ?? string.Empty, FontFamily = code, FontSize = 14,
+            Text = value ?? string.Empty, FontSize = 14,
             LineHeight = 23, LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
             IsTextSelectionEnabled = true, Margin = new Thickness(20, 16, 20, 16),
-        };
+        }, nameof(ReaderFaces.Code));
         weights.Bind(text, TextBlock.FontWeightProperty, nameof(ReaderFontWeights.Code));
         return new Border
         {
@@ -222,12 +222,11 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition());
             // The marker shares the item text's font, size and line box, so both share a baseline.
-            var marker = new TextBlock
+            var marker = faces.Bind(new TextBlock
             {
                 Text = node.Ordered == true ? (++index).ToString(CultureInfo.CurrentCulture) + "." : "•",
-                FontFamily = reading,
                 Style = Shared("ArticleListMarker"),
-            };
+            }, nameof(ReaderFaces.Reading));
             textStyle.BindSize(marker);
             textStyle.BindLineHeight(marker);
             weights.Bind(marker, TextBlock.FontWeightProperty, nameof(ReaderFontWeights.Reading));
@@ -273,7 +272,7 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
             return null;
         }
 
-        var link = new HyperlinkButton { NavigateUri = address, Content = address.Host, FontFamily = ui };
+        var link = faces.Bind(new HyperlinkButton { NavigateUri = address, Content = address.Host }, nameof(ReaderFaces.Ui));
         weights.Bind(link, Control.FontWeightProperty, nameof(ReaderFontWeights.Ui));
         return link;
     }
@@ -296,7 +295,7 @@ internal sealed class ArticleBlockRenderer(FontFamily reading, FontFamily ui, Fo
         Grid.SetColumn(action, 1);
         row.Children.Add(description);
         row.Children.Add(action);
-        var button = new Button { Style = Shared("ArticleImageLoad"), Content = row, FontFamily = ui };
+        var button = faces.Bind(new Button { Style = Shared("ArticleImageLoad"), Content = row }, nameof(ReaderFaces.Ui));
         weights.Bind(button, Control.FontWeightProperty, nameof(ReaderFontWeights.Ui));
         Show("Load", $"Load image · {label}", isEnabled: true);
         var image = new Image { Visibility = Visibility.Collapsed, Stretch = Stretch.Uniform, MaxHeight = 720 };

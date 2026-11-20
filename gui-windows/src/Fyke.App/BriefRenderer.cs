@@ -31,7 +31,7 @@ internal sealed record InlineStateView(InlineTone Tone, string Label, string Tit
 /// claim is followed by the numbers of the articles it cites, and every number is one hover from
 /// its source. Hovering a number shows the source; clicking keeps it open.
 /// </summary>
-internal sealed class BriefRenderer(FontFamily reading, FontFamily ui, ReaderFontWeights weights, ReaderTextStyle textStyle)
+internal sealed class BriefRenderer(ReaderFaces faces, ReaderFontWeights weights, ReaderTextStyle textStyle)
 {
     private const double PopoverWidth = 340;
     private Flyout? popover;
@@ -170,14 +170,13 @@ internal sealed class BriefRenderer(FontFamily reading, FontFamily ui, ReaderFon
     private RichTextBlock Paragraph(IReadOnlyList<BriefClaim> claims, Dictionary<int, BriefCitation> citations,
         DateTimeOffset now, Action<BriefCitation> open)
     {
-        var text = new RichTextBlock
+        var text = faces.Bind(new RichTextBlock
         {
             Style = Shared("BriefParagraph"),
-            FontFamily = reading,
             IsTextSelectionEnabled = true,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 24),
-        };
+        }, nameof(ReaderFaces.Reading));
         textStyle.BindBrief(text);
         weights.Bind(text, RichTextBlock.FontWeightProperty, nameof(ReaderFontWeights.Reading));
         AutomationProperties.SetName(text, string.Join(" ", claims.Select(BriefText.Spoken)));
@@ -207,13 +206,11 @@ internal sealed class BriefRenderer(FontFamily reading, FontFamily ui, ReaderFon
     // The number sits five points above the line, like a superscript.
     private Button Mark(BriefCitation citation, bool last, DateTimeOffset now, Action<BriefCitation> open)
     {
-        var mark = new Button
+        var mark = faces.Bind(new Button
         {
             Style = Shared("BriefCitation"),
-            FontFamily = ui,
             Content = last ? $"{citation.Number}" : $"{citation.Number},",
-            RenderTransform = new TranslateTransform { Y = -5 },
-        };
+            RenderTransform = new TranslateTransform { Y = -5 } }, nameof(ReaderFaces.Ui));
         AutomationProperties.SetName(mark, $"Source {citation.Number}");
         AutomationProperties.SetHelpText(mark, "Shows the cited article");
         mark.PointerEntered += (_, _) =>
@@ -305,9 +302,9 @@ internal sealed class BriefRenderer(FontFamily reading, FontFamily ui, ReaderFon
 
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(-10, 0, 0, 0) };
         var label = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-        label.Children.Add(new TextBlock { Text = "Open article", FontFamily = ui, FontSize = 13 });
+        label.Children.Add(faces.Bind(new TextBlock { Text = "Open article", FontSize = 13 }, nameof(ReaderFaces.Ui)));
         label.Children.Add(new FontIcon { Glyph = "\uE751", FontSize = 10 });
-        var button = new Button { Style = Shared("BriefQuietAction"), Content = label, FontFamily = ui };
+        var button = faces.Bind(new Button { Style = Shared("BriefQuietAction"), Content = label }, nameof(ReaderFaces.Ui));
         AutomationProperties.SetName(button, "Open article");
         AutomationProperties.SetAutomationId(button, "OpenCitedArticle");
         button.Click += (_, _) => open();
@@ -400,7 +397,7 @@ internal sealed class BriefRenderer(FontFamily reading, FontFamily ui, ReaderFon
 
     private Button Action(string text, Action run, string style)
     {
-        var button = new Button { Style = Shared(style), Content = text, FontFamily = ui, FontSize = 13 };
+        var button = faces.Bind(new Button { Style = Shared(style), Content = text, FontSize = 13 }, nameof(ReaderFaces.Ui));
         button.Click += (_, _) => run();
         return button;
     }
@@ -408,17 +405,17 @@ internal sealed class BriefRenderer(FontFamily reading, FontFamily ui, ReaderFon
     /// <summary>A line of interface text in the UI face, with the weight the reader settings choose.</summary>
     public TextBlock Label(string text, double size, string style, string weight = nameof(ReaderFontWeights.Ui), int spacing = 0)
     {
-        var label = new TextBlock { Text = text, FontFamily = ui, FontSize = size, Style = Shared(style), CharacterSpacing = spacing };
+        var label = faces.Bind(new TextBlock { Text = text, FontSize = size, Style = Shared(style), CharacterSpacing = spacing }, nameof(ReaderFaces.Ui));
         weights.Bind(label, TextBlock.FontWeightProperty, weight);
         return label;
     }
 
     private TextBlock Reading(string text, double size, string style, string weight)
     {
-        var block = new TextBlock
+        var block = faces.Bind(new TextBlock
         {
-            Text = text, FontFamily = reading, FontSize = size, Style = Shared(style), TextWrapping = TextWrapping.Wrap,
-        };
+            Text = text, FontSize = size, Style = Shared(style), TextWrapping = TextWrapping.Wrap,
+        }, nameof(ReaderFaces.Reading));
         weights.Bind(block, TextBlock.FontWeightProperty, weight);
         return block;
     }

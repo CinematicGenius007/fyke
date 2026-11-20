@@ -26,13 +26,11 @@ public sealed partial class MainWindow
     private DiscussionLink? discussionLink;
     private CancellationTokenSource? discussionRequest;
     private ArticleBlockRenderer commentRenderer = null!;
-    private FontFamily discussionUiFont = null!;
     private long discussionEntryId;
 
-    private void InitializeDiscussion(FontFamily reading, FontFamily ui, FontFamily code)
+    private void InitializeDiscussion()
     {
-        discussionUiFont = ui;
-        commentRenderer = new ArticleBlockRenderer(reading, ui, code, readerFonts, readerTextStyle);
+        commentRenderer = new ArticleBlockRenderer(ReaderFaces.Shared, readerFonts, readerTextStyle);
         DiscussionComments.ElementClearing += (_, args) =>
         {
             if (args.Element is ContentPresenter presenter)
@@ -210,13 +208,12 @@ public sealed partial class MainWindow
             caption = $"{author} · {date.ToString("g", CultureInfo.CurrentCulture)}";
         }
 
-        var metadata = new TextBlock
+        var metadata = ReaderFaces.Shared.Bind(new TextBlock
         {
             Text = caption,
-            FontFamily = discussionUiFont,
             FontSize = 13,
             TextWrapping = TextWrapping.Wrap,
-        };
+        }, nameof(ReaderFaces.Ui));
         readerFonts.Bind(metadata, TextBlock.FontWeightProperty, nameof(ReaderFontWeights.SectionLabel));
         if (row.ReplyCount == 0 && comment.Blocks.Length == 0)
         {
@@ -232,8 +229,8 @@ public sealed partial class MainWindow
         {
             Content = label, Padding = new Thickness(4), Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
             BorderThickness = new Thickness(0), HorizontalAlignment = HorizontalAlignment.Left,
-            CornerRadius = AppResources.FromApp<CornerRadius>("RadiusControl"),
         };
+        ReaderFaces.Shared.Bind(toggle, Control.CornerRadiusProperty, nameof(ReaderFaces.RadiusControl));
         var body = new StackPanel { Spacing = 8 };
         content.Children.Add(toggle);
         content.Children.Add(body);

@@ -490,7 +490,7 @@ public sealed partial class MainWindow
 
             var text = revision.Text ?? (recipeRevisionTexts.TryGetValue(number, out var read) ? read : null);
             var body = briefRenderer.Note(text ?? "…", 12, "BriefSoft");
-            body.FontFamily = AppResources.FromApp<Microsoft.UI.Xaml.Media.FontFamily>("FontCode");
+            ReaderFaces.Shared.Bind(body, nameof(ReaderFaces.Code));
             body.IsTextSelectionEnabled = true;
             RecipeHistoryPage.Children.Add(new Border { Style = AppResources.FromApp<Style>("RecipeRevisionText"), Child = body });
             if (number != current && text is not null)

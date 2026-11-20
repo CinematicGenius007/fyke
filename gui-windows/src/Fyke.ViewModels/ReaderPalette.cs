@@ -7,6 +7,12 @@ namespace Fyke.ViewModels;
 /// base with some of its colours replaced.</summary>
 public sealed record ReaderCustomTheme(string Id, string Name, string Base, IReadOnlyDictionary<string, uint> Colors)
 {
+    /// <summary>The fonts this theme sets. What it leaves unset comes from its base.</summary>
+    public ReaderFonts Fonts { get; init; } = new();
+
+    /// <summary>The corner radii this theme sets. What it leaves unset is the token's.</summary>
+    public ReaderRadii Radii { get; init; } = new();
+
     internal static IReadOnlyList<ReaderCustomTheme> FromUi(JsonElement ui)
     {
         if (ui.ValueKind != JsonValueKind.Object || !ui.TryGetProperty("themes", out var themes)
@@ -36,7 +42,11 @@ public sealed record ReaderCustomTheme(string Id, string Name, string Base, IRea
                 }
             }
 
-            found.Add(new ReaderCustomTheme(id, name, Text(theme, "base") ?? "light", colors));
+            found.Add(new ReaderCustomTheme(id, name, Text(theme, "base") ?? "light", colors)
+            {
+                Fonts = theme.TryGetProperty("fonts", out var fonts) ? ReaderFonts.FromJson(fonts) : new(),
+                Radii = theme.TryGetProperty("radii", out var radii) ? ReaderRadii.FromJson(radii) : new(),
+            });
         }
 
         return found;

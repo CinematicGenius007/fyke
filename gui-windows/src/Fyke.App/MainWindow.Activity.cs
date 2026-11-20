@@ -499,7 +499,7 @@ public sealed partial class MainWindow
             message.MaxLines = 3;
             message.TextTrimming = TextTrimming.CharacterEllipsis;
             message.IsTextSelectionEnabled = true;
-            message.FontFamily = AppResources.FromApp<FontFamily>("FontCode");
+            ReaderFaces.Shared.Bind(message, nameof(ReaderFaces.Code));
             AutomationProperties.SetAutomationId(message, "FeedHealthError");
             Grid.SetColumn(message, 1);
             line.Children.Add(message);

@@ -13,7 +13,6 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
 using VirtualKey = Windows.System.VirtualKey;
 
 namespace Fyke.App;
@@ -42,7 +41,7 @@ public sealed partial class MainWindow
     private bool articleInterrupted;
     private double requestedTimelineWidth = ReaderPaneLayout.DefaultTimeline;
 
-    private void InitializeReader(FontFamily ui)
+    private void InitializeReader()
     {
         reader = new ReaderData(client);
         Timeline.ItemsSource = articles;
@@ -51,23 +50,20 @@ public sealed partial class MainWindow
         readerReloadTimer.Interval = TimeSpan.FromMilliseconds(250);
         readerReloadTimer.IsRepeating = false;
         readerReloadTimer.Tick += (_, _) => ReloadChangedReader();
-        Destinations.FontFamily = ui;
-        Timeline.FontFamily = ui;
-        var resources = Application.Current.Resources;
-        var reading = resources.Get<FontFamily>("FontReading");
-        var code = resources.Get<FontFamily>("FontCode");
+        ReaderFaces.Shared.Bind(Destinations, nameof(ReaderFaces.Ui));
+        ReaderFaces.Shared.Bind(Timeline, nameof(ReaderFaces.Ui));
         readerFonts = ReaderFontWeights.Shared;
-        articleRenderer = new ArticleBlockRenderer(reading, ui, code, readerFonts, readerTextStyle,
+        articleRenderer = new ArticleBlockRenderer(ReaderFaces.Shared, readerFonts, readerTextStyle,
             linkAction: DiscussionLinkAction, trackImages: true);
         InitializeSettings();
-        InitializeDiscussion(reading, ui, code);
+        InitializeDiscussion();
         InitializeSearch();
         InitializePalette();
         InitializeAddFeed();
         InitializeCatalogEditing();
         InitializeBulkMarks();
         InitializeKeys();
-        InitializeToday(reading, ui);
+        InitializeToday();
         InitializeRoutines();
         InitializeActivity();
         asking = new Asking(client);

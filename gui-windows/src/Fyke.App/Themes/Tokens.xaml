@@ -29,6 +29,13 @@
       <SolidColorBrush x:Key="OnAccentBrush" Color="{StaticResource OnAccentColor}" />
       <Color x:Key="ScrimColor">#33000000</Color>
       <SolidColorBrush x:Key="ScrimBrush" Color="{StaticResource ScrimColor}" />
+      <FontFamily x:Key="FontReading">ms-appx:///Fonts/Newsreader-Variable.ttf#Newsreader</FontFamily>
+      <FontFamily x:Key="FontTitle">ms-appx:///Fonts/Newsreader-Variable.ttf#Newsreader</FontFamily>
+      <FontFamily x:Key="FontUi">ms-appx:///Fonts/Inter-Variable.ttf#Inter</FontFamily>
+      <FontFamily x:Key="FontCode">ms-appx:///Fonts/JetBrainsMono-Variable.ttf#JetBrains Mono</FontFamily>
+      <CornerRadius x:Key="RadiusControl">6</CornerRadius>
+      <CornerRadius x:Key="RadiusPanel">10</CornerRadius>
+      <CornerRadius x:Key="RadiusSheet">12</CornerRadius>
     </ResourceDictionary>
     <ResourceDictionary x:Key="Dark">
       <Color x:Key="GroundColor">#111111</Color>
@@ -57,12 +64,13 @@
       <SolidColorBrush x:Key="OnAccentBrush" Color="{StaticResource OnAccentColor}" />
       <Color x:Key="ScrimColor">#80000000</Color>
       <SolidColorBrush x:Key="ScrimBrush" Color="{StaticResource ScrimColor}" />
+      <FontFamily x:Key="FontReading">ms-appx:///Fonts/Newsreader-Variable.ttf#Newsreader</FontFamily>
+      <FontFamily x:Key="FontTitle">ms-appx:///Fonts/Newsreader-Variable.ttf#Newsreader</FontFamily>
+      <FontFamily x:Key="FontUi">ms-appx:///Fonts/Inter-Variable.ttf#Inter</FontFamily>
+      <FontFamily x:Key="FontCode">ms-appx:///Fonts/JetBrainsMono-Variable.ttf#JetBrains Mono</FontFamily>
+      <CornerRadius x:Key="RadiusControl">6</CornerRadius>
+      <CornerRadius x:Key="RadiusPanel">10</CornerRadius>
+      <CornerRadius x:Key="RadiusSheet">12</CornerRadius>
     </ResourceDictionary>
   </ResourceDictionary.ThemeDictionaries>
-  <FontFamily x:Key="FontReading">ms-appx:///Fonts/Newsreader-Variable.ttf#Newsreader</FontFamily>
-  <FontFamily x:Key="FontUi">ms-appx:///Fonts/Inter-Variable.ttf#Inter</FontFamily>
-  <FontFamily x:Key="FontCode">ms-appx:///Fonts/JetBrainsMono-Variable.ttf#JetBrains Mono</FontFamily>
-  <CornerRadius x:Key="RadiusControl">6</CornerRadius>
-  <CornerRadius x:Key="RadiusPanel">10</CornerRadius>
-  <CornerRadius x:Key="RadiusSheet">12</CornerRadius>
 </ResourceDictionary>

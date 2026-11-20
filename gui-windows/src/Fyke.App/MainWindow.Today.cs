@@ -10,7 +10,6 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
 
 namespace Fyke.App;
 
@@ -36,12 +35,12 @@ public sealed partial class MainWindow
 
     private bool IsTodayShown => destination is { Scope: ReaderScope.Today };
 
-    private void InitializeToday(FontFamily reading, FontFamily ui)
+    private void InitializeToday()
     {
         briefs = new Briefs(client);
-        briefRenderer = new BriefRenderer(reading, ui, readerFonts, readerTextStyle);
+        briefRenderer = new BriefRenderer(ReaderFaces.Shared, readerFonts, readerTextStyle);
         BriefRows.ItemsSource = briefRows;
-        BriefRows.FontFamily = ui;
+        ReaderFaces.Shared.Bind(BriefRows, nameof(ReaderFaces.Ui));
         todayReloadTimer = DispatcherQueue.CreateTimer();
         todayReloadTimer.Interval = TimeSpan.FromMilliseconds(250);
         todayReloadTimer.IsRepeating = false;

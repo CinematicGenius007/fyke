@@ -72,7 +72,15 @@ public sealed partial class MainWindow
             Paint(palette);
         }
 
-        Root.RequestedTheme = highContrast ? ElementTheme.Default : (palette.IsDark ? ElementTheme.Dark : ElementTheme.Light);
+        var theme = highContrast ? ElementTheme.Default : (palette.IsDark ? ElementTheme.Dark : ElementTheme.Light);
+        if (ApplyLook(saved?.Look(systemIsDark) ?? ReaderLook.Default))
+        {
+            // ThemeResource values resolve again only when the theme changes, so pass through
+            // the other one for the new fonts and radii to reach every control.
+            Root.RequestedTheme = theme == ElementTheme.Dark ? ElementTheme.Light : ElementTheme.Dark;
+        }
+
+        Root.RequestedTheme = theme;
         AppWindow.TitleBar.PreferredTheme = highContrast ? TitleBarTheme.UseDefaultAppMode
             : (palette.IsDark ? TitleBarTheme.Dark : TitleBarTheme.Light);
     }
@@ -92,6 +100,23 @@ public sealed partial class MainWindow
                 brush.Color = color;
             }
         }
+    }
+
+    /// <summary>Puts a theme's typefaces and corner radii into both token dictionaries.</summary>
+    /// <remarks>Unlike colours, each theme sets its own fonts, so both dictionaries hold the
+    /// active theme's. Elements built in code follow through their binding to
+    /// <see cref="ReaderFaces"/>. False when nothing changed.</remarks>
+    private bool ApplyLook(ReaderLook look)
+    {
+        var faces = ReaderFaces.Shared;
+        if (!faces.Apply(look))
+        {
+            return false;
+        }
+
+        faces.WriteTo(Theme("Light"));
+        faces.WriteTo(Theme("Dark"));
+        return true;
     }
 
     // The Light or Dark dictionary of Themes/Tokens.xaml.

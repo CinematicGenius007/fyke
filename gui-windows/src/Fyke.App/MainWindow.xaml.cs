@@ -37,12 +37,11 @@ public sealed partial class MainWindow : Window
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
-        // StackPanel has no font of its own, so the text elements take it from the token.
-        var ui = AppResources.FromApp<FontFamily>("FontUi");
-        MessageText.FontFamily = ui;
-        DetailText.FontFamily = ui;
-        RetryButton.FontFamily = ui;
-        InitializeReader(ui);
+        // StackPanel has no font of its own, so the text elements bind to the face themselves.
+        ReaderFaces.Shared.Bind(MessageText, nameof(ReaderFaces.Ui));
+        ReaderFaces.Shared.Bind(DetailText, nameof(ReaderFaces.Ui));
+        ReaderFaces.Shared.Bind(RetryButton, nameof(ReaderFaces.Ui));
+        InitializeReader();
         ViewModel.PropertyChanged += (_, _) => ShowState();
         ShowState();
         SizeWindow();

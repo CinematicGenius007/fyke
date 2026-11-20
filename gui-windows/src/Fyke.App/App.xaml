@@ -208,7 +208,7 @@
             <Style x:Key="RecipeRevisionText" TargetType="Border">
                 <Setter Property="Padding" Value="16" />
                 <Setter Property="Margin" Value="0,0,0,12" />
-                <Setter Property="CornerRadius" Value="{StaticResource RadiusControl}" />
+                <Setter Property="CornerRadius" Value="{ThemeResource RadiusControl}" />
                 <Setter Property="Background" Value="{ThemeResource SurfaceBrush}" />
             </Style>
             <Style x:Key="SettingsHairline" TargetType="Border">
@@ -228,7 +228,7 @@
                 <Setter Property="Background" Value="{ThemeResource InkBrush}" />
             </Style>
             <Style x:Key="WriterBadgeText" TargetType="TextBlock">
-                <Setter Property="FontFamily" Value="{StaticResource FontUi}" />
+                <Setter Property="FontFamily" Value="{ThemeResource FontUi}" />
                 <Setter Property="FontSize" Value="12" />
                 <Setter Property="FontWeight" Value="SemiBold" />
                 <Setter Property="Foreground" Value="{ThemeResource GroundBrush}" />
@@ -236,7 +236,7 @@
                 <Setter Property="VerticalAlignment" Value="Center" />
             </Style>
             <Style x:Key="WriterProblem" TargetType="TextBlock">
-                <Setter Property="FontFamily" Value="{StaticResource FontUi}" />
+                <Setter Property="FontFamily" Value="{ThemeResource FontUi}" />
                 <Setter Property="FontSize" Value="12" />
                 <Setter Property="Foreground" Value="{ThemeResource InkBrush}" />
                 <Setter Property="TextWrapping" Value="Wrap" />
@@ -246,11 +246,11 @@
                 <Setter Property="Height" Value="22" />
                 <Setter Property="Padding" Value="8,0" />
                 <Setter Property="VerticalAlignment" Value="Center" />
-                <Setter Property="CornerRadius" Value="{StaticResource RadiusControl}" />
+                <Setter Property="CornerRadius" Value="{ThemeResource RadiusControl}" />
                 <Setter Property="Background" Value="{ThemeResource SelectedBrush}" />
             </Style>
             <Style x:Key="WriterDefaultText" TargetType="TextBlock">
-                <Setter Property="FontFamily" Value="{StaticResource FontUi}" />
+                <Setter Property="FontFamily" Value="{ThemeResource FontUi}" />
                 <Setter Property="FontSize" Value="11" />
                 <Setter Property="Foreground" Value="{ThemeResource MutedBrush}" />
                 <Setter Property="VerticalAlignment" Value="Center" />
@@ -258,7 +258,7 @@
             <Style x:Key="RoutineActionRow" TargetType="Border">
                 <Setter Property="MinHeight" Value="40" />
                 <Setter Property="Padding" Value="12,0,4,0" />
-                <Setter Property="CornerRadius" Value="{StaticResource RadiusControl}" />
+                <Setter Property="CornerRadius" Value="{ThemeResource RadiusControl}" />
                 <Setter Property="Background" Value="{ThemeResource SurfaceBrush}" />
             </Style>
             <Style x:Key="RoutineBar" TargetType="Border">
@@ -278,7 +278,7 @@
             <Style x:Key="ActivityFailure" TargetType="Border">
                 <Setter Property="Padding" Value="12" />
                 <Setter Property="Margin" Value="8,0" />
-                <Setter Property="CornerRadius" Value="{StaticResource RadiusControl}" />
+                <Setter Property="CornerRadius" Value="{ThemeResource RadiusControl}" />
                 <Setter Property="Background" Value="{ThemeResource SelectedBrush}" />
             </Style>
             <Style x:Key="ActivityDot" TargetType="Ellipse">
@@ -304,7 +304,7 @@
             </Style>
             <Style x:Key="StorageConfirm" TargetType="Border">
                 <Setter Property="Padding" Value="10" />
-                <Setter Property="CornerRadius" Value="{StaticResource RadiusControl}" />
+                <Setter Property="CornerRadius" Value="{ThemeResource RadiusControl}" />
                 <Setter Property="Background" Value="{ThemeResource SurfaceBrush}" />
             </Style>
             <Style x:Key="ActivityError" TargetType="Border">
@@ -315,19 +315,19 @@
                 <Setter Property="Background" Value="{ThemeResource GroundBrush}" />
                 <Setter Property="BorderBrush" Value="{ThemeResource HairlineBrush}" />
                 <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="CornerRadius" Value="{StaticResource RadiusSheet}" />
+                <Setter Property="CornerRadius" Value="{ThemeResource RadiusSheet}" />
             </Style>
             <Style x:Key="CatchUpAction" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
                 <Setter Property="Height" Value="56" />
                 <Setter Property="HorizontalAlignment" Value="Stretch" />
-                <Setter Property="CornerRadius" Value="{StaticResource RadiusControl}" />
-                <Setter Property="FontFamily" Value="{StaticResource FontUi}" />
+                <Setter Property="CornerRadius" Value="{ThemeResource RadiusControl}" />
+                <Setter Property="FontFamily" Value="{ThemeResource FontUi}" />
             </Style>
             <Style x:Key="CatchUpPrimaryAction" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
                 <Setter Property="Height" Value="56" />
                 <Setter Property="HorizontalAlignment" Value="Stretch" />
-                <Setter Property="CornerRadius" Value="{StaticResource RadiusControl}" />
-                <Setter Property="FontFamily" Value="{StaticResource FontUi}" />
+                <Setter Property="CornerRadius" Value="{ThemeResource RadiusControl}" />
+                <Setter Property="FontFamily" Value="{ThemeResource FontUi}" />
             </Style>
         </ResourceDictionary>
     </Application.Resources>

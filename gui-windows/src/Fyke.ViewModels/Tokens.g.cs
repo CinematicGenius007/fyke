@@ -2,7 +2,7 @@
 
 namespace Fyke.ViewModels;
 
-/// <summary>The Paper palette as RGBA values.</summary>
+/// <summary>The Paper palette as RGBA values, with the typefaces and radii.</summary>
 internal static class Tokens
 {
     public const uint ColorLightGround = 0xFFFFFFFF;
@@ -37,4 +37,10 @@ internal static class Tokens
     public const uint ColorTerminalGround = 0x000000FF;
     public const uint ColorTerminalUnread = 0x39FF88FF;
     public const uint ColorTerminalRead = 0x2A9D5CFF;
+    public const string FontReading = "Newsreader";
+    public const string FontUi = "Inter";
+    public const string FontCode = "JetBrains Mono";
+    public const double RadiusControl = 6;
+    public const double RadiusPanel = 10;
+    public const double RadiusSheet = 12;
 }
