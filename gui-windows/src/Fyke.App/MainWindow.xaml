@@ -871,6 +871,9 @@
                         <SelectorBarItem x:Name="AgentsSettingsTab" Text="Agents" AutomationProperties.AutomationId="AgentsSettingsTab">
                             <SelectorBarItem.Icon><FontIcon Glyph="&#xE99A;" FontSize="14" /></SelectorBarItem.Icon>
                         </SelectorBarItem>
+                        <SelectorBarItem x:Name="StorageSettingsTab" Text="Storage" AutomationProperties.AutomationId="StorageSettingsTab">
+                            <SelectorBarItem.Icon><FontIcon Glyph="&#xEDA2;" FontSize="14" /></SelectorBarItem.Icon>
+                        </SelectorBarItem>
                     </SelectorBar>
                     <Button x:Name="CloseSettingsButton" HorizontalAlignment="Right" Width="32" Height="32" Padding="0"
                             Click="CloseSettingsClicked" CornerRadius="{StaticResource RadiusControl}" VerticalAlignment="Center"
@@ -1117,6 +1120,57 @@
                                     <TextBlock x:Name="McpConfigText" FontFamily="{StaticResource FontCode}" FontSize="12" IsTextSelectionEnabled="True"
                                                TextWrapping="Wrap" Foreground="{ThemeResource InkSoftBrush}" AutomationProperties.Name="MCP configuration" />
                                 </Border>
+                            </StackPanel>
+                        </StackPanel>
+                        <!-- Storage: where the data lives and what uses space. The disk space section is
+                             drawn in MainWindow.Storage.cs from storage.get. -->
+                        <StackPanel x:Name="StorageSettingsBody" MaxWidth="640" Spacing="24" Visibility="Collapsed">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Where your data lives" Style="{StaticResource SettingsTitle}" AutomationProperties.HeadingLevel="Level2" />
+                                <TextBlock Text="Feeds, articles and settings stay in one folder on this PC." Style="{StaticResource SettingsDetail}" />
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="4" VerticalAlignment="Center">
+                                        <TextBlock Text="Data folder" Style="{StaticResource SettingsLabel}" />
+                                        <TextBlock x:Name="DataFolderPath" Style="{StaticResource SettingsDetail}" IsTextSelectionEnabled="True"
+                                                   AutomationProperties.AutomationId="DataFolderPath" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <Button Content="Open" Click="OpenDataFolderClicked" Style="{StaticResource BriefQuietAction}"
+                                                AutomationProperties.Name="Open data folder" AutomationProperties.AutomationId="OpenDataFolder" />
+                                        <Button x:Name="ChangeDataFolder" Content="Change…" Click="ChangeDataFolderClicked" Style="{StaticResource SettingsAction}"
+                                                AutomationProperties.Name="Change data folder" AutomationProperties.AutomationId="ChangeDataFolder" />
+                                    </StackPanel>
+                                </Grid>
+                                <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="4" VerticalAlignment="Center">
+                                        <TextBlock Text="Settings file" Style="{StaticResource SettingsLabel}" />
+                                        <TextBlock x:Name="SettingsFilePath" Style="{StaticResource SettingsDetail}" IsTextSelectionEnabled="True"
+                                                   AutomationProperties.AutomationId="SettingsFilePath" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Content="Open" Click="OpenSettingsFileClicked" Style="{StaticResource SettingsAction}"
+                                            VerticalAlignment="Center" AutomationProperties.Name="Open settings file"
+                                            AutomationProperties.AutomationId="OpenSettingsFile" />
+                                </Grid>
+                            </StackPanel>
+                            <StackPanel Spacing="8">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="4">
+                                        <TextBlock Text="Disk space" Style="{StaticResource SettingsTitle}" AutomationProperties.HeadingLevel="Level2" />
+                                        <TextBlock x:Name="StorageChecked" Style="{StaticResource SettingsDetail}" AutomationProperties.AutomationId="StorageChecked" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1" x:Name="StorageRefresh" Click="StorageRefreshClicked" Style="{StaticResource SettingsAction}"
+                                            VerticalAlignment="Top" AutomationProperties.Name="Measure again" AutomationProperties.AutomationId="StorageRefresh">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                                            <TextBlock Text="Refresh" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+                                <StackPanel x:Name="StorageDetails" Spacing="8" AutomationProperties.AutomationId="StorageDetails" />
                             </StackPanel>
                         </StackPanel>
                     </Grid>
@@ -1460,6 +1514,41 @@
                                 FontFamily="{StaticResource FontUi}" CornerRadius="{StaticResource RadiusControl}" />
                         <Button x:Name="CatalogEditConfirm" Height="32" Click="CatalogEditConfirmClicked"
                                 Style="{StaticResource AccentButtonStyle}" AutomationProperties.AutomationId="CatalogEditConfirm"
+                                FontFamily="{StaticResource FontUi}" CornerRadius="{StaticResource RadiusControl}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+        <!-- Moving the data folder: asks first, shows each stage of fyke data move, then says what went wrong
+             if it failed. Built in MainWindow.Storage.cs. -->
+        <Grid Grid.RowSpan="2" x:Name="DataMoveOverlay" Visibility="Collapsed" TabFocusNavigation="Cycle"
+              KeyDown="DataMoveKeyDown">
+            <Border Background="{ThemeResource ScrimBrush}" />
+            <Border MaxWidth="420" Margin="16,120,16,16" VerticalAlignment="Top" Padding="22"
+                    CornerRadius="{StaticResource RadiusSheet}" BorderThickness="1"
+                    BorderBrush="{ThemeResource HairlineBrush}" Background="{ThemeResource GroundBrush}"
+                    AutomationProperties.AutomationId="DataMoveDialog">
+                <StackPanel Spacing="6">
+                    <TextBlock x:Name="DataMoveHeading" FontSize="22" TextWrapping="Wrap" CharacterSpacing="-10"
+                               FontFamily="{StaticResource FontReading}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Title, Mode=OneWay}"
+                               Foreground="{ThemeResource InkBrush}" AutomationProperties.HeadingLevel="Level1"
+                               AutomationProperties.AutomationId="DataMoveHeading" />
+                    <TextBlock x:Name="DataMoveText" FontSize="14" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"
+                               FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
+                               Foreground="{ThemeResource InkSoftBrush}" AutomationProperties.AutomationId="DataMoveText" />
+                    <Grid x:Name="DataMoveWarningRow" ColumnSpacing="8" Margin="0,6,0,0" Visibility="Collapsed">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <FontIcon Glyph="&#xE7BA;" FontSize="13" VerticalAlignment="Top" Margin="0,2,0,0" Foreground="{ThemeResource MutedBrush}" />
+                        <TextBlock Grid.Column="1" x:Name="DataMoveWarningText" FontSize="13" TextWrapping="Wrap"
+                                   FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
+                                   Foreground="{ThemeResource MutedBrush}" AutomationProperties.AutomationId="DataMoveWarning" />
+                    </Grid>
+                    <StackPanel x:Name="DataMoveButtons" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
+                        <Button x:Name="DataMoveCancel" Content="Cancel" Height="32" Click="DataMoveCancelClicked"
+                                AutomationProperties.AutomationId="DataMoveCancel"
+                                FontFamily="{StaticResource FontUi}" CornerRadius="{StaticResource RadiusControl}" />
+                        <Button x:Name="DataMoveConfirm" Content="Move data" Height="32" Click="DataMoveConfirmClicked"
+                                Style="{StaticResource AccentButtonStyle}" AutomationProperties.AutomationId="DataMoveConfirm"
                                 FontFamily="{StaticResource FontUi}" CornerRadius="{StaticResource RadiusControl}" />
                     </StackPanel>
                 </StackPanel>

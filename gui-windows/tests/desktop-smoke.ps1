@@ -340,6 +340,32 @@ try {
         if ($ui.agentTier -eq 'annotate' -and $ui.scrollbars -eq 'never') { $true }
     } | Out-Null
 
+    # Storage: what the data folder holds, the retention setting, and freeing feed copies. FYKE_HOME
+    # names the folder for this run, so the move is offered but disabled; the client tests and
+    # fyke data move's own tests cover the move.
+    $storageTab = Wait-For 'the Storage settings tab' { Find-ById 'StorageSettingsTab' }
+    $storageTab.GetCurrentPattern([Windows.Automation.SelectionItemPattern]::Pattern).Select()
+    Wait-For 'the disk use to be measured' {
+        $details = Find-ById 'StorageDetails'
+        $folder = Find-ById 'DataFolderPath'
+        if ($details -and (Find-ByName $details 'Articles and search') -and $folder -and
+            $folder.Current.Name -like "*$(Split-Path $testHome -Leaf)") { $true }
+    } | Out-Null
+    $change = Find-ById 'ChangeDataFolder'
+    if ($change.Current.IsEnabled) { throw 'Change… should be disabled while FYKE_HOME names the data folder.' }
+    Select-SettingsOption 'RetentionPicker' '30 days'
+    Wait-For 'the retention to persist' {
+        if ((Read-ReaderConfig $configPath).remove_read_after_days -eq 30) { $true }
+    } | Out-Null
+    Invoke-Button 'StorageDetails_copies'
+    Invoke-Button 'FreeCopies'
+    Invoke-Button 'StorageConfirm'
+    Wait-For 'the space to be measured again after freeing it' {
+        $checked = Find-ById 'StorageChecked'
+        if ($checked -and $checked.Current.Name -eq 'Checked just now' -and (Find-ById 'FreeCopies') -and
+            !(Find-ById 'StorageConfirm')) { $true }
+    } | Out-Null
+
     Invoke-Button 'CloseSettingsButton'
     Wait-For 'article layout to persist alongside the updated font weight' {
         $ui = (Read-ReaderConfig $configPath).ui

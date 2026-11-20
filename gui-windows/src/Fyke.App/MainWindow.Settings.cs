@@ -33,6 +33,7 @@ public sealed partial class MainWindow
         InitializeTextLayoutSettings();
         InitializeAppearance();
         InitializeWriters();
+        InitializeStorage();
         SettingsTabs.SelectionChanged += SettingsTabChanged;
         SettingsTabs.SelectedItem = GeneralSettingsTab;
 
@@ -52,9 +53,11 @@ public sealed partial class MainWindow
     {
         var reading = sender.SelectedItem == ReadingSettingsTab;
         var agents = sender.SelectedItem == AgentsSettingsTab;
-        GeneralSettingsBody.Visibility = reading || agents ? Visibility.Collapsed : Visibility.Visible;
+        var storageTab = sender.SelectedItem == StorageSettingsTab;
+        GeneralSettingsBody.Visibility = reading || agents || storageTab ? Visibility.Collapsed : Visibility.Visible;
         ReadingSettingsBody.Visibility = reading ? Visibility.Visible : Visibility.Collapsed;
         AgentsSettingsBody.Visibility = agents ? Visibility.Visible : Visibility.Collapsed;
+        StorageSettingsBody.Visibility = storageTab ? Visibility.Visible : Visibility.Collapsed;
         _ = SettingsScroll.ChangeView(null, 0, null, disableAnimation: true);
         if (!reading)
         {
@@ -64,6 +67,11 @@ public sealed partial class MainWindow
         if (agents && IsSettingsOpen)
         {
             _ = LoadWritersAsync();
+        }
+
+        if (storageTab && IsSettingsOpen)
+        {
+            ShowStorage();
         }
     }
 
@@ -101,6 +109,10 @@ public sealed partial class MainWindow
             if (SettingsTabs.SelectedItem == AgentsSettingsTab)
             {
                 _ = LoadWritersAsync();
+            }
+            else if (SettingsTabs.SelectedItem == StorageSettingsTab)
+            {
+                ShowStorage();
             }
         }
 
@@ -218,6 +230,7 @@ public sealed partial class MainWindow
         ApplyTextLayoutControls(loaded.TextLayout);
         ScrollbarsPicker.SelectedIndex = (int)loaded.Scrollbars;
         ApplyAgentControls(loaded);
+        ApplyStorageControls(loaded);
         foreach (var (picker, role) in weightPickers)
         {
             picker.SelectedIndex = loaded.Typography.StepFor(role) + 2;
@@ -235,6 +248,11 @@ public sealed partial class MainWindow
         foreach (var slider in textSliders.Keys)
         {
             slider.IsEnabled = enabled;
+        }
+
+        if (retentionPicker is not null)
+        {
+            retentionPicker.IsEnabled = enabled;
         }
     }
 

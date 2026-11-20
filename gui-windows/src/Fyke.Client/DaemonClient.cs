@@ -85,6 +85,35 @@ public sealed class DaemonClient : IDaemonClient
         }
     }
 
+    /// <summary>The data folder the client last looked in. Empty before it first connects.</summary>
+    public string DataFolder => Volatile.Read(ref _dataFolder);
+
+    /// <summary>
+    /// Keeps the client from reaching or starting a daemon until the returned handle is disposed.
+    /// <c>fyke data move</c> stops the daemon and starts it again in the new folder, and a client that
+    /// started one in the old folder meanwhile would hold the data the move is copying. Calls and
+    /// events wait out the pause, then find the data folder again.
+    /// </summary>
+    public async Task<IDisposable> PauseAsync(CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        return new Pause(_gate);
+    }
+
+    private sealed class Pause(SemaphoreSlim gate) : IDisposable
+    {
+        private int _released;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _released, 1) == 0)
+            {
+                gate.Release();
+            }
+        }
+    }
+
     public async Task StartAsync(CancellationToken ct)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -527,7 +556,7 @@ public sealed class DaemonClient : IDaemonClient
     /// </summary>
     private async Task ConnectAsync(TimeSpan budget, CancellationToken ct, bool replaceOlder = false)
     {
-        _dataFolder = _options.DataFolder ?? FykeHome.Discover();
+        Volatile.Write(ref _dataFolder, _options.DataFolder ?? FykeHome.Discover());
         _socketPath = _options.SocketPath ?? FykeHome.SocketPath(_dataFolder);
         FykeHome.CheckSocketPath(_socketPath);
 

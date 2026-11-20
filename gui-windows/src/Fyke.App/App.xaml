@@ -289,6 +289,24 @@
             <Style x:Key="ActivityQuietDot" TargetType="Ellipse" BasedOn="{StaticResource ActivityDot}">
                 <Setter Property="Fill" Value="{ThemeResource ControlBrush}" />
             </Style>
+            <Style x:Key="StorageSegment" TargetType="Border">
+                <Setter Property="CornerRadius" Value="3" />
+                <Setter Property="Background" Value="{ThemeResource ControlBrush}" />
+            </Style>
+            <Style x:Key="StorageInkSegment" TargetType="Border" BasedOn="{StaticResource StorageSegment}">
+                <Setter Property="Background" Value="{ThemeResource InkBrush}" />
+            </Style>
+            <Style x:Key="StorageSoftSegment" TargetType="Border" BasedOn="{StaticResource StorageSegment}">
+                <Setter Property="Background" Value="{ThemeResource InkSoftBrush}" />
+            </Style>
+            <Style x:Key="StorageUnreadSegment" TargetType="Border" BasedOn="{StaticResource StorageSegment}">
+                <Setter Property="Background" Value="{ThemeResource UnreadBrush}" />
+            </Style>
+            <Style x:Key="StorageConfirm" TargetType="Border">
+                <Setter Property="Padding" Value="10" />
+                <Setter Property="CornerRadius" Value="{StaticResource RadiusControl}" />
+                <Setter Property="Background" Value="{ThemeResource SurfaceBrush}" />
+            </Style>
             <Style x:Key="ActivityError" TargetType="Border">
                 <Setter Property="Padding" Value="16,12" />
                 <Setter Property="Background" Value="{ThemeResource SurfaceBrush}" />

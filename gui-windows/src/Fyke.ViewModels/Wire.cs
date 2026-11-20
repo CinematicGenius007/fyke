@@ -37,6 +37,8 @@ namespace Fyke.ViewModels;
 [JsonSerializable(typeof(RoutineDryRun))]
 [JsonSerializable(typeof(Routines.RoutineList))]
 [JsonSerializable(typeof(SavedView))]
+[JsonSerializable(typeof(StorageFreed))]
+[JsonSerializable(typeof(StorageUse))]
 [JsonSerializable(typeof(SavedViews.ViewList))]
 [JsonSerializable(typeof(ViewPreview))]
 [JsonSerializable(typeof(ViewRemoval))]

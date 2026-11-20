@@ -99,6 +99,30 @@ public sealed class DaemonEventsTests
     }
 
     [Fact]
+    public async Task APauseKeepsTheClientFromStartingADaemonUntilItEnds()
+    {
+        await using var fake = new FakeDaemon();
+        fake.Start();
+        var starter = new RecordingStarter(_ => fake.Restart());
+        await using var client = new DaemonClient(TestSupport.Options(fake, starter));
+        await client.StartAsync(CancellationToken.None);
+        Assert.Equal(fake.Folder, client.DataFolder);
+
+        var pause = await client.PauseAsync(CancellationToken.None);
+        fake.Kill();
+        var call = client.CallAsync("stats.get", null, CancellationToken.None);
+        await Task.Delay(300);
+        Assert.False(call.IsCompleted);
+        Assert.Equal(0, starter.Calls);
+
+        pause.Dispose();
+        pause.Dispose(); // A second release is harmless.
+        await call.WaitAsync(TestSupport.Patience);
+        Assert.Equal(1, starter.Calls);
+        Assert.Equal(ConnectionState.Connected, client.State);
+    }
+
+    [Fact]
     public async Task EventsThatWerePrunedWhileAwayProduceAGapBeforeTheNextEvent()
     {
         await using var fake = new FakeDaemon();

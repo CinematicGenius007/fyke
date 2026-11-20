@@ -16,6 +16,9 @@ public sealed record ReaderPreferences(bool FullText, bool LoadImages, ReaderTyp
     /// <summary>What agents connected over MCP may change.</summary>
     public AgentTier AgentTier { get; init; }
 
+    /// <summary>Read articles are removed after this many days. Zero keeps them.</summary>
+    public long RemoveReadAfterDays { get; init; }
+
     /// <summary>The colours on screen now.</summary>
     public ReaderPalette Palette(bool systemIsDark) => ReaderPalette.Resolve(Appearance.ActiveTheme(systemIsDark), Themes);
 }
@@ -40,6 +43,10 @@ public sealed class ReaderSettings(IDaemonClient client)
         {
             Themes = ReaderCustomTheme.FromUi(ui),
             AgentTier = AgentAccess.FromUi(ui),
+            RemoveReadAfterDays = config.TryGetProperty("remove_read_after_days", out var days) && days.ValueKind == JsonValueKind.Number
+                && days.TryGetInt64(out var kept)
+                ? Math.Max(0, kept)
+                : 0,
         };
     }
 
