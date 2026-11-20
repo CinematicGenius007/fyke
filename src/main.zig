@@ -447,7 +447,6 @@ fn daemonCommand(app: App, args: Args) !void {
     try app.connector.waitForExit();
 }
 
-
 test {
     _ = autostart;
     _ = supervise;
