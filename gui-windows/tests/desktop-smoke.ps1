@@ -181,7 +181,9 @@ try {
     Select-ReaderItem $items 'Desktop fixture'
     $timelineId = [Windows.Automation.PropertyCondition]::new(
         [Windows.Automation.AutomationElement]::AutomationIdProperty, 'ReaderTimeline')
-    $timeline = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $timelineId)
+    $timeline = Wait-For 'the reader timeline' {
+        $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $timelineId)
+    }
     Select-ReaderItem $timeline 'Native reader fixture'
     $paragraph = [Windows.Automation.PropertyCondition]::new(
         [Windows.Automation.AutomationElement]::NameProperty, 'The story is rendered from stored blocks.')
