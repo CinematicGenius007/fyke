@@ -127,6 +127,7 @@ public sealed partial class MainWindow
         QueueTodayChange(change);
         QueueRoutineChange(change);
         QueueActivityChange(change);
+        QueueNotification(change);
         // Gap events also cover replay after pruned or reset daemon history.
         if ((change.IsGap || change.Type.StartsWith("entry.", StringComparison.Ordinal)
             || change.Type.StartsWith("feed.", StringComparison.Ordinal)

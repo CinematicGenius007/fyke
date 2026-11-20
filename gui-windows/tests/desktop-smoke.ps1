@@ -11,8 +11,11 @@ $appPath = (Resolve-Path $App).Path
 $daemonPath = (Resolve-Path $Daemon).Path
 $previousHome = $env:FYKE_HOME
 $previousBin = $env:FYKE_BIN
+$previousHeadless = $env:FYKE_HEADLESS
 $testHome = Join-Path ([IO.Path]::GetTempPath()) ('fyke ' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 $env:FYKE_HOME = $testHome
+# Routine notifications must not reach the notification centre of whoever runs this.
+$env:FYKE_HEADLESS = '1'
 $companion = Join-Path (Split-Path $appPath) 'fyke.exe'
 if (Test-Path $companion) { throw "Use a fresh app build without a bundled daemon: $companion" }
 $window = $null
@@ -894,5 +897,6 @@ try {
     } finally {
         $env:FYKE_HOME = $previousHome
         $env:FYKE_BIN = $previousBin
+        $env:FYKE_HEADLESS = $previousHeadless
     }
 }

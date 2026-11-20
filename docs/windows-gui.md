@@ -179,6 +179,8 @@ Storage in Settings shows, as on macOS, where the data lives and what uses space
 
 Today `fyke service install` registers the daemon in the per-user Run key. The GUI keeps that: closing the window leaves the daemon running. Supervision after a crash, and notifications with every window closed, are planned slices (W4 below) with their own design.
 
+A routine's **notify** action works as on macOS while the window is open. The daemon writes a `routine.notify` event, and the window posts one system notification, "Fyke: A routine has something for you", through the Windows App SDK's `AppNotificationManager` (`MainWindow.Notifications.cs`). Several in ten seconds, such as events replayed after a reconnect, post once (`RoutineNotices`). Clicking one brings the window forward. Notifications turned off for Fyke in Windows Settings are respected. The window registers on open and unregisters on close, so a click after close does nothing until W4 brings single-instance activation. `FYKE_HEADLESS` turns notifications off, and the desktop smoke test sets it.
+
 ## Testing
 
 | Layer | How |
