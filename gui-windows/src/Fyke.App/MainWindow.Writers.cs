@@ -278,11 +278,7 @@ public sealed partial class MainWindow
 
     private async Task PickClaudeProfileAsync()
     {
-        var picker = new FolderPicker(AppWindow.Id)
-        {
-            CommitButtonText = "Use this folder",
-            SuggestedFolder = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        };
+        var picker = new FolderPicker(AppWindow.Id) { CommitButtonText = "Use this folder" };
         var picked = await picker.PickSingleFolderAsync();
         if (picked is null || string.IsNullOrEmpty(picked.Path) || lifetime.IsCancellationRequested)
         {
