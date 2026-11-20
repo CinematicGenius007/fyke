@@ -160,6 +160,10 @@ pub const Service = struct {
     /// Signaled after events are written, for `events.subscribe`.
     events_lock: Io.Mutex = .init,
     events_changed: Io.Condition = .init,
+    /// The last `routine.notify` event a running app took, and when the daemon last
+    /// started the app to post one itself (`notify.zig`).
+    notify_delivered_seq: std.atomic.Value(i64) = .init(0),
+    notify_posted_at: std.atomic.Value(i64) = .init(0),
 
     /// Probe JSON is owned by the daemon, never by a request arena. The lock also
     /// serializes the first lazy probe with explicit writers.check requests.

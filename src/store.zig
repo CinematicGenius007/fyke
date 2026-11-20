@@ -1366,11 +1366,13 @@ pub const Db = struct {
     }
 
     /// Appends a change notification inside the caller’s write transaction.
-    pub fn featureEvent(db: *Db, kind: []const u8, id: i64, now: i64) !void {
+    /// Returns the event's sequence number.
+    pub fn featureEvent(db: *Db, kind: []const u8, id: i64, now: i64) !i64 {
         try db.run(
             \\INSERT INTO events(at,type,subject_id)
             \\VALUES(?1,?2,?3)
         , .{ now, kind, id });
+        return sqlite3_last_insert_rowid(db.handle);
     }
 
     /// Rejects feed and folder ids that no longer exist before executing a selection.
@@ -1679,7 +1681,7 @@ pub const Db = struct {
             , .{ name, rule, now });
             result_id = sqlite3_last_insert_rowid(db.handle);
         }
-        try db.featureEvent("view.changed", result_id, now);
+        _ = try db.featureEvent("view.changed", result_id, now);
         try db.commit();
         return db.viewGet(a, result_id);
     }
@@ -1694,7 +1696,7 @@ pub const Db = struct {
             \\WHERE id=?1
         , .{ id, position });
         if (sqlite3_changes(db.handle) == 0) return error.NoSuchView;
-        try db.featureEvent("view.changed", id, now);
+        _ = try db.featureEvent("view.changed", id, now);
         try db.commit();
     }
 
@@ -1723,7 +1725,7 @@ pub const Db = struct {
             \\FROM views
             \\WHERE id=?1
         , .{id});
-        try db.featureEvent("view.changed", id, now);
+        _ = try db.featureEvent("view.changed", id, now);
         try db.commit();
         return object(a, .{ .ok = true });
     }
@@ -1816,7 +1818,7 @@ pub const Db = struct {
             \\INSERT INTO recipe_revisions(recipe_id,revision,text,note,created_at)
             \\VALUES(?1,?2,?3,?4,?5)
         , .{ result_id, rev, body, note, now });
-        try db.featureEvent("recipe.changed", result_id, now);
+        _ = try db.featureEvent("recipe.changed", result_id, now);
         try db.commit();
         return db.recipeGet(a, result_id, null);
     }
@@ -1923,7 +1925,7 @@ pub const Db = struct {
             \\VALUES(?1,?2,?3)
         , .{ stage, input, now });
         const id = sqlite3_last_insert_rowid(db.handle);
-        try db.featureEvent("job.changed", id, now);
+        _ = try db.featureEvent("job.changed", id, now);
         try db.commit();
         return db.jobGet(a, id);
     }
@@ -1948,7 +1950,7 @@ pub const Db = struct {
             \\AND status IN ('queued','running')
         , .{ id, status, reason, now });
         if (sqlite3_changes(db.handle) > 0) {
-            try db.featureEvent("job.changed", id, now);
+            _ = try db.featureEvent("job.changed", id, now);
             try db.completeRoutineBrief(id, status, null, reason, now);
         }
         try db.commit();
@@ -1976,7 +1978,7 @@ pub const Db = struct {
             \\SET status='running',attempts=attempts+1,lease_until=?2
             \\WHERE id=?1
         , .{ id, now + 1260000 });
-        try db.featureEvent("job.changed", id, now);
+        _ = try db.featureEvent("job.changed", id, now);
         try db.commit();
         return rows[0];
     }
@@ -2124,7 +2126,7 @@ pub const Db = struct {
             , .{ name, view, schedule, actions, enabled, now, next });
             result_id = sqlite3_last_insert_rowid(db.handle);
         }
-        try db.featureEvent("routine.changed", result_id, now);
+        _ = try db.featureEvent("routine.changed", result_id, now);
         try db.commit();
         return db.routineGet(a, result_id);
     }
@@ -2146,7 +2148,7 @@ pub const Db = struct {
             \\FROM routines
             \\WHERE id=?1
         , .{id});
-        try db.featureEvent("routine.changed", id, now);
+        _ = try db.featureEvent("routine.changed", id, now);
         try db.commit();
     }
 
@@ -2227,8 +2229,8 @@ pub const Db = struct {
             \\SET next_run_at=?2
             \\WHERE id=?1
         , .{ id, next });
-        try db.featureEvent("job.changed", job, now);
-        try db.featureEvent("routine.changed", id, now);
+        _ = try db.featureEvent("job.changed", job, now);
+        _ = try db.featureEvent("routine.changed", id, now);
         try db.commit();
         return db.jobGet(a, job);
     }
@@ -2362,13 +2364,13 @@ pub const Db = struct {
             \\FROM json_each(?2)
         , .{ id, try std.fmt.allocPrint(a, "{f}", .{std.json.fmt(ids, .{})}) });
         try db.completeRoutineBrief(job, "done", id, null, now);
-        try db.featureEvent("artifact.new", id, now);
+        _ = try db.featureEvent("artifact.new", id, now);
         try db.run(
             \\UPDATE jobs
             \\SET status='done',finished_at=?2,lease_until=NULL
             \\WHERE id=?1
         , .{ job, now });
-        try db.featureEvent("job.changed", job, now);
+        _ = try db.featureEvent("job.changed", job, now);
         try db.commit();
         return id;
     }

@@ -450,6 +450,7 @@ fn daemonCommand(app: App, args: Args) !void {
 test {
     _ = autostart;
     _ = supervise;
+    _ = @import("notify.zig");
     _ = @import("launchd.zig");
     _ = @import("systemd.zig");
     _ = data_move;

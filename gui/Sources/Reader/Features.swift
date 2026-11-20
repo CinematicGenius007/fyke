@@ -242,18 +242,33 @@ extension Feed {
     var isFailing: Bool { errorCount > 0 && lastError != nil }
 }
 
-/// System notifications for routines that ask to notify, while the app runs.
+/// System notifications for routines that ask to notify. A running app posts them as
+/// the events arrive. With the app closed, the daemon opens a hidden copy with
+/// `--notify`, which posts one and quits (`src/notify.zig`). Clicking it opens Fyke.
 enum Notifier {
-    static func post(title: String, body: String) {
+    static let title = "Fyke"
+    static let body = "A routine has something for you"
+
+    static func post(title: String = title, body: String = body, then done: @escaping @Sendable () -> Void = {}) {
         // A headless check must not reach the notification center of the person at this Mac.
-        guard Bundle.main.bundleIdentifier != nil, !TestMode.headless else { return }
+        guard Bundle.main.bundleIdentifier != nil, !TestMode.headless else { return done() }
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
-            guard granted else { return }
+            guard granted else { return done() }
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body
-            center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+            center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)) { _ in done() }
         }
+    }
+
+    /// The `--notify` launch: posts, then quits before any window opens. The callbacks
+    /// arrive on other queues, so the main thread can wait for them.
+    static func postAndQuitIfAsked() {
+        guard CommandLine.arguments.contains("--notify") else { return }
+        let posted = DispatchSemaphore(value: 0)
+        post { posted.signal() }
+        _ = posted.wait(timeout: .now() + 30)
+        exit(0)
     }
 }

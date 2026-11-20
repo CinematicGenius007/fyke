@@ -114,7 +114,7 @@ Errors use JSON-RPC error objects with stable numeric codes and a `data.kind` st
 
 Requests are limited to 1 MiB per line. A longer one closes that connection.
 
-`events.subscribe` takes `since_seq` and turns the connection into a one-way stream, so a client keeps a second connection for requests. After a reconnect, it resumes from its last sequence number.
+`events.subscribe` takes `since_seq` and turns the connection into a one-way stream, so a client keeps a second connection for requests. After a reconnect, it resumes from its last sequence number. A client that posts routine notifications itself, as the GUIs do, also sends `notifies: true`. When a `routine.notify` event reaches no such client within two seconds, the daemon starts the app installed with it to post one: the bundle that holds it on macOS (`open -g -j … --args --notify`), `Fyke.App.exe --notify` beside it on Windows. Events less than ten seconds apart post once. A daemon with no app beside it posts nothing, and `FYKE_HEADLESS` turns this off. `FYKE_NOTIFIER` names another program to run with `--notify`, for tests.
 
 `connection.restrict` takes a `tier` and lowers this connection for good. New connections start at `manage`, since anything that can open the socket already owns the data. `fyke mcp` restricts itself before accepting any agent request.
 

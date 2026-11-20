@@ -7,6 +7,7 @@ struct ReaderApp: App {
     @State private var model = AppModel()
 
     init() {
+        Notifier.postAndQuitIfAsked()
         Fonts.registerBundled()
     }
 

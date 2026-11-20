@@ -20,6 +20,7 @@ public sealed partial class MainWindow : Window
     {
         ReplaceOlderDaemon = string.IsNullOrEmpty(Environment.GetEnvironmentVariable("FYKE_BIN"))
             && File.Exists(Path.Combine(AppContext.BaseDirectory, "fyke.exe")),
+        PostsNotifications = RoutineNotifier.CanPost,
     });
     private readonly CancellationTokenSource lifetime = new();
     private readonly Task connection;

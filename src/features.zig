@@ -4,6 +4,7 @@
 const std = @import("std");
 const core = @import("core");
 const store = @import("store.zig");
+const notify = @import("notify.zig");
 const service = @import("service.zig");
 const schedule = @import("schedule.zig");
 const writer = @import("writer.zig");
@@ -308,6 +309,12 @@ fn runRoutine(s: *service.Service, a: std.mem.Allocator, job: i64, value: std.js
     };
     const input = try std.json.parseFromValueLeaky(Input, a, value, .{});
     var results: std.ArrayList(std.json.Value) = .empty;
+    var notify_seq: i64 = 0;
+    // Runs after the routine is finished and announced, so a running app sees the event.
+    defer if (notify_seq != 0) {
+        s.eventsChanged();
+        notify.post(s, a, notify_seq);
+    };
     for (input.actions) |action| {
         {
             const db = s.lockWriter();
@@ -318,7 +325,7 @@ fn runRoutine(s: *service.Service, a: std.mem.Allocator, job: i64, value: std.js
                 return;
             }
         }
-        const result = actionResult(s, a, job, input, action) catch |err| try store.object(
+        const result = actionResult(s, a, job, input, action, &notify_seq) catch |err| try store.object(
             a,
             .{
                 .kind = @tagName(action.kind),
@@ -338,7 +345,7 @@ fn runRoutine(s: *service.Service, a: std.mem.Allocator, job: i64, value: std.js
     try db.jobFinish(job, if (failed) "failed" else "done", if (failed) "RoutineActionFailed" else null, s.now());
 }
 
-fn actionResult(s: *service.Service, a: std.mem.Allocator, job: i64, input: anytype, action: Action) !std.json.Value {
+fn actionResult(s: *service.Service, a: std.mem.Allocator, job: i64, input: anytype, action: Action, notify_seq: *i64) !std.json.Value {
     const db = s.lockWriter();
     defer s.unlockWriter();
     const current = try db.jobGet(a, job);
@@ -368,7 +375,7 @@ fn actionResult(s: *service.Service, a: std.mem.Allocator, job: i64, input: anyt
             ),
             s.now(),
         ),
-        .notify => try db.featureEvent("routine.notify", input.routine_id, s.now()),
+        .notify => notify_seq.* = try db.featureEvent(notify.event_type, input.routine_id, s.now()),
         .brief => {
             const recipe = try db.recipeGet(a, action.recipe_id, null);
             const writing = Writing{

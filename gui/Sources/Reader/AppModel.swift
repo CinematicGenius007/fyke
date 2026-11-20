@@ -239,7 +239,7 @@ final class AppModel {
             if event.type == "view.changed", case .view = place { try? await reloadEntries() }
             if event.type == "artifact.new", place == .today, selectedBrief == nil { selectedBrief = library.briefs.first?.id }
         case "routine.notify":
-            Notifier.post(title: "Fyke", body: "A routine has something for you")
+            Notifier.post()
         default:
             scheduleReload()
         }

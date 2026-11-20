@@ -822,7 +822,13 @@ public sealed class DaemonClient : IDaemonClient
                 since = _lastSeq ?? 0;
             }
 
-            var request = BuildRequest("events.subscribe", new JsonObject { ["since_seq"] = since });
+            var subscribe = new JsonObject { ["since_seq"] = since };
+            if (_options.PostsNotifications)
+            {
+                subscribe["notifies"] = true;
+            }
+
+            var request = BuildRequest("events.subscribe", subscribe);
             _ = await ExchangeAsync(connection, request, "events.subscribe", _options.CallTimeout, ct).ConfigureAwait(false);
             return (connection, epoch);
         }

@@ -19,6 +19,14 @@ public static class Program
     public static int Main()
     {
         WinRT.ComWrappersSupport.InitializeComWrappers();
+        // The daemon asks for a routine's notification while no window is open. This runs
+        // before the single-instance check, so it neither opens a window nor takes the key.
+        if (Array.IndexOf(Environment.GetCommandLineArgs(), RoutineNotifier.Argument) > 0)
+        {
+            RoutineNotifier.PostAlone();
+            return 0;
+        }
+
         if (RedirectedToOpenWindow())
         {
             return 0;

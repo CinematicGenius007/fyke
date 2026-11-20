@@ -39,6 +39,13 @@ public sealed class DaemonClientOptions
         "opml.import",
     };
 
+    /// <summary>
+    /// The app posts routine notifications itself, so the daemon leaves the events it
+    /// receives to it. With no such app connected, the daemon starts one to post them
+    /// (<c>src/notify.zig</c>).
+    /// </summary>
+    public bool PostsNotifications { get; init; }
+
     /// <summary>How long <c>StartAsync</c> keeps trying to reach a daemon, starting one if needed.</summary>
     public TimeSpan StartupTimeout { get; init; } = TimeSpan.FromSeconds(30);
 

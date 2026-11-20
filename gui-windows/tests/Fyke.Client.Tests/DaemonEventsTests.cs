@@ -24,6 +24,33 @@ public sealed class DaemonEventsTests
         Assert.Equal([0L], fake.Subscriptions);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AnAppThatPostsNotificationsSaysSo(bool posts)
+    {
+        await using var fake = new FakeDaemon();
+        fake.Start();
+        var options = TestSupport.Options(fake);
+        await using var client = new DaemonClient(new DaemonClientOptions
+        {
+            DataFolder = options.DataFolder,
+            SocketPath = options.SocketPath,
+            ProcessStarter = options.ProcessStarter,
+            StartupTimeout = options.StartupTimeout,
+            CallTimeout = options.CallTimeout,
+            PostsNotifications = posts,
+        });
+        await client.StartAsync(CancellationToken.None);
+        using var cancel = new CancellationTokenSource();
+        await using var events = client.EventsAsync(cancel.Token).GetAsyncEnumerator(cancel.Token);
+
+        fake.Publish(1, "routine.notify", 7);
+        _ = await TestSupport.TakeAsync(events, 1);
+
+        Assert.Equal([posts], fake.SubscriptionsThatNotify);
+    }
+
     [Fact]
     public async Task OnlyChangesAfterTheHandshakeAreDelivered()
     {

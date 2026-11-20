@@ -46,6 +46,9 @@ internal sealed class FakeDaemon : IAsyncDisposable
 
     public List<long> Subscriptions { get; } = [];
 
+    /// <summary>Whether each subscription said the client posts notifications.</summary>
+    public List<bool> SubscriptionsThatNotify { get; } = [];
+
     public bool Running => _listener is not null;
 
     public FakeDaemon On(string method, Func<JsonElement, object?> handler)
@@ -231,6 +234,7 @@ internal sealed class FakeDaemon : IAsyncDisposable
             lock (_lock)
             {
                 Subscriptions.Add(since);
+                SubscriptionsThatNotify.Add(parameters.TryGetProperty("notifies", out var n) && n.GetBoolean());
             }
 
             await SendAsync(client, Reply(id, new { subscribed = true }), stop);
