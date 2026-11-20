@@ -39,7 +39,7 @@ public sealed partial class MainWindow
     private DataMovePlan? dataMove;
     private MovePhase dataMovePhase;
 
-    private bool IsStorageShown => IsSettingsOpen && SettingsTabs.SelectedItem == StorageSettingsTab;
+    private bool IsStorageShown => IsSettingsOpen && SettingsPane.SettingsTabs.SelectedItem == SettingsPane.StorageSettingsTab;
 
     private bool IsDataMoveOpen => DataMoveOverlay?.Visibility == Visibility.Visible;
 
@@ -51,8 +51,8 @@ public sealed partial class MainWindow
     private void ShowStorage()
     {
         ShowDataFolder();
-        ChangeDataFolder.IsEnabled = !HomeOverridden;
-        ToolTipService.SetToolTip(ChangeDataFolder, HomeOverridden ? StorageText.HomeOverridden : null);
+        SettingsPane.ChangeDataFolder.IsEnabled = !HomeOverridden;
+        ToolTipService.SetToolTip(SettingsPane.ChangeDataFolder, HomeOverridden ? StorageText.HomeOverridden : null);
         RenderStorage();
         _ = MeasureStorageAsync();
     }
@@ -61,8 +61,8 @@ public sealed partial class MainWindow
     {
         var user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         var folder = client.DataFolder;
-        DataFolderPath.Text = StorageText.Tilde(folder, user);
-        SettingsFilePath.Text = StorageText.Tilde(Path.Combine(folder, "config.json"), user);
+        SettingsPane.DataFolderPath.Text = StorageText.Tilde(folder, user);
+        SettingsPane.SettingsFilePath.Text = StorageText.Tilde(Path.Combine(folder, "config.json"), user);
     }
 
     private async Task MeasureStorageAsync()
@@ -142,12 +142,12 @@ public sealed partial class MainWindow
 
     private void RenderStorage()
     {
-        StorageChecked.Text = storageCheckedAt is { } at ? StorageText.Checked(at, DateTimeOffset.Now) : string.Empty;
-        StorageDetails.Children.Clear();
+        SettingsPane.StorageChecked.Text = storageCheckedAt is { } at ? StorageText.Checked(at, DateTimeOffset.Now) : string.Empty;
+        SettingsPane.StorageDetails.Children.Clear();
         retentionPicker = null;
         if (storageUse is not { } use)
         {
-            StorageDetails.Children.Add(StorageSkeleton());
+            SettingsPane.StorageDetails.Children.Add(StorageSkeleton());
             return;
         }
 
@@ -159,8 +159,8 @@ public sealed partial class MainWindow
         Grid.SetColumn(size, 1);
         total.Children.Add(size);
         AutomationProperties.SetName(total, $"Used in all, {StorageText.Size(use.TotalBytes)}");
-        StorageDetails.Children.Add(total);
-        StorageDetails.Children.Add(StorageBar(
+        SettingsPane.StorageDetails.Children.Add(total);
+        SettingsPane.StorageDetails.Children.Add(StorageBar(
         [
             ("Articles and search", use.DatabaseBytes, "StorageInkSegment"),
             ("Feed copies", use.RawBytes, "StorageUnreadSegment"),
@@ -180,7 +180,7 @@ public sealed partial class MainWindow
             articles.Children.Add(StorageConfirm(StorageText.FreeArticlesPrompt(use.Articles), storage.FreeArticlesAsync));
         }
 
-        StorageDetails.Children.Add(StorageSection("articles", "Articles and search", use.DatabaseBytes,
+        SettingsPane.StorageDetails.Children.Add(StorageSection("articles", "Articles and search", use.DatabaseBytes,
             StorageText.ArticlesDetail(use.Articles), articles));
 
         var copies = new StackPanel { Spacing = 8 };
@@ -191,8 +191,8 @@ public sealed partial class MainWindow
             copies.Children.Add(StorageConfirm(StorageText.FreeCopiesPrompt, storage.FreeCopiesAsync));
         }
 
-        StorageDetails.Children.Add(StorageSection("copies", "Feed copies", use.RawBytes, StorageText.CopiesDetail, copies));
-        StorageDetails.Children.Add(StorageSection("logs", "Logs and settings", use.LogsAndSettingsBytes, StorageText.LogsDetail, null));
+        SettingsPane.StorageDetails.Children.Add(StorageSection("copies", "Feed copies", use.RawBytes, StorageText.CopiesDetail, copies));
+        SettingsPane.StorageDetails.Children.Add(StorageSection("logs", "Logs and settings", use.LogsAndSettingsBytes, StorageText.LogsDetail, null));
     }
 
     private Grid ArticleControls()
@@ -652,6 +652,6 @@ public sealed partial class MainWindow
         }
 
         dataMove = null;
-        HideReaderOverlay(DataMoveOverlay, ChangeDataFolder, restoreFocus && IsSettingsOpen);
+        HideReaderOverlay(DataMoveOverlay, SettingsPane.ChangeDataFolder, restoreFocus && IsSettingsOpen);
     }
 }

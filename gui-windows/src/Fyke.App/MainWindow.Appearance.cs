@@ -45,7 +45,7 @@ public sealed partial class MainWindow
 
         themeIds = ids;
         themeNames = names;
-        ThemePicker.ItemsSource = DayThemePicker.ItemsSource = NightThemePicker.ItemsSource = names;
+        SettingsPane.ThemePicker.ItemsSource = SettingsPane.DayThemePicker.ItemsSource = SettingsPane.NightThemePicker.ItemsSource = names;
     }
 
     private void SystemColorsChanged(UISettings sender, object args) => QueueAppearanceRefresh();
@@ -130,11 +130,11 @@ public sealed partial class MainWindow
     {
         var appearance = saved.Appearance;
         ListThemes(saved.Themes);
-        FollowSystemToggle.IsOn = appearance.FollowSystem;
-        SystemThemeChoices.Visibility = appearance.FollowSystem ? Visibility.Visible : Visibility.Collapsed;
-        SelectTheme(ThemePicker, appearance.Theme);
-        SelectTheme(DayThemePicker, appearance.DayTheme);
-        SelectTheme(NightThemePicker, appearance.NightTheme);
+        SettingsPane.FollowSystemToggle.IsOn = appearance.FollowSystem;
+        SettingsPane.SystemThemeChoices.Visibility = appearance.FollowSystem ? Visibility.Visible : Visibility.Collapsed;
+        SelectTheme(SettingsPane.ThemePicker, appearance.Theme);
+        SelectTheme(SettingsPane.DayThemePicker, appearance.DayTheme);
+        SelectTheme(SettingsPane.NightThemePicker, appearance.NightTheme);
     }
 
     // A theme deleted since it was chosen shows as Light, which is what is on screen.
@@ -164,7 +164,7 @@ public sealed partial class MainWindow
             return;
         }
 
-        var follows = FollowSystemToggle.IsOn;
+        var follows = SettingsPane.FollowSystemToggle.IsOn;
         if (follows != saved.Appearance.FollowSystem)
         {
             _ = ReadSettingsAsync(ct => readerSettings.SetFollowSystemAsync(follows, ct),
@@ -180,8 +180,8 @@ public sealed partial class MainWindow
             return;
         }
 
-        var slot = picker == DayThemePicker ? ReaderThemeSlot.Day
-            : picker == NightThemePicker ? ReaderThemeSlot.Night : ReaderThemeSlot.Fixed;
+        var slot = picker == SettingsPane.DayThemePicker ? ReaderThemeSlot.Day
+            : picker == SettingsPane.NightThemePicker ? ReaderThemeSlot.Night : ReaderThemeSlot.Fixed;
         var theme = themeIds[picker.SelectedIndex];
         if (theme != saved.Appearance.ThemeFor(slot) || (slot == ReaderThemeSlot.Fixed && saved.Appearance.FollowSystem))
         {

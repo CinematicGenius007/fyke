@@ -1,0 +1,345 @@
+<!-- Settings: General, Reading, Agents and Storage. MainWindow.Settings.cs and the files it
+     names fill and wire it; this file is the view only. -->
+<UserControl x:Class="Fyke.App.SettingsPane"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Fyke.App">
+    <UserControl.Resources>
+        <Style x:Key="SettingsTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="FontFamily" Value="{ThemeResource FontReading}" />
+            <Setter Property="Foreground" Value="{ThemeResource InkBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="SettingsLabel" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{ThemeResource FontUi}" />
+            <Setter Property="Foreground" Value="{ThemeResource InkBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="SettingsDetail" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="{ThemeResource FontUi}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{ThemeResource MutedBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style x:Key="SettingsAction" TargetType="Button">
+            <Setter Property="Height" Value="32" />
+            <Setter Property="CornerRadius" Value="{ThemeResource RadiusControl}" />
+            <Setter Property="FontFamily" Value="{ThemeResource FontUi}" />
+        </Style>
+        <Style x:Key="SettingsPicker" TargetType="ComboBox">
+            <Setter Property="MinWidth" Value="152" />
+            <Setter Property="MinHeight" Value="32" />
+            <Setter Property="FontFamily" Value="{ThemeResource FontUi}" />
+        </Style>
+    </UserControl.Resources>
+    <Grid Background="{ThemeResource GroundBrush}" AutomationProperties.Name="Settings">
+    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+    <Grid Margin="24,16,24,8">
+        <SelectorBar x:Name="SettingsTabs" x:FieldModifier="internal" HorizontalAlignment="Center"
+                     AutomationProperties.Name="Settings tabs" FontFamily="{ThemeResource FontUi}">
+            <SelectorBarItem x:Name="GeneralSettingsTab" x:FieldModifier="internal" Text="General" AutomationProperties.AutomationId="GeneralSettingsTab">
+                <SelectorBarItem.Icon><SymbolIcon Symbol="Setting" /></SelectorBarItem.Icon>
+            </SelectorBarItem>
+            <SelectorBarItem x:Name="ReadingSettingsTab" x:FieldModifier="internal" Text="Reading" AutomationProperties.AutomationId="ReadingSettingsTab">
+                <SelectorBarItem.Icon><FontIcon Glyph="&#xE8D2;" FontSize="14" /></SelectorBarItem.Icon>
+            </SelectorBarItem>
+            <SelectorBarItem x:Name="AgentsSettingsTab" x:FieldModifier="internal" Text="Agents" AutomationProperties.AutomationId="AgentsSettingsTab">
+                <SelectorBarItem.Icon><FontIcon Glyph="&#xE99A;" FontSize="14" /></SelectorBarItem.Icon>
+            </SelectorBarItem>
+            <SelectorBarItem x:Name="StorageSettingsTab" x:FieldModifier="internal" Text="Storage" AutomationProperties.AutomationId="StorageSettingsTab">
+                <SelectorBarItem.Icon><FontIcon Glyph="&#xEDA2;" FontSize="14" /></SelectorBarItem.Icon>
+            </SelectorBarItem>
+        </SelectorBar>
+        <Button x:Name="CloseSettingsButton" x:FieldModifier="internal" HorizontalAlignment="Right" Width="32" Height="32" Padding="0" CornerRadius="{ThemeResource RadiusControl}" VerticalAlignment="Center"
+                AutomationProperties.AutomationId="CloseSettingsButton" AutomationProperties.Name="Close Settings"
+                ToolTipService.ToolTip="Close Settings (Esc)">
+            <FontIcon Glyph="&#xE711;" FontSize="14" />
+        </Button>
+    </Grid>
+    <Grid Grid.Row="1" Padding="24,0">
+        <StackPanel Spacing="8" x:Name="SettingsFeedback" x:FieldModifier="internal" Visibility="Collapsed" MaxWidth="640" Margin="0,8">
+            <TextBlock x:Name="SettingsStatus" x:FieldModifier="internal" Style="{StaticResource SettingsDetail}" AutomationProperties.LiveSetting="Polite" />
+            <Button x:Name="ReloadSettingsButton" x:FieldModifier="internal" Visibility="Collapsed" Content="Try again"
+                    Style="{StaticResource SettingsAction}" />
+        </StackPanel>
+    </Grid>
+    <ScrollViewer Grid.Row="2" x:Name="SettingsScroll" x:FieldModifier="internal" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
+                  AutomationProperties.AutomationId="SettingsScroll">
+        <Grid Padding="24,16,24,28">
+            <StackPanel x:Name="GeneralSettingsBody" x:FieldModifier="internal" MaxWidth="640" Spacing="24">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Updates" Style="{StaticResource SettingsTitle}" AutomationProperties.HeadingLevel="Level2" />
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Check for new articles" Style="{StaticResource SettingsLabel}" />
+                            <TextBlock Text="Fyke follows how often each feed posts." Style="{StaticResource SettingsDetail}" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="Automatic" VerticalAlignment="Center" Style="{StaticResource SettingsDetail}" />
+                    </Grid>
+                    <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Fetch full articles" Style="{StaticResource SettingsLabel}" />
+                            <TextBlock Text="Replaces short summaries and follows each site’s robots.txt." Style="{StaticResource SettingsDetail}" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1" x:Name="FullTextToggle" x:FieldModifier="internal" IsEnabled="False"
+                                      MinWidth="0" OnContent="" OffContent="" AutomationProperties.Name="Fetch full articles"
+                                      AutomationProperties.AutomationId="FullTextToggle" />
+                    </Grid>
+                </StackPanel>
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Privacy" Style="{StaticResource SettingsTitle}" AutomationProperties.HeadingLevel="Level2" />
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Load images automatically" Style="{StaticResource SettingsLabel}" />
+                            <TextBlock Text="Loading an image can tell its publisher you are reading." Style="{StaticResource SettingsDetail}" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1" x:Name="LoadImagesToggle" x:FieldModifier="internal" IsEnabled="False"
+                                      MinWidth="0" OnContent="" OffContent="" AutomationProperties.Name="Load images automatically"
+                                      AutomationProperties.AutomationId="LoadImagesToggle" />
+                    </Grid>
+                </StackPanel>
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Subscriptions and keys" Style="{StaticResource SettingsTitle}" AutomationProperties.HeadingLevel="Level2" />
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Your subscriptions" Style="{StaticResource SettingsLabel}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="SettingsImport" x:FieldModifier="internal" Content="Import OPML…" Style="{StaticResource SettingsAction}" />
+                            <Button x:Name="SettingsExport" x:FieldModifier="internal" Content="Export OPML…" Style="{StaticResource SettingsAction}" />
+                        </StackPanel>
+                    </StackPanel>
+                    <Expander Header="Keyboard shortcuts" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                              FontFamily="{ThemeResource FontUi}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Style="{StaticResource SettingsLabel}">Command palette <Run Text="Ctrl+K" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                            <TextBlock Style="{StaticResource SettingsLabel}">Search articles <Run Text="Ctrl+F or /" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                            <TextBlock Style="{StaticResource SettingsLabel}">Add feed <Run Text="Ctrl+N or A" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                            <TextBlock Style="{StaticResource SettingsLabel}">Settings <Run Text="Ctrl+," Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                            <TextBlock Style="{StaticResource SettingsLabel}">Move between panes <Run Text="F6 / Shift+F6" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                            <TextBlock Style="{StaticResource SettingsLabel}">Next or previous article <Run Text="J / K" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                            <TextBlock Style="{StaticResource SettingsLabel}">Next unread article <Run Text="N" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                            <TextBlock Style="{StaticResource SettingsLabel}">Show unread only or all articles <Run Text="U" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                            <TextBlock Style="{StaticResource SettingsLabel}">Open page in browser <Run Text="O" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                            <TextBlock Style="{StaticResource SettingsLabel}">Fetch full article <Run Text="F" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                            <TextBlock Style="{StaticResource SettingsLabel}">Text size and spacing <Run Text="T" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                            <TextBlock Style="{StaticResource SettingsLabel}">Refresh feeds <Run Text="R" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                            <TextBlock Style="{StaticResource SettingsLabel}">Mark read or unread <Run Text="M" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                            <TextBlock Style="{StaticResource SettingsLabel}">Star or unstar article <Run Text="S" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                            <TextBlock Style="{StaticResource SettingsLabel}">Show discussion <Run Text="C" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                            <TextBlock Style="{StaticResource SettingsLabel}">Mark all read <Run Text="Ctrl+Shift+K" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                            <TextBlock Style="{StaticResource SettingsLabel}">Undo mark all read <Run Text="Ctrl+Z" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                            <TextBlock Style="{StaticResource SettingsLabel}">Close panel <Run Text="Esc" Foreground="{ThemeResource MutedBrush}" /></TextBlock>
+                        </StackPanel>
+                    </Expander>
+                </StackPanel>
+            </StackPanel>
+            <StackPanel x:Name="ReadingSettingsBody" x:FieldModifier="internal" MaxWidth="640" Spacing="8" Visibility="Collapsed">
+                <TextBlock Text="Appearance" Style="{StaticResource SettingsTitle}" AutomationProperties.HeadingLevel="Level2" />
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <TextBlock Text="Fixed theme" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="1" x:Name="ThemePicker" x:FieldModifier="internal" Style="{StaticResource SettingsPicker}" IsEnabled="False" AutomationProperties.Name="Fixed theme"
+                              AutomationProperties.AutomationId="ThemePicker" />
+                </Grid>
+                <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <TextBlock Text="Follow system appearance" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center" />
+                    <ToggleSwitch Grid.Column="1" x:Name="FollowSystemToggle" x:FieldModifier="internal" IsEnabled="False"
+                                  MinWidth="0" OnContent="" OffContent="" AutomationProperties.Name="Follow system appearance"
+                                  AutomationProperties.AutomationId="FollowSystemToggle" />
+                </Grid>
+                <StackPanel x:Name="SystemThemeChoices" x:FieldModifier="internal" Spacing="8">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBlock Text="Day" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center" />
+                        <ComboBox Grid.Column="1" x:Name="DayThemePicker" x:FieldModifier="internal" Style="{StaticResource SettingsPicker}" IsEnabled="False" AutomationProperties.Name="Day theme" />
+                    </Grid>
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBlock Text="Night" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center" />
+                        <ComboBox Grid.Column="1" x:Name="NightThemePicker" x:FieldModifier="internal" Style="{StaticResource SettingsPicker}" IsEnabled="False" AutomationProperties.Name="Night theme" />
+                    </Grid>
+                </StackPanel>
+                <TextBlock Text="Font weights" Style="{StaticResource SettingsTitle}" Margin="0,16,0,0"
+                           AutomationProperties.HeadingLevel="Level2" />
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <TextBlock Text="Reading" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center"
+                               FontFamily="{ThemeResource FontReading}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Reading, Mode=OneWay}" />
+                    <ComboBox Grid.Column="1" x:Name="ReadingWeightPicker" x:FieldModifier="internal" Style="{StaticResource SettingsPicker}" IsEnabled="False" AutomationProperties.Name="Reading font weight"
+                              AutomationProperties.AutomationId="ReadingWeightPicker" />
+                </Grid>
+                <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <TextBlock Text="Titles" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center"
+                               FontFamily="{ThemeResource FontTitle}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Title, Mode=OneWay}" />
+                    <ComboBox Grid.Column="1" x:Name="TitleWeightPicker" x:FieldModifier="internal" Style="{StaticResource SettingsPicker}" IsEnabled="False" AutomationProperties.Name="Titles font weight"
+                              AutomationProperties.AutomationId="TitleWeightPicker" />
+                </Grid>
+                <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <TextBlock Text="App" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center"
+                               FontFamily="{ThemeResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}" />
+                    <ComboBox Grid.Column="1" x:Name="UiWeightPicker" x:FieldModifier="internal" Style="{StaticResource SettingsPicker}" IsEnabled="False" AutomationProperties.Name="App font weight"
+                              AutomationProperties.AutomationId="UiWeightPicker" />
+                </Grid>
+                <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <TextBlock Text="Code" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center"
+                               FontFamily="{ThemeResource FontCode}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Code, Mode=OneWay}" />
+                    <ComboBox Grid.Column="1" x:Name="CodeWeightPicker" x:FieldModifier="internal" Style="{StaticResource SettingsPicker}" IsEnabled="False" AutomationProperties.Name="Code font weight"
+                              AutomationProperties.AutomationId="CodeWeightPicker" />
+                </Grid>
+                <TextBlock Text="Text" Style="{StaticResource SettingsTitle}" Margin="0,16,0,0"
+                           AutomationProperties.HeadingLevel="Level2" />
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="2*" MinWidth="80" />
+                        <ColumnDefinition Width="32" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Text size" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center" />
+                    <Slider Grid.Column="1" x:Name="TextSizeSlider" x:FieldModifier="internal" MaxWidth="200" HorizontalAlignment="Stretch"
+                            IsEnabled="False" AutomationProperties.Name="Text size"
+                            AutomationProperties.AutomationId="TextSizeSlider" />
+                    <TextBlock Grid.Column="2" x:Name="TextSizeValue" x:FieldModifier="internal" HorizontalAlignment="Right" VerticalAlignment="Center"
+                               Style="{StaticResource SettingsDetail}" />
+                </Grid>
+                <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="2*" MinWidth="80" />
+                        <ColumnDefinition Width="32" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Line spacing" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center" />
+                    <Slider Grid.Column="1" x:Name="LineSpacingSlider" x:FieldModifier="internal" MaxWidth="200" HorizontalAlignment="Stretch"
+                            IsEnabled="False" AutomationProperties.Name="Line spacing"
+                            AutomationProperties.AutomationId="LineSpacingSlider" />
+                    <TextBlock Grid.Column="2" x:Name="LineSpacingValue" x:FieldModifier="internal" HorizontalAlignment="Right" VerticalAlignment="Center"
+                               Style="{StaticResource SettingsDetail}" />
+                </Grid>
+                <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="2*" MinWidth="80" />
+                        <ColumnDefinition Width="32" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Column width" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center" />
+                    <Slider Grid.Column="1" x:Name="ColumnWidthSlider" x:FieldModifier="internal" MaxWidth="200" HorizontalAlignment="Stretch"
+                            IsEnabled="False" AutomationProperties.Name="Column width"
+                            AutomationProperties.AutomationId="ColumnWidthSlider" />
+                    <TextBlock Grid.Column="2" x:Name="ColumnWidthValue" x:FieldModifier="internal" HorizontalAlignment="Right" VerticalAlignment="Center"
+                               Style="{StaticResource SettingsDetail}" />
+                </Grid>
+                <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <TextBlock Text="Show scrollbars" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="1" x:Name="ScrollbarsPicker" x:FieldModifier="internal" Style="{StaticResource SettingsPicker}" IsEnabled="False" AutomationProperties.Name="Show scrollbars"
+                              AutomationProperties.AutomationId="ScrollbarsPicker" />
+                </Grid>
+            </StackPanel>
+            <StackPanel x:Name="AgentsSettingsBody" x:FieldModifier="internal" MaxWidth="640" Spacing="24" Visibility="Collapsed">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Who writes your briefs" Style="{StaticResource SettingsTitle}" AutomationProperties.HeadingLevel="Level2" />
+                    <TextBlock x:Name="WritersDetail" x:FieldModifier="internal" Style="{StaticResource SettingsDetail}" />
+                    <TextBlock x:Name="WritersEmpty" x:FieldModifier="internal" Style="{StaticResource SettingsDetail}" FontSize="13" Margin="0,12" />
+                    <StackPanel x:Name="WriterRows" x:FieldModifier="internal" AutomationProperties.Name="Writers" />
+                    <TextBlock x:Name="WritersProblem" x:FieldModifier="internal" Style="{StaticResource SettingsLabel}" FontSize="12" Visibility="Collapsed"
+                               AutomationProperties.AutomationId="WritersProblem" AutomationProperties.LiveSetting="Assertive" />
+                </StackPanel>
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Let agents use Fyke" Style="{StaticResource SettingsTitle}" AutomationProperties.HeadingLevel="Level2" />
+                    <TextBlock x:Name="AgentsDetail" x:FieldModifier="internal" Style="{StaticResource SettingsDetail}" />
+                    <Grid ColumnSpacing="12" MinHeight="40">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBlock Text="Read articles, views and briefs" Style="{StaticResource SettingsLabel}" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="Always on" Style="{StaticResource SettingsDetail}" FontSize="13" VerticalAlignment="Center" />
+                    </Grid>
+                    <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Make changes" Style="{StaticResource SettingsLabel}" />
+                            <TextBlock Text="Mark read and star; or also edit views, recipes and routines" Style="{StaticResource SettingsDetail}" />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1" x:Name="AgentTierPicker" x:FieldModifier="internal" Style="{StaticResource SettingsPicker}" MinWidth="180" IsEnabled="False" AutomationProperties.Name="What agents may change"
+                                  AutomationProperties.AutomationId="AgentTierPicker" VerticalAlignment="Center" />
+                    </Grid>
+                    <Grid ColumnSpacing="12" Margin="0,4,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBlock Text="Add Fyke to another agent with this configuration." Style="{StaticResource SettingsDetail}" VerticalAlignment="Center" />
+                        <Button Grid.Column="1" x:Name="CopyMcpConfig" x:FieldModifier="internal" Content="Copy MCP config"
+                                Style="{StaticResource SettingsAction}" AutomationProperties.AutomationId="CopyMcpConfig" />
+                    </Grid>
+                    <Border Padding="16,12" CornerRadius="{ThemeResource RadiusControl}" Background="{ThemeResource SurfaceBrush}">
+                        <TextBlock x:Name="McpConfigText" x:FieldModifier="internal" FontFamily="{ThemeResource FontCode}" FontSize="12" IsTextSelectionEnabled="True"
+                                   TextWrapping="Wrap" Foreground="{ThemeResource InkSoftBrush}" AutomationProperties.Name="MCP configuration" />
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+            <!-- Storage: where the data lives and what uses space. The disk space section is
+                 drawn in MainWindow.Storage.cs from storage.get. -->
+            <StackPanel x:Name="StorageSettingsBody" x:FieldModifier="internal" MaxWidth="640" Spacing="24" Visibility="Collapsed">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Where your data lives" Style="{StaticResource SettingsTitle}" AutomationProperties.HeadingLevel="Level2" />
+                    <TextBlock Text="Feeds, articles and settings stay in one folder on this PC." Style="{StaticResource SettingsDetail}" />
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Data folder" Style="{StaticResource SettingsLabel}" />
+                            <TextBlock x:Name="DataFolderPath" x:FieldModifier="internal" Style="{StaticResource SettingsDetail}" IsTextSelectionEnabled="True"
+                                       AutomationProperties.AutomationId="DataFolderPath" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Button x:Name="OpenDataFolder" x:FieldModifier="internal" Content="Open" Style="{StaticResource BriefQuietAction}"
+                                    AutomationProperties.Name="Open data folder" AutomationProperties.AutomationId="OpenDataFolder" />
+                            <Button x:Name="ChangeDataFolder" x:FieldModifier="internal" Content="Change…" Style="{StaticResource SettingsAction}"
+                                    AutomationProperties.Name="Change data folder" AutomationProperties.AutomationId="ChangeDataFolder" />
+                        </StackPanel>
+                    </Grid>
+                    <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Settings file" Style="{StaticResource SettingsLabel}" />
+                            <TextBlock x:Name="SettingsFilePath" x:FieldModifier="internal" Style="{StaticResource SettingsDetail}" IsTextSelectionEnabled="True"
+                                       AutomationProperties.AutomationId="SettingsFilePath" />
+                        </StackPanel>
+                        <Button Grid.Column="1" x:Name="OpenSettingsFile" x:FieldModifier="internal" Content="Open" Style="{StaticResource SettingsAction}"
+                                VerticalAlignment="Center" AutomationProperties.Name="Open settings file"
+                                AutomationProperties.AutomationId="OpenSettingsFile" />
+                    </Grid>
+                </StackPanel>
+                <StackPanel Spacing="8">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Disk space" Style="{StaticResource SettingsTitle}" AutomationProperties.HeadingLevel="Level2" />
+                            <TextBlock x:Name="StorageChecked" x:FieldModifier="internal" Style="{StaticResource SettingsDetail}" AutomationProperties.AutomationId="StorageChecked" />
+                        </StackPanel>
+                        <Button Grid.Column="1" x:Name="StorageRefresh" x:FieldModifier="internal" Style="{StaticResource SettingsAction}"
+                                VerticalAlignment="Top" AutomationProperties.Name="Measure again" AutomationProperties.AutomationId="StorageRefresh">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                                <TextBlock Text="Refresh" />
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                    <StackPanel x:Name="StorageDetails" x:FieldModifier="internal" Spacing="8" AutomationProperties.AutomationId="StorageDetails" />
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+    </Grid>
+</UserControl>

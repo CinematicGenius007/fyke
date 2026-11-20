@@ -16,9 +16,9 @@ public sealed partial class MainWindow
 
     private void InitializeTextLayoutSettings()
     {
-        textSliders.Add(TextSizeSlider, (ReaderTextSetting.Size, TextSizeValue));
-        textSliders.Add(LineSpacingSlider, (ReaderTextSetting.LineSpacing, LineSpacingValue));
-        textSliders.Add(ColumnWidthSlider, (ReaderTextSetting.ColumnWidth, ColumnWidthValue));
+        textSliders.Add(SettingsPane.TextSizeSlider, (ReaderTextSetting.Size, SettingsPane.TextSizeValue));
+        textSliders.Add(SettingsPane.LineSpacingSlider, (ReaderTextSetting.LineSpacing, SettingsPane.LineSpacingValue));
+        textSliders.Add(SettingsPane.ColumnWidthSlider, (ReaderTextSetting.ColumnWidth, SettingsPane.ColumnWidthValue));
         textSaveTimer = DispatcherQueue.CreateTimer();
         textSaveTimer.Interval = TimeSpan.FromMilliseconds(300);
         textSaveTimer.IsRepeating = false;

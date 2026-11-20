@@ -25,40 +25,72 @@ public sealed partial class MainWindow
 
     private bool IsSettingsOpen => SettingsPane?.Visibility == Visibility.Visible;
 
+    /// <summary>Connects the controls of <see cref="Fyke.App.SettingsPane"/>, which is the view only,
+    /// to the handlers here and in the files beside this one.</summary>
+    private void WireSettingsPane()
+    {
+        var pane = SettingsPane;
+        pane.CloseSettingsButton.Click += CloseSettingsClicked;
+        pane.ReloadSettingsButton.Click += ReloadSettingsClicked;
+        pane.FullTextToggle.Toggled += GeneralSettingToggled;
+        pane.LoadImagesToggle.Toggled += GeneralSettingToggled;
+        pane.SettingsImport.Click += ImportOpmlClicked;
+        pane.SettingsExport.Click += SettingsExportClicked;
+        pane.ThemePicker.SelectionChanged += AppearanceThemeChanged;
+        pane.FollowSystemToggle.Toggled += FollowSystemChanged;
+        pane.DayThemePicker.SelectionChanged += AppearanceThemeChanged;
+        pane.NightThemePicker.SelectionChanged += AppearanceThemeChanged;
+        pane.ReadingWeightPicker.SelectionChanged += FontWeightChanged;
+        pane.TitleWeightPicker.SelectionChanged += FontWeightChanged;
+        pane.UiWeightPicker.SelectionChanged += FontWeightChanged;
+        pane.CodeWeightPicker.SelectionChanged += FontWeightChanged;
+        pane.TextSizeSlider.ValueChanged += TextLayoutChanged;
+        pane.LineSpacingSlider.ValueChanged += TextLayoutChanged;
+        pane.ColumnWidthSlider.ValueChanged += TextLayoutChanged;
+        pane.ScrollbarsPicker.SelectionChanged += ScrollbarsChanged;
+        pane.AgentTierPicker.SelectionChanged += AgentTierChanged;
+        pane.CopyMcpConfig.Click += CopyMcpConfigClicked;
+        pane.OpenDataFolder.Click += OpenDataFolderClicked;
+        pane.ChangeDataFolder.Click += ChangeDataFolderClicked;
+        pane.OpenSettingsFile.Click += OpenSettingsFileClicked;
+        pane.StorageRefresh.Click += StorageRefreshClicked;
+    }
+
     private void InitializeSettings()
     {
         readerSettings = new ReaderSettings(client);
+        WireSettingsPane();
         ReaderShell.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(SettingsKeyDown), true);
         Root.PreviewKeyDown += SettingsShortcutKeyDown;
         InitializeTextLayoutSettings();
         InitializeAppearance();
         InitializeWriters();
         InitializeStorage();
-        SettingsTabs.SelectionChanged += SettingsTabChanged;
-        SettingsTabs.SelectedItem = GeneralSettingsTab;
+        SettingsPane.SettingsTabs.SelectionChanged += SettingsTabChanged;
+        SettingsPane.SettingsTabs.SelectedItem = SettingsPane.GeneralSettingsTab;
 
-        weightPickers.Add(ReadingWeightPicker, ReaderFontRole.Reading);
-        weightPickers.Add(TitleWeightPicker, ReaderFontRole.Title);
-        weightPickers.Add(UiWeightPicker, ReaderFontRole.Ui);
-        weightPickers.Add(CodeWeightPicker, ReaderFontRole.Code);
+        weightPickers.Add(SettingsPane.ReadingWeightPicker, ReaderFontRole.Reading);
+        weightPickers.Add(SettingsPane.TitleWeightPicker, ReaderFontRole.Title);
+        weightPickers.Add(SettingsPane.UiWeightPicker, ReaderFontRole.Ui);
+        weightPickers.Add(SettingsPane.CodeWeightPicker, ReaderFontRole.Code);
         string[] choices = ["Much lighter", "Lighter", "Normal", "Bolder", "Much bolder"];
         foreach (var picker in weightPickers.Keys)
         {
             picker.ItemsSource = choices;
         }
-        ScrollbarsPicker.ItemsSource = new[] { "While scrolling", "Always", "Never" };
+        SettingsPane.ScrollbarsPicker.ItemsSource = new[] { "While scrolling", "Always", "Never" };
     }
 
     private void SettingsTabChanged(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
     {
-        var reading = sender.SelectedItem == ReadingSettingsTab;
-        var agents = sender.SelectedItem == AgentsSettingsTab;
-        var storageTab = sender.SelectedItem == StorageSettingsTab;
-        GeneralSettingsBody.Visibility = reading || agents || storageTab ? Visibility.Collapsed : Visibility.Visible;
-        ReadingSettingsBody.Visibility = reading ? Visibility.Visible : Visibility.Collapsed;
-        AgentsSettingsBody.Visibility = agents ? Visibility.Visible : Visibility.Collapsed;
-        StorageSettingsBody.Visibility = storageTab ? Visibility.Visible : Visibility.Collapsed;
-        _ = SettingsScroll.ChangeView(null, 0, null, disableAnimation: true);
+        var reading = sender.SelectedItem == SettingsPane.ReadingSettingsTab;
+        var agents = sender.SelectedItem == SettingsPane.AgentsSettingsTab;
+        var storageTab = sender.SelectedItem == SettingsPane.StorageSettingsTab;
+        SettingsPane.GeneralSettingsBody.Visibility = reading || agents || storageTab ? Visibility.Collapsed : Visibility.Visible;
+        SettingsPane.ReadingSettingsBody.Visibility = reading ? Visibility.Visible : Visibility.Collapsed;
+        SettingsPane.AgentsSettingsBody.Visibility = agents ? Visibility.Visible : Visibility.Collapsed;
+        SettingsPane.StorageSettingsBody.Visibility = storageTab ? Visibility.Visible : Visibility.Collapsed;
+        _ = SettingsPane.SettingsScroll.ChangeView(null, 0, null, disableAnimation: true);
         if (!reading)
         {
             FlushTextLayoutChanges();
@@ -106,17 +138,17 @@ public sealed partial class MainWindow
             TimelinePane.Visibility = TimelineDivider.Visibility = ArticlePane.Visibility = Visibility.Collapsed;
             SettingsPane.Visibility = Visibility.Visible;
             _ = ReadSettingsAsync();
-            if (SettingsTabs.SelectedItem == AgentsSettingsTab)
+            if (SettingsPane.SettingsTabs.SelectedItem == SettingsPane.AgentsSettingsTab)
             {
                 _ = LoadWritersAsync();
             }
-            else if (SettingsTabs.SelectedItem == StorageSettingsTab)
+            else if (SettingsPane.SettingsTabs.SelectedItem == SettingsPane.StorageSettingsTab)
             {
                 ShowStorage();
             }
         }
 
-        CloseSettingsButton.Focus(FocusState.Programmatic);
+        SettingsPane.CloseSettingsButton.Focus(FocusState.Programmatic);
     }
 
     /// After a reconnect, Settings that stayed open reads everything again: a data move or a
@@ -129,11 +161,11 @@ public sealed partial class MainWindow
         }
 
         _ = ReadSettingsAsync();
-        if (SettingsTabs.SelectedItem == AgentsSettingsTab)
+        if (SettingsPane.SettingsTabs.SelectedItem == SettingsPane.AgentsSettingsTab)
         {
             _ = LoadWritersAsync();
         }
-        else if (SettingsTabs.SelectedItem == StorageSettingsTab)
+        else if (SettingsPane.SettingsTabs.SelectedItem == SettingsPane.StorageSettingsTab)
         {
             ShowStorage();
         }
@@ -244,11 +276,11 @@ public sealed partial class MainWindow
 
     private void ApplySettingsControls(ReaderPreferences loaded)
     {
-        FullTextToggle.IsOn = loaded.FullText;
-        LoadImagesToggle.IsOn = loaded.LoadImages;
+        SettingsPane.FullTextToggle.IsOn = loaded.FullText;
+        SettingsPane.LoadImagesToggle.IsOn = loaded.LoadImages;
         ApplyAppearanceControls(loaded);
         ApplyTextLayoutControls(loaded.TextLayout);
-        ScrollbarsPicker.SelectedIndex = (int)loaded.Scrollbars;
+        SettingsPane.ScrollbarsPicker.SelectedIndex = (int)loaded.Scrollbars;
         ApplyAgentControls(loaded);
         ApplyStorageControls(loaded);
         foreach (var (picker, role) in weightPickers)
@@ -259,8 +291,8 @@ public sealed partial class MainWindow
 
     private void EnableSettingsControls(bool enabled)
     {
-        FullTextToggle.IsEnabled = LoadImagesToggle.IsEnabled = ScrollbarsPicker.IsEnabled = AgentTierPicker.IsEnabled = enabled;
-        FollowSystemToggle.IsEnabled = ThemePicker.IsEnabled = DayThemePicker.IsEnabled = NightThemePicker.IsEnabled = enabled;
+        SettingsPane.FullTextToggle.IsEnabled = SettingsPane.LoadImagesToggle.IsEnabled = SettingsPane.ScrollbarsPicker.IsEnabled = SettingsPane.AgentTierPicker.IsEnabled = enabled;
+        SettingsPane.FollowSystemToggle.IsEnabled = SettingsPane.ThemePicker.IsEnabled = SettingsPane.DayThemePicker.IsEnabled = SettingsPane.NightThemePicker.IsEnabled = enabled;
         foreach (var picker in weightPickers.Keys)
         {
             picker.IsEnabled = enabled;
@@ -287,11 +319,11 @@ public sealed partial class MainWindow
         }
 
         var enabled = toggle.IsOn;
-        if (toggle == FullTextToggle && saved.FullText != enabled)
+        if (toggle == SettingsPane.FullTextToggle && saved.FullText != enabled)
         {
             _ = ReadSettingsAsync(ct => readerSettings.SetFullTextAsync(enabled, ct), current => current.FullText == enabled);
         }
-        else if (toggle == LoadImagesToggle && saved.LoadImages != enabled)
+        else if (toggle == SettingsPane.LoadImagesToggle && saved.LoadImages != enabled)
         {
             _ = ReadSettingsAsync(ct => readerSettings.SetLoadImagesAsync(enabled, ct), current => current.LoadImages == enabled);
         }
@@ -336,7 +368,7 @@ public sealed partial class MainWindow
             ReaderScrollbarMode.Never => ScrollBarVisibility.Hidden,
             _ => ScrollBarVisibility.Auto,
         };
-        ArticleScroller.VerticalScrollBarVisibility = SettingsScroll.VerticalScrollBarVisibility = visibility;
+        ArticleScroller.VerticalScrollBarVisibility = SettingsPane.SettingsScroll.VerticalScrollBarVisibility = visibility;
         ScrollViewer.SetVerticalScrollBarVisibility(Destinations, visibility);
         ScrollViewer.SetVerticalScrollBarVisibility(Timeline, visibility);
         ScrollViewer.SetVerticalScrollBarVisibility(SearchResults, visibility);
@@ -425,9 +457,9 @@ public sealed partial class MainWindow
 
     private void ShowSettingsStatus(string? message, bool retry = false)
     {
-        SettingsStatus.Text = message ?? string.Empty;
-        SettingsFeedback.Visibility = message is null ? Visibility.Collapsed : Visibility.Visible;
-        ReloadSettingsButton.Visibility = retry ? Visibility.Visible : Visibility.Collapsed;
+        SettingsPane.SettingsStatus.Text = message ?? string.Empty;
+        SettingsPane.SettingsFeedback.Visibility = message is null ? Visibility.Collapsed : Visibility.Visible;
+        SettingsPane.ReloadSettingsButton.Visibility = retry ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void SettingsExportClicked(object sender, RoutedEventArgs args) => _ = ExportOpmlAsync();

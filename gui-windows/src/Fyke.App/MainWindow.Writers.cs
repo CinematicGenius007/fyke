@@ -34,9 +34,9 @@ public sealed partial class MainWindow
     private void InitializeWriters()
     {
         writers = new Writers(client);
-        WritersDetail.Text = WriterText.SectionDetail;
-        AgentsDetail.Text = WriterText.AgentsDetail;
-        AgentTierPicker.ItemsSource = AgentTierChoices;
+        SettingsPane.WritersDetail.Text = WriterText.SectionDetail;
+        SettingsPane.AgentsDetail.Text = WriterText.AgentsDetail;
+        SettingsPane.AgentTierPicker.ItemsSource = AgentTierChoices;
         RenderWriters();
     }
 
@@ -44,9 +44,9 @@ public sealed partial class MainWindow
     private void OpenAgentsSettings()
     {
         OpenSettings();
-        if (IsSettingsOpen && SettingsTabs.SelectedItem != AgentsSettingsTab)
+        if (IsSettingsOpen && SettingsPane.SettingsTabs.SelectedItem != SettingsPane.AgentsSettingsTab)
         {
-            SettingsTabs.SelectedItem = AgentsSettingsTab;
+            SettingsPane.SettingsTabs.SelectedItem = SettingsPane.AgentsSettingsTab;
         }
     }
 
@@ -90,20 +90,20 @@ public sealed partial class MainWindow
 
     private void RenderWriters()
     {
-        WriterRows.Children.Clear();
-        WritersEmpty.Text = writersUnavailable ? WriterText.NeedsNewerService : WriterText.Looking;
-        WritersEmpty.Visibility = writerList.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        SettingsPane.WriterRows.Children.Clear();
+        SettingsPane.WritersEmpty.Text = writersUnavailable ? WriterText.NeedsNewerService : WriterText.Looking;
+        SettingsPane.WritersEmpty.Visibility = writerList.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         foreach (var writer in writerList)
         {
-            if (WriterRows.Children.Count > 0)
+            if (SettingsPane.WriterRows.Children.Count > 0)
             {
-                WriterRows.Children.Add(new Border { Height = 1, Style = AppResources.FromApp<Style>("SettingsHairline") });
+                SettingsPane.WriterRows.Children.Add(new Border { Height = 1, Style = AppResources.FromApp<Style>("SettingsHairline") });
             }
 
-            WriterRows.Children.Add(WriterRow(writer));
+            SettingsPane.WriterRows.Children.Add(WriterRow(writer));
             if (writer is { IsClaude: true, Installed: true })
             {
-                WriterRows.Children.Add(ProfileRow(writer));
+                SettingsPane.WriterRows.Children.Add(ProfileRow(writer));
             }
         }
     }
@@ -321,14 +321,14 @@ public sealed partial class MainWindow
 
     private void ShowWritersProblem(string? problem)
     {
-        WritersProblem.Text = problem ?? string.Empty;
-        WritersProblem.Visibility = problem is null ? Visibility.Collapsed : Visibility.Visible;
+        SettingsPane.WritersProblem.Text = problem ?? string.Empty;
+        SettingsPane.WritersProblem.Visibility = problem is null ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void ApplyAgentControls(ReaderPreferences loaded)
     {
-        AgentTierPicker.SelectedIndex = (int)loaded.AgentTier;
-        McpConfigText.Text = AgentAccess.McpConfig(McpProgram(), loaded.AgentTier);
+        SettingsPane.AgentTierPicker.SelectedIndex = (int)loaded.AgentTier;
+        SettingsPane.McpConfigText.Text = AgentAccess.McpConfig(McpProgram(), loaded.AgentTier);
     }
 
     /// <summary>The fyke program the app runs, which an agent starts with <c>mcp</c>.</summary>
@@ -337,13 +337,13 @@ public sealed partial class MainWindow
 
     private void AgentTierChanged(object sender, SelectionChangedEventArgs args)
     {
-        if (!IsSettingsOpen || readingSettings || AgentTierPicker.SelectedIndex < 0
+        if (!IsSettingsOpen || readingSettings || SettingsPane.AgentTierPicker.SelectedIndex < 0
             || preferences is not { InvalidConfig: false } saved)
         {
             return;
         }
 
-        var tier = (AgentTier)AgentTierPicker.SelectedIndex;
+        var tier = (AgentTier)SettingsPane.AgentTierPicker.SelectedIndex;
         if (saved.AgentTier != tier)
         {
             _ = ReadSettingsAsync(ct => writers.SetAgentTierAsync(tier, ct), current => current.AgentTier == tier);
@@ -353,13 +353,13 @@ public sealed partial class MainWindow
     private void CopyMcpConfigClicked(object sender, RoutedEventArgs args)
     {
         var package = new DataPackage();
-        package.SetText(McpConfigText.Text);
+        package.SetText(SettingsPane.McpConfigText.Text);
         Clipboard.SetContent(package);
-        CopyMcpConfig.Content = "Copied";
+        SettingsPane.CopyMcpConfig.Content = "Copied";
         var timer = DispatcherQueue.CreateTimer();
         timer.Interval = TimeSpan.FromSeconds(2);
         timer.IsRepeating = false;
-        timer.Tick += (_, _) => CopyMcpConfig.Content = "Copy MCP config";
+        timer.Tick += (_, _) => SettingsPane.CopyMcpConfig.Content = "Copy MCP config";
         timer.Start();
     }
 }

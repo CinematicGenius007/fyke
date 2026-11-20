@@ -139,8 +139,8 @@ public sealed partial class MainWindow
         OpenSettings();
         if (IsSettingsOpen)
         {
-            SettingsTabs.SelectedItem = ReadingSettingsTab;
-            TextSizeSlider.Focus(FocusState.Programmatic);
+            SettingsPane.SettingsTabs.SelectedItem = SettingsPane.ReadingSettingsTab;
+            SettingsPane.TextSizeSlider.Focus(FocusState.Programmatic);
         }
     }
 

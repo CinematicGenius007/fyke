@@ -92,7 +92,7 @@ public sealed partial class MainWindow
         {
             if (pane == SidebarPane)
             {
-                CloseSettingsButton.Focus(FocusState.Keyboard);
+                SettingsPane.CloseSettingsButton.Focus(FocusState.Keyboard);
             }
             else
             {

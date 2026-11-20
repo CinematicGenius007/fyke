@@ -36,6 +36,8 @@ gui-windows/
 
 Only `Fyke.App` depends on Windows. Everything a test can reach without a window lives in the other two.
 
+In `Fyke.App`, `MainWindow.xaml` holds the window's frame, and `MainWindow.*.cs` partials hold the logic, one concern per file. Large views have their own XAML: `SettingsPane.xaml` is the Settings view only. Its controls are `internal`, and `MainWindow.WireSettingsPane` attaches their handlers, so the settings state and the daemon client stay in one place.
+
 ## Size
 
 The published app is self-contained and compiled ahead of time (Native AOT), so it needs no .NET or Windows App SDK install and starts without a JIT. It references only the Windows App SDK components it uses, WinUI and Foundation; the SDK's metapackage would add about 45 MB of machine learning, AI and Widgets runtimes. Nothing reads types by reflection: the daemon's JSON goes through a System.Text.Json source-generated context, and XAML binds with `x:Bind`. The libraries set `IsAotCompatible`, and the app fails the build on trimming and AOT warnings.
