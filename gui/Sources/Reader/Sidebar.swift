@@ -34,7 +34,7 @@ struct Sidebar: View {
     @State private var dropTarget = false
 
     /// Folders first, then feeds, at each level. A closed folder hides what it holds.
-    /// A feed sits one level below its folder, so its name lines up with the folder's.
+    /// A feed's name starts one step inside its folder's name, level with a sibling folder's.
     private func rows(parent: Int64? = nil, depth: Int = 0) -> [TreeRow] {
         var rows: [TreeRow] = []
         for folder in model.childFolders(of: parent) {

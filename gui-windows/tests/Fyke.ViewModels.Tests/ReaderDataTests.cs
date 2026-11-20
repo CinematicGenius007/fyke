@@ -46,6 +46,13 @@ public sealed class ReaderDataTests
                 (ReaderScope.Feed, "https://example.com", 0, 1L),
             ],
             destinations.Select(row => (row.Scope, row.Title, row.Depth, row.Count)));
+        // A child starts one step inside its parent; siblings line up (docs/design-rules.md).
+        int Depth(string title) => destinations.Single(row => row.Title == title).Depth;
+        Assert.Equal(SidebarIndent.TextStart(Depth("Engineering")), SidebarIndent.Leading(Depth("Systems")));
+        Assert.Equal(SidebarIndent.TextStart(Depth("Engineering")) + SidebarIndent.Step, SidebarIndent.TextStart(Depth("Systems")));
+        Assert.Equal(SidebarIndent.TextStart(Depth("Databases")), SidebarIndent.TextStart(Depth("Systems")));
+        Assert.Equal(SidebarIndent.TextStart(Depth("Databases")) + SidebarIndent.Step, SidebarIndent.TextStart(Depth("Café")));
+        Assert.Equal(SidebarIndent.TextStart(Depth("All")), SidebarIndent.TextStart(Depth("https://example.com")));
         var view = Assert.Single(destinations, row => row.Scope == ReaderScope.View);
         Assert.Equal("Articles about zig", view.RuleSummary);
 

@@ -14,10 +14,11 @@ public enum SidebarIndent {
 
     public static func leading(depth: Int) -> Double { edge + step * Double(max(depth, 0)) }
 
-    /// Folders draw a chevron in the icon column, feeds draw none. A feed is one level
-    /// below its folder, so its name lines up with the folder's name. A feed at the top
-    /// level sits at depth 1 for the same reason: its name lines up with All and Starred.
-    public static func feedDepth(folderDepth: Int?) -> Int { (folderDepth ?? 0) + 1 }
+    /// Folders draw a chevron in the icon column, feeds draw none, so a feed's name starts
+    /// where its depth's icon would. Inside a folder a feed is a child: its name starts one
+    /// step inside the folder's name, level with a sibling folder's name. A feed at the top
+    /// level sits at depth 1, so its name lines up with All, Starred and top-level folders.
+    public static func feedDepth(folderDepth: Int?) -> Int { folderDepth.map { $0 + 2 } ?? 1 }
 
     /// Where the text of a row starts.
     public static func textStart(depth: Int, hasIcon: Bool) -> Double {

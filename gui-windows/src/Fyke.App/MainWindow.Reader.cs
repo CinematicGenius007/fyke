@@ -542,7 +542,7 @@ public sealed partial class MainWindow
     {
         if (sender is Grid row && args.NewValue is ReaderDestination item)
         {
-            row.Padding = new Thickness(10 + 22 * item.Depth, 0, 8, 0);
+            row.Padding = new Thickness(SidebarIndent.Leading(item.Depth), 0, 8, 0);
             PrepareDestinationActions(row, item);
         }
     }

@@ -17,7 +17,7 @@ New features belong inside the reader, not beside it. People open Fyke to read, 
 |---|---|
 | Grid | 4 pt. Panes are 232 / 368 / flexible. The reading column is 640 wide. |
 | Sidebar row | 32 high, padding 10, icon 14, gap 8, radius 6 |
-| Indent | 10 + 22 × depth. 22 is the icon (14) plus the gap (8), so a child's text lines up with its parent's text. |
+| Indent | 10 + 22 × depth. 22 is the icon (14) plus the gap (8). A child's icon or chevron starts where its parent's text starts, so a child's text sits one step inside its parent's. |
 | Section label | 11 pt, weight 600, +0.06em tracking, capitals, muted color |
 | Chip | 24 to 28 high, radius 6. Selected chips are filled; chips have no border. |
 | Button | 32 high, radius 6. One primary button per view. |
@@ -29,7 +29,7 @@ Use the named tokens, never raw values. A value that is missing from the tokens 
 
 ### Indent is computed, never set per row
 
-The indent for a depth is one value, computed from the formula above, and every row at that depth uses it. Sibling feeds under one folder must line up. A tree where siblings sit at 64 and 48 reads as two levels when it is one.
+The indent for a depth is one value, computed from the formula above, and every row at that depth uses it. Sibling feeds and folders under one folder must line up, and their names start one step inside the folder's name. A child whose name sits level with its parent's reads as a sibling. A tree where siblings sit at 64 and 48 reads as two levels when it is one.
 
 ## Interaction rules
 

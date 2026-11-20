@@ -10,22 +10,23 @@ import Testing
         #expect(SidebarIndent.leading(depth: 3) == 76)
     }
 
-    @Test func childTextLinesUpWithParentText() {
+    @Test func aChildStartsOneStepInsideItsParent() {
         for depth in 0..<5 {
             let folderText = SidebarIndent.textStart(depth: depth, hasIcon: true)
             let feedText = SidebarIndent.textStart(depth: SidebarIndent.feedDepth(folderDepth: depth), hasIcon: false)
             let childFolderChevron = SidebarIndent.leading(depth: depth + 1)
-            #expect(feedText == folderText)
+            let childFolderText = SidebarIndent.textStart(depth: depth + 1, hasIcon: true)
+            #expect(feedText == folderText + SidebarIndent.step)
             #expect(childFolderChevron == folderText)
+            #expect(childFolderText == feedText)
         }
     }
 
     @Test func siblingsShareOneIndent() {
-        // A feed and a folder side by side in one folder: the feed's name and the
-        // folder's chevron start at the same x.
+        // A feed and a folder side by side in one folder: their names start at the same x.
         let parent = 1
         let feed = SidebarIndent.textStart(depth: SidebarIndent.feedDepth(folderDepth: parent), hasIcon: false)
-        let folder = SidebarIndent.leading(depth: parent + 1)
+        let folder = SidebarIndent.textStart(depth: parent + 1, hasIcon: true)
         #expect(feed == folder)
     }
 
