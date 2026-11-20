@@ -109,6 +109,12 @@ Today is the first sidebar row. Its list pane shows the briefs, newest first, wi
 
 When there is no brief to show, Today says why in place: writing (with Cancel), failed in the last day (with Try again), empty, or an older service that has no `briefs.*` methods (with Restart the service). A brief written after a job started or failed is newer news and shows instead. The sidebar row shows a spinner while a brief is written and a dot for a newest brief not yet seen. `job.changed`, `artifact.new` and `recipe.changed` events reload Today wherever the reader is. J and K move through the briefs. Recipe editing and writer choice are planned with W3c.
 
+## Ask and Catch up
+
+Ask your feeds (Ctrl+Shift+A, the palette, or "Ask your feeds: …" for what is typed in the palette) covers the article pane, as on macOS. It asks over the saved view being read, or every feed, with `ask.run`, and follows the job through the job list Today already reloads on each `job.changed`. When the job is done it reads the answer with `answers.get` and draws it with the brief renderer, so each claim cites its articles the same way. A follow-up names the question before it. A failed or cancelled job says why, with Ask again. Copy puts the answer and its numbered sources on the clipboard. Back, Escape, choosing a place, or opening an article closes Ask. While Ask is shown, single-key commands are off, so typing a question never marks or moves anything. The ask logic and its words are in `Fyke.ViewModels/Asking.cs` and tested without the GUI.
+
+Catch up (Ctrl+J, the sidebar button, the palette, or a folder's menu) shows the unread articles of the place being read, one card at a time, over the whole window. Today means All. Left skips (marks read), Down saves for Later, Right or Enter reads now, which closes Catch up and opens the article. Ctrl+Z undoes the last choice and puts back the article's earlier read and later state from `entries.mark_many`'s `previous`. Escape closes it, and the list reloads if anything was marked. The queue holds up to 500 unread articles. The session and its words are in `Fyke.ViewModels/CatchUp.cs`.
+
 ## Command palette and focus
 
 Ctrl+K or the command button in the sidebar opens the palette. It matches typed letters against destinations and available reader actions, with up to four article matches through `entries.search`. Feed and folder destinations remain searchable when hidden by a collapsed parent. Search and the palette share Up, Down, Enter, Escape, and focus restoration. F6 and Shift+F6 move forward and backward between the sidebar, timeline, and article reader.
@@ -224,7 +230,7 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W3a | Saved-view creation, preview, timeline, edit, reorder, and removal | Model tests for rule round-trip, revision, scope and removal. Windows smoke covers Search through creation, preview, edit and removal. Visual review and view undo are open |
 | W3b | Planned routine editor, schedules over saved views, and run actions | Run a routine over one feed or all feeds. Verify combined actions and their results, including failed or partial runs |
 | W3c | Today, briefs and citations done; recipe editing and writer choice planned | Run a brief from a view, edit and preview its recipe, reopen the result, and follow citations in Windows |
-| W3d | Planned Ask, catch-up and Activity | Verify question and catch-up inputs, cited results, live job state, and failure or cancellation |
+| W3d | Ask and Catch up done; Activity planned | Verify question and catch-up inputs, cited results, live job state, and failure or cancellation |
 | W4 | Restart supervision, notifications and activation | Close the window, crash and restart the daemon, sign out/in, deny notification access, reopen the right result |
 | W5 | Versioned GUI/core bundle, runtime dependencies, signing, installer, upgrades, uninstall and release notes | Clean Windows 11 x64 standard-user install, upgrade from a prior build, rollback and uninstall with data retention, verified published checksums |
 

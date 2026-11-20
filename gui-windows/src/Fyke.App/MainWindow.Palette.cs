@@ -93,6 +93,12 @@ public sealed partial class MainWindow
         var maximum = query.Length == 0 ? 8 : 5;
         var commands = MatchPaletteItems(PaletteDestinations(), query, maximum)
             .Concat(MatchPaletteItems(PaletteActions(), query, maximum)).ToArray();
+        if (query.Length >= 2)
+        {
+            commands = [.. commands, new PaletteResult("ask.query", $"Ask your feeds: “{query}”", "Answers only from your feeds",
+                null, () => StartAsk(query))];
+        }
+
         ShowPaletteItems(commands, query.Length >= 2 ? "Searching articles…" : "No matching commands.");
         if (query.Length < 2)
         {
@@ -164,6 +170,12 @@ public sealed partial class MainWindow
     {
         yield return new("search", "Search articles", null, "Ctrl+F", OpenSearch);
         yield return new("add-feed", "Add feed", null, "Ctrl+N", () => OpenAddFeed());
+        yield return new("ask", "Ask your feeds", null, "Ctrl+Shift+A", () => StartAsk());
+        if (destination is { } place)
+        {
+            yield return new("catch-up", $"Catch up on {CatchUpText.Title(place)}", null, "Ctrl+J", () => OpenCatchUp(place));
+        }
+
         yield return new("settings", "Settings", null, "Ctrl+,", OpenSettings);
         yield return new("new-folder", "New folder", null, null, () => OpenCatalogEdit(CatalogEditKind.CreateFolder));
         yield return new("new-view", "New saved view", null, null, () => _ = OpenViewEditorAsync());

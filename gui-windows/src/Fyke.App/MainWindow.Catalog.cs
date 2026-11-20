@@ -49,6 +49,7 @@ public sealed partial class MainWindow
         var refresh = Add("Refresh", target => _ = RefreshSubscriptionsAsync(target.Scope == ReaderScope.Feed ? target : null));
         var import = Add("Import OPML…", target => _ = ImportOpmlAsync());
         var export = Add("Export OPML…", target => _ = ExportOpmlAsync());
+        var catchUp = Add("Catch up", target => OpenCatchUp(target));
         var mark = Add("Mark all read", target => StartBulkMark(target));
         var remove = Add("Remove…", target => OpenCatalogEdit(CatalogEditKind.Remove, target));
         var newView = Add("New saved view…", target => _ = OpenViewEditorAsync());
@@ -70,6 +71,7 @@ public sealed partial class MainWindow
             refresh.IsEnabled = !refreshingSubscriptions;
             import.Visibility = export.Visibility = scope == ReaderScope.All ? Visibility.Visible : Visibility.Collapsed;
             import.IsEnabled = export.IsEnabled = !transferringOpml;
+            catchUp.Visibility = scope == ReaderScope.Folder ? Visibility.Visible : Visibility.Collapsed;
             mark.IsEnabled = CanChangeBulkMarks;
             remove.Visibility = editable ? Visibility.Visible : Visibility.Collapsed;
             remove.Text = scope == ReaderScope.Folder ? "Delete folder…" : "Remove feed…";

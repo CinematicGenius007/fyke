@@ -12,8 +12,11 @@ public sealed partial class MainWindow
 {
     private Control? focusBeforeOverlay;
 
-    private bool IsReaderOverlayOpen => IsSearchOpen || IsPaletteOpen || IsAddFeedOpen || IsCatalogEditOpen || viewDialogOpen;
-    private bool IsReaderCovered => IsReaderOverlayOpen || IsSettingsOpen;
+    private bool IsReaderOverlayOpen => IsSearchOpen || IsPaletteOpen || IsAddFeedOpen || IsCatalogEditOpen || viewDialogOpen
+        || IsCatchUpOpen;
+
+    // Ask covers the article, so single-key commands neither act on it unseen nor fire while a question is typed.
+    private bool IsReaderCovered => IsReaderOverlayOpen || IsSettingsOpen || IsAskShown;
 
     private void ShowReaderOverlay(Grid overlay, Control initialFocus)
     {

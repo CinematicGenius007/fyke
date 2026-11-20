@@ -131,6 +131,23 @@ try {
         if ($heading -and $heading.Current.Name -eq 'Starred' -and (!$title -or $title.Current.IsOffscreen)) { $true }
     } | Out-Null
 
+    # Catch up over an empty Starred says there is nothing unread, and Done closes it.
+    $catchUpButton = $root.FindFirst([Windows.Automation.TreeScope]::Descendants,
+        [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::AutomationIdProperty, 'CatchUpButton'))
+    if (!$catchUpButton) { throw 'The Catch up button was not found' }
+    $catchUpButton.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'the empty Catch up state' {
+        $title = Find-ByName $root 'Nothing unread here'
+        if ($title -and !$title.Current.IsOffscreen) { $true }
+    } | Out-Null
+    $catchUpDone = $root.FindFirst([Windows.Automation.TreeScope]::Descendants,
+        [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::AutomationIdProperty, 'CatchUpDone'))
+    $catchUpDone.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+    Wait-For 'Catch up to close' {
+        $title = Find-ByName $root 'Nothing unread here'
+        if (!$title -or $title.Current.IsOffscreen) { $true }
+    } | Out-Null
+
     $opml = Join-Path $testHome 'fixture.opml'
     $urlAttribute = [Security.SecurityElement]::Escape($FeedUrl)
     [IO.File]::WriteAllText($opml, @"

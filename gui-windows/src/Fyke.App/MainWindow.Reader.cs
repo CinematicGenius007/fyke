@@ -68,6 +68,7 @@ public sealed partial class MainWindow
         InitializeBulkMarks();
         InitializeKeys();
         InitializeToday(reading, ui);
+        asking = new Asking(client);
         ShowArticle(null);
         UpdateMarkControls();
     }
@@ -93,6 +94,8 @@ public sealed partial class MainWindow
         else
         {
             StopToday();
+            CloseCatchUp(restoreFocus: false);
+            CloseAsk(restoreFocus: false);
             CloseSearch(restoreFocus: false);
             ClosePalette(restoreFocus: false);
             CloseAddFeed(restoreFocus: false);
@@ -227,6 +230,7 @@ public sealed partial class MainWindow
     private void NavigateToDestination(ReaderDestination selected, bool refreshCatalog = false)
     {
         CloseSettings(restoreFocus: false);
+        CloseAsk(restoreFocus: false);
         if (destination is { } current && current.Scope == selected.Scope && current.Id == selected.Id)
         {
             return;
@@ -436,6 +440,11 @@ public sealed partial class MainWindow
 
     private async Task OpenArticleAsync(TimelineArticle? article)
     {
+        if (article is not null)
+        {
+            CloseAsk(restoreFocus: false);
+        }
+
         articleRequest?.Cancel();
         openArticle = article;
         articleAuthor = null;

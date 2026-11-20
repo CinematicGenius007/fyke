@@ -25,6 +25,7 @@ namespace Fyke.ViewModels;
 [JsonSerializable(typeof(ReaderData.ArticleBody))]
 [JsonSerializable(typeof(ReaderData.FetchFullReply))]
 [JsonSerializable(typeof(ReaderData.BulkMarkReply))]
+[JsonSerializable(typeof(ReaderData.CatchUpMarkReply))]
 [JsonSerializable(typeof(ReaderData.CatalogItems<ReaderData.Entry>))]
 [JsonSerializable(typeof(ReaderData.CatalogItems<ReaderData.Feed>))]
 [JsonSerializable(typeof(ReaderData.CatalogItems<ReaderData.Folder>))]
@@ -35,6 +36,7 @@ namespace Fyke.ViewModels;
 [JsonSerializable(typeof(ViewPreview))]
 [JsonSerializable(typeof(ViewRemoval))]
 [JsonSerializable(typeof(ViewRule))]
+[JsonSerializable(typeof(WriterJob))]
 internal sealed partial class WireJson : JsonSerializerContext;
 
 internal static class Wire

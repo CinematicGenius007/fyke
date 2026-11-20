@@ -44,28 +44,60 @@ internal sealed class BriefRenderer(FontFamily reading, FontFamily ui, ReaderFon
     {
         ClosePopover();
         column.Children.Clear();
-        var citations = brief.Cited.ToDictionary(citation => citation.Number);
+        column.Children.Add(Tag("AI BRIEF", header));
+        column.Children.Add(Title(brief.DisplayTitle, 40, "BriefTitle"));
+        AppendBody(column, brief, now, open);
+        column.Children.Add(MadeWith(brief, recipeName));
+    }
 
-        var tag = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 0, 0, 16) };
-        tag.Children.Add(new Border
+    /// <summary>Writing, failed, empty or unavailable, said where the brief would be.</summary>
+    public void ShowState(Panel column, InlineStateView state)
+    {
+        ClosePopover();
+        column.Children.Clear();
+        column.Children.Add(State(state));
+    }
+
+    /// <summary>A generated tag and the line beside it: "AI BRIEF  Engineering · November 20".</summary>
+    public StackPanel Tag(string tag, string detail)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 0, 0, 16) };
+        row.Children.Add(new Border
         {
             Style = Shared("BriefTag"),
-            Child = Label("AI BRIEF", 11, "BriefSoft", nameof(ReaderFontWeights.SectionLabel), spacing: 45),
+            Child = Label(tag, 11, "BriefSoft", nameof(ReaderFontWeights.SectionLabel), spacing: 45),
         });
-        var place = Label(header, 13, "BriefMuted");
+        var place = Label(detail, 13, "BriefMuted");
         place.VerticalAlignment = VerticalAlignment.Center;
         place.TextTrimming = TextTrimming.CharacterEllipsis;
-        tag.Children.Add(place);
-        column.Children.Add(tag);
+        row.Children.Add(place);
+        return row;
+    }
 
-        var title = Reading(brief.DisplayTitle, 40, "BriefInk", nameof(ReaderFontWeights.Title));
+    /// <summary>A page title in the reading face, selectable and announced as the page's heading.</summary>
+    public TextBlock Title(string text, double size, string automationId)
+    {
+        var title = Reading(text, size, "BriefInk", nameof(ReaderFontWeights.Title));
         title.CharacterSpacing = -15;
         title.Margin = new Thickness(0, 0, 0, 24);
         title.IsTextSelectionEnabled = true;
         AutomationProperties.SetHeadingLevel(title, AutomationHeadingLevel.Level1);
-        AutomationProperties.SetAutomationId(title, "BriefTitle");
-        column.Children.Add(title);
+        AutomationProperties.SetAutomationId(title, automationId);
+        return title;
+    }
 
+    /// <summary>A line of interface text in one of the brief styles, such as BriefMuted.</summary>
+    public TextBlock Note(string text, double size, string style)
+    {
+        var note = Label(text, size, style);
+        note.TextWrapping = TextWrapping.Wrap;
+        return note;
+    }
+
+    /// <summary>The claims with their citation numbers, then the sources.</summary>
+    public void AppendBody(Panel column, Brief brief, DateTimeOffset now, Action<BriefCitation> open)
+    {
+        var citations = brief.Cited.ToDictionary(citation => citation.Number);
         foreach (var section in brief.Parts)
         {
             if (!string.IsNullOrWhiteSpace(section.Heading))
@@ -80,14 +112,11 @@ internal sealed class BriefRenderer(FontFamily reading, FontFamily ui, ReaderFon
         }
 
         column.Children.Add(Sources(brief, open));
-        column.Children.Add(MadeWith(brief, recipeName));
     }
 
-    /// <summary>Writing, failed, empty or unavailable, said where the brief would be.</summary>
-    public void ShowState(Panel column, InlineStateView state)
+    /// <summary>A state said in place of content, with what can be done about it.</summary>
+    public StackPanel State(InlineStateView state)
     {
-        ClosePopover();
-        column.Children.Clear();
         var panel = new StackPanel { MaxWidth = 520, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 24, 0, 0) };
         AutomationProperties.SetAutomationId(panel, "TodayState");
 
@@ -133,7 +162,7 @@ internal sealed class BriefRenderer(FontFamily reading, FontFamily ui, ReaderFon
             panel.Children.Add(actions);
         }
 
-        column.Children.Add(panel);
+        return panel;
     }
 
     public void ClosePopover() => popover?.Hide();

@@ -55,6 +55,7 @@ public sealed class ReaderData(IDaemonClient client)
 {
     public const int PageSize = 100;
     public const int SearchLimit = 100;
+    public const int CatchUpLimit = 500;
     public SavedViews Views { get; } = new(client);
 
     public async Task<IReadOnlyList<ReaderDestination>> DestinationsAsync(CancellationToken ct)
@@ -171,6 +172,35 @@ public sealed class ReaderData(IDaemonClient client)
         return previous.Where(entry => !entry.Read).Select(entry => entry.Id).ToArray();
     }
 
+    /// <summary>The unread articles Catch up goes through, newest first, at most 500 as on macOS.</summary>
+    public async Task<IReadOnlyList<CatchUpCard>> CatchUpQueueAsync(ReaderDestination destination, CancellationToken ct)
+    {
+        var page = await EntryPageAsync(destination, null, unreadOnly: true, CatchUpLimit, ct).ConfigureAwait(false);
+        return [.. page.Items.Where(entry => !entry.Read).DistinctBy(entry => entry.Id).Select(entry => new CatchUpCard(entry.Id,
+            string.IsNullOrWhiteSpace(entry.Title) ? "Untitled" : entry.Title, entry.FeedTitle, entry.SortAt,
+            string.IsNullOrWhiteSpace(entry.Snippet) ? entry.Summary : entry.Snippet))];
+    }
+
+    /// <summary>Skip and Read now mark an article read; Later saves it. Returns its state before.</summary>
+    public async Task<CatchUpMarks> CatchUpMarkAsync(long id, CatchUpDecision decision, CancellationToken ct)
+    {
+        var change = new JsonObject { ["ids"] = Wire.Ids([id]) };
+        change[decision == CatchUpDecision.Later ? "later" : "read"] = true;
+        var reply = await ReadAsync("entries.mark_many", change, WireJson.Default.CatchUpMarkReply, ct).ConfigureAwait(false);
+        return reply.Previous is [{ } previous] && previous.Id == id
+            ? new CatchUpMarks(previous.Read, previous.Later)
+            : throw new DaemonProtocolException("The daemon did not return the article's earlier marks.");
+    }
+
+    /// <summary>Puts an article's read and later state back as it was; with none known, unread and not saved.</summary>
+    public Task RestoreCatchUpAsync(long id, CatchUpMarks? previous, CancellationToken ct) =>
+        client.CallAsync("entries.mark_many", new JsonObject
+        {
+            ["ids"] = Wire.Ids([id]),
+            ["read"] = previous?.Read ?? false,
+            ["later"] = previous?.Later ?? false,
+        }, ct);
+
     public async Task<IReadOnlyList<SearchHit>> SearchAsync(string query, bool unreadOnly, CancellationToken ct,
         int limit = SearchLimit)
     {
@@ -262,5 +292,7 @@ public sealed class ReaderData(IDaemonClient client)
     internal sealed record MarkState(bool Read, bool Starred);
     internal sealed record BulkMarkReply(PreviousRead[]? Previous);
     internal sealed record PreviousRead(long Id, bool Read);
+    internal sealed record CatchUpMarkReply(PreviousMarks[]? Previous);
+    internal sealed record PreviousMarks(long Id, bool Read, bool Later);
     internal sealed record EntryPage(Entry[] Items, string? NextCursor);
 }

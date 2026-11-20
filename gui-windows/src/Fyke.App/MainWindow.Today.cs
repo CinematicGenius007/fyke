@@ -128,6 +128,7 @@ public sealed partial class MainWindow
                 today = await briefs.LoadAsync(request.Token);
                 request.Token.ThrowIfCancellationRequested();
                 UpdateTodayBadge();
+                _ = FollowAskAsync(today.Jobs);
             }
 
             if (IsTodayShown)

@@ -199,6 +199,24 @@
                 <Setter Property="Height" Value="32" />
                 <Setter Property="CornerRadius" Value="6" />
             </Style>
+            <Style x:Key="CatchUpSheet" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource GroundBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource HairlineBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource RadiusSheet}" />
+            </Style>
+            <Style x:Key="CatchUpAction" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+                <Setter Property="Height" Value="56" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="CornerRadius" Value="{StaticResource RadiusControl}" />
+                <Setter Property="FontFamily" Value="{StaticResource FontUi}" />
+            </Style>
+            <Style x:Key="CatchUpPrimaryAction" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+                <Setter Property="Height" Value="56" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="CornerRadius" Value="{StaticResource RadiusControl}" />
+                <Setter Property="FontFamily" Value="{StaticResource FontUi}" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

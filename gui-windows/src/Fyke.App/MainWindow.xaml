@@ -37,6 +37,8 @@
                 <KeyboardAccelerator Key="S" Invoked="ArticleMarkShortcut" />
                 <KeyboardAccelerator Key="R" Invoked="RefreshSubscriptionsShortcut" />
                 <KeyboardAccelerator Key="R" Modifiers="Control" Invoked="WriteBriefShortcut" />
+                <KeyboardAccelerator Key="J" Modifiers="Control" Invoked="CatchUpShortcut" />
+                <KeyboardAccelerator Key="A" Modifiers="Control,Shift" Invoked="AskShortcut" />
                 <KeyboardAccelerator Key="K" Modifiers="Control,Shift" Invoked="MarkAllReadShortcut" />
                 <KeyboardAccelerator Key="Z" Modifiers="Control" Invoked="UndoBulkShortcut" />
                 <KeyboardAccelerator Key="J" Invoked="NavigationShortcut" />
@@ -71,6 +73,12 @@
                                FontWeight="{x:Bind local:ReaderFontWeights.Shared.SectionLabel, Mode=OneWay}"
                                Foreground="{ThemeResource MutedBrush}" />
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                        <Button x:Name="CatchUpButton" Width="32" Height="32" Padding="0"
+                                Click="CatchUpClicked" CornerRadius="{StaticResource RadiusControl}"
+                                AutomationProperties.AutomationId="CatchUpButton" AutomationProperties.Name="Catch up"
+                                AutomationProperties.AcceleratorKey="Ctrl+J" ToolTipService.ToolTip="Catch up (Ctrl+J)">
+                            <FontIcon Glyph="&#xE8F1;" FontSize="14" />
+                        </Button>
                         <Button x:Name="AddFeedButton" Width="32" Height="32" Padding="0"
                                 Click="AddFeedClicked" CornerRadius="{StaticResource RadiusControl}"
                                 AutomationProperties.AutomationId="AddFeedButton" AutomationProperties.Name="Add feed"
@@ -386,6 +394,53 @@
                             <FontIcon Glyph="&#xE72C;" FontSize="14" />
                         </Button>
                     </StackPanel>
+                </Grid>
+                <!-- Ask your feeds: a question answered only from your articles, each claim cited. Built in MainWindow.Ask.cs. -->
+                <Grid x:Name="AskPane" Grid.RowSpan="2" Visibility="Collapsed" Background="{ThemeResource GroundBrush}" KeyDown="AskPaneKeyDown"
+                      AutomationProperties.Name="Ask your feeds" AutomationProperties.AutomationId="AskPane">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="48" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <Grid Margin="16,8,16,0" ColumnSpacing="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="AskBack" Click="AskBackClicked" Style="{StaticResource BriefQuietAction}"
+                                AutomationProperties.AutomationId="AskBack">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE76B;" FontSize="12" />
+                                <TextBlock x:Name="AskBackText" Text="Back" />
+                            </StackPanel>
+                        </Button>
+                        <Button Grid.Column="1" x:Name="AskCopy" Visibility="Collapsed" Click="AskCopyClicked"
+                                Style="{StaticResource BriefQuietAction}" Content="Copy"
+                                AutomationProperties.Name="Copy the answer" AutomationProperties.AutomationId="AskCopy" />
+                    </Grid>
+                    <ScrollViewer Grid.Row="1" x:Name="AskScroller" IsTabStop="True" UseSystemFocusVisuals="True"
+                                  AutomationProperties.Name="Answer" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="AskColumn" Margin="40,48,40,96" MaxWidth="640" HorizontalAlignment="Stretch">
+                            <Grid x:Name="AskField" ColumnSpacing="8" Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="AskQuery" FontSize="15" MinHeight="40" VerticalContentAlignment="Center"
+                                         KeyDown="AskQueryKeyDown" TextChanged="AskQueryChanged" MaxLength="4000"
+                                         AutomationProperties.AutomationId="AskQuery" AutomationProperties.Name="Question"
+                                         FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}" />
+                                <TextBlock Grid.Column="1" Text="Answers only from your feeds" FontSize="12" VerticalAlignment="Center"
+                                           Foreground="{ThemeResource MutedBrush}" FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}" />
+                                <Button Grid.Column="2" x:Name="AskSubmit" Width="40" Height="40" Padding="0" IsEnabled="False"
+                                        Click="AskSubmitClicked" Style="{StaticResource AccentButtonStyle}" CornerRadius="{StaticResource RadiusControl}"
+                                        AutomationProperties.Name="Ask" AutomationProperties.AutomationId="AskSubmit" ToolTipService.ToolTip="Ask (Enter)">
+                                    <FontIcon Glyph="&#xE74A;" FontSize="14" />
+                                </Button>
+                            </Grid>
+                        </StackPanel>
+                    </ScrollViewer>
                 </Grid>
             </Grid>
             <Grid Grid.Column="2" Grid.ColumnSpan="3" x:Name="SettingsPane" Visibility="Collapsed"
@@ -982,6 +1037,98 @@
                     </StackPanel>
                 </StackPanel>
             </Border>
+        </Grid>
+        <!-- Catch up: unread articles one at a time. Skip (Left) marks read, Later (Down) saves for later,
+             Read now (Right or Enter) opens it. Built in MainWindow.CatchUp.cs. -->
+        <Grid Grid.RowSpan="2" x:Name="CatchUpOverlay" Visibility="Collapsed" Background="{ThemeResource SurfaceBrush}"
+              KeyDown="CatchUpKeyDown" TabFocusNavigation="Cycle" AutomationProperties.AutomationId="CatchUp">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid Margin="16,40,16,0">
+                <StackPanel HorizontalAlignment="Center" Spacing="8">
+                    <TextBlock x:Name="CatchUpHeading" FontSize="13" HorizontalAlignment="Center" FontFamily="{StaticResource FontUi}"
+                               FontWeight="{x:Bind local:ReaderFontWeights.Shared.SectionLabel, Mode=OneWay}"
+                               AutomationProperties.HeadingLevel="Level1" />
+                    <ProgressBar x:Name="CatchUpProgress" Width="200" Maximum="1" AutomationProperties.Name="Catch up progress" />
+                </StackPanel>
+                <Button x:Name="CatchUpDone" HorizontalAlignment="Right" VerticalAlignment="Top" Click="CatchUpDoneClicked"
+                        Style="{StaticResource BriefSecondaryAction}" AutomationProperties.AutomationId="CatchUpDone"
+                        AutomationProperties.Name="Done" AutomationProperties.AcceleratorKey="Escape">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Done" />
+                        <TextBlock Text="Esc" Foreground="{ThemeResource MutedBrush}" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+            <StackPanel Grid.Row="1" MaxWidth="680" Margin="16,24" VerticalAlignment="Center" HorizontalAlignment="Stretch">
+                <ProgressRing x:Name="CatchUpLoading" Width="18" Height="18" IsActive="False" Visibility="Collapsed" />
+                <StackPanel x:Name="CatchUpState" Visibility="Collapsed" HorizontalAlignment="Center" />
+                <Grid x:Name="CatchUpStack" Height="420" Visibility="Collapsed">
+                    <!-- The edges of the next articles, so the stack reads as a stack. -->
+                    <Border x:Name="CatchUpEdgeFar" Style="{StaticResource CatchUpSheet}" Height="40" Margin="32,380,32,0" VerticalAlignment="Top" />
+                    <Border x:Name="CatchUpEdgeNear" Style="{StaticResource CatchUpSheet}" Height="40" Margin="16,368,16,0" VerticalAlignment="Top" />
+                    <ContentControl x:Name="CatchUpCard" Height="396" VerticalAlignment="Top" IsTabStop="True" UseSystemFocusVisuals="False"
+                                    HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                                    AutomationProperties.AutomationId="CatchUpCard">
+                        <Border Style="{StaticResource CatchUpSheet}" Padding="48">
+                            <StackPanel>
+                                <TextBlock x:Name="CatchUpDetail" FontSize="12" Margin="0,0,0,16" TextTrimming="CharacterEllipsis"
+                                           Foreground="{ThemeResource MutedBrush}" FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}" />
+                                <TextBlock x:Name="CatchUpTitle" FontSize="32" Margin="0,0,0,20" TextWrapping="Wrap" MaxLines="3"
+                                           TextTrimming="WordEllipsis" CharacterSpacing="-12" FontFamily="{StaticResource FontReading}"
+                                           FontWeight="{x:Bind local:ReaderFontWeights.Shared.Title, Mode=OneWay}"
+                                           Foreground="{ThemeResource InkBrush}" />
+                                <TextBlock x:Name="CatchUpPreview" FontSize="17" LineHeight="28" LineStackingStrategy="BlockLineHeight"
+                                           TextWrapping="Wrap" MaxLines="5" TextTrimming="WordEllipsis" FontFamily="{StaticResource FontReading}"
+                                           FontWeight="{x:Bind local:ReaderFontWeights.Shared.Reading, Mode=OneWay}"
+                                           Foreground="{ThemeResource InkSoftBrush}" />
+                            </StackPanel>
+                        </Border>
+                    </ContentControl>
+                </Grid>
+                <Grid x:Name="CatchUpActions" ColumnSpacing="12" Margin="0,28,0,0" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="CatchUpSkip" Click="CatchUpSkipClicked" Style="{StaticResource CatchUpAction}"
+                            AutomationProperties.Name="Skip" AutomationProperties.HelpText="Marks it read. Shortcut Left" AutomationProperties.AutomationId="CatchUpSkip">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE711;" FontSize="13" />
+                            <TextBlock Text="Skip" FontSize="16" />
+                            <TextBlock Text="&#x2190;" FontSize="13" Foreground="{ThemeResource MutedBrush}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Column="1" x:Name="CatchUpLater" Click="CatchUpLaterClicked" Style="{StaticResource CatchUpAction}"
+                            AutomationProperties.Name="Later" AutomationProperties.HelpText="Saves it for later. Shortcut Down" AutomationProperties.AutomationId="CatchUpLater">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE823;" FontSize="13" />
+                            <TextBlock Text="Later" FontSize="16" />
+                            <TextBlock Text="&#x2193;" FontSize="13" Foreground="{ThemeResource MutedBrush}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Grid.Column="2" x:Name="CatchUpRead" Click="CatchUpReadClicked" Style="{StaticResource CatchUpPrimaryAction}"
+                            AutomationProperties.Name="Read now" AutomationProperties.HelpText="Opens it. Shortcut Right" AutomationProperties.AutomationId="CatchUpRead">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE73E;" FontSize="13" />
+                            <TextBlock Text="Read now" FontSize="16" />
+                            <TextBlock Text="&#x2192;" FontSize="13" Opacity="0.7" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </StackPanel>
+            <StackPanel Grid.Row="2" x:Name="CatchUpFooter" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="12"
+                        Height="32" Margin="16,0,16,32" Visibility="Collapsed">
+                <TextBlock x:Name="CatchUpCounts" FontSize="13" VerticalAlignment="Center" Foreground="{ThemeResource MutedBrush}"
+                           AutomationProperties.LiveSetting="Polite" FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}" />
+                <Button x:Name="CatchUpUndo" Click="CatchUpUndoClicked" Style="{StaticResource BriefQuietAction}"
+                        AutomationProperties.Name="Undo last" AutomationProperties.AcceleratorKey="Ctrl+Z"
+                        AutomationProperties.AutomationId="CatchUpUndo" Content="Undo last  Ctrl+Z" />
+            </StackPanel>
         </Grid>
     </Grid>
 </Window>
