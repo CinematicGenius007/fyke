@@ -64,8 +64,27 @@ public sealed class SavedViews(IDaemonClient client)
     public Task MoveAsync(long id, int position, CancellationToken ct) =>
         client.CallAsync("views.move", new JsonObject { ["id"] = id, ["position"] = position }, ct);
 
-    public Task<ViewRemoval> RemoveAsync(long id, bool detach, CancellationToken ct) =>
-        ReadAsync("views.remove", new JsonObject { ["id"] = id, ["detach"] = detach }, WireJson.Default.ViewRemoval, ct);
+    /// <summary>
+    /// Removes the view. While routines look in it and <paramref name="detach"/> is false, the daemon refuses with
+    /// <c>in_use</c> and the routine ids in the error data; that comes back as a removal that is not ok.
+    /// </summary>
+    public async Task<ViewRemoval> RemoveAsync(long id, bool detach, CancellationToken ct)
+    {
+        try
+        {
+            return await ReadAsync("views.remove", new JsonObject { ["id"] = id, ["detach"] = detach }, WireJson.Default.ViewRemoval, ct)
+                .ConfigureAwait(false);
+        }
+        catch (DaemonRpcException refusal) when (refusal.Is("in_use"))
+        {
+            return new ViewRemoval(false, "in_use", RoutineIds(refusal.ErrorData));
+        }
+    }
+
+    private static long[] RoutineIds(JsonElement? data) =>
+        data is { ValueKind: JsonValueKind.Object } value && value.TryGetProperty("routine_ids", out var ids) && ids.ValueKind == JsonValueKind.Array
+            ? ids.EnumerateArray().Where(id => id.ValueKind == JsonValueKind.Number).Select(id => id.GetInt64()).ToArray()
+            : [];
 
     private async Task<T> ReadAsync<T>(string method, JsonObject? parameters, JsonTypeInfo<T> type, CancellationToken ct) =>
         Wire.Read(await client.CallAsync(method, parameters, ct).ConfigureAwait(false), type, method);

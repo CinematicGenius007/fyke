@@ -116,7 +116,9 @@ public sealed class SavedViewsTests
                 Assert.Equal(7, request.GetProperty("id").GetInt64());
                 Assert.False(request.GetProperty("detach").GetBoolean());
                 long[] routines = [8, 9];
-                return JsonSerializer.SerializeToElement(new { kind = "in_use", routine_ids = routines });
+                // The daemon refuses with a JSON-RPC error; its data names the routines.
+                throw new DaemonRpcException("view is used by routines", -32000, "in_use",
+                    JsonSerializer.SerializeToElement(new { kind = "in_use", routine_ids = routines }));
             },
         };
 
