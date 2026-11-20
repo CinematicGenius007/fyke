@@ -70,7 +70,7 @@ public sealed class SavedViewsTests
         };
         var destinations = await new ReaderData(client).DestinationsAsync(CancellationToken.None);
 
-        Assert.Equal(new[] { ReaderScope.All, ReaderScope.Starred }, destinations.Select(row => row.Scope));
+        Assert.Equal(new[] { ReaderScope.Today, ReaderScope.All, ReaderScope.Starred }, destinations.Select(row => row.Scope));
     }
 
     [Fact]

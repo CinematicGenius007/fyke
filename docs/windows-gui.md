@@ -103,6 +103,12 @@ Saved views appear below Starred in daemon order and also appear in the palette.
 
 Use a view's sidebar menu to reorder or delete it. Deletion asks for confirmation and, if the daemon reports linked routines, asks separately before disabling and detaching them. Undo for view creation, editing, and deletion is planned.
 
+## Today and briefs
+
+Today is the first sidebar row. Its list pane shows the briefs, newest first, with a writing row while a writer runs. The reader shows the chosen brief: its claims with numbered citations, the sources, and the writer and recipe that made it. Hovering a citation shows its article in a popover; clicking pins the popover, and **Open article** opens it in the reader with a **Brief** button to return. Opening Today never runs a writer. The toolbar button and Ctrl+R in Today write a brief of the chosen brief's view, or of unread articles, with the chosen brief's recipe.
+
+When there is no brief to show, Today says why in place: writing (with Cancel), failed in the last day (with Try again), empty, or an older service that has no `briefs.*` methods (with Restart the service). A brief written after a job started or failed is newer news and shows instead. The sidebar row shows a spinner while a brief is written and a dot for a newest brief not yet seen. `job.changed`, `artifact.new` and `recipe.changed` events reload Today wherever the reader is. J and K move through the briefs. Recipe editing and writer choice are planned with W3c.
+
 ## Command palette and focus
 
 Ctrl+K or the command button in the sidebar opens the palette. It matches typed letters against destinations and available reader actions, with up to four article matches through `entries.search`. Feed and folder destinations remain searchable when hidden by a collapsed parent. Search and the palette share Up, Down, Enter, Escape, and focus restoration. F6 and Shift+F6 move forward and backward between the sidebar, timeline, and article reader.
@@ -217,7 +223,7 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W2e.5 | Planned General background updating and link destination controls | Runtime and login behavior with W4, plus safe native link routing and browser fallback |
 | W3a | Saved-view creation, preview, timeline, edit, reorder, and removal | Model tests for rule round-trip, revision, scope and removal. Windows smoke covers Search through creation, preview, edit and removal. Visual review and view undo are open |
 | W3b | Planned routine editor, schedules over saved views, and run actions | Run a routine over one feed or all feeds. Verify combined actions and their results, including failed or partial runs |
-| W3c | Planned Codex briefs, recipe editing, Today and citations | Run a brief from a view, edit and preview its recipe, reopen the result, and follow citations in Windows |
+| W3c | Today, briefs and citations done; recipe editing and writer choice planned | Run a brief from a view, edit and preview its recipe, reopen the result, and follow citations in Windows |
 | W3d | Planned Ask, catch-up and Activity | Verify question and catch-up inputs, cited results, live job state, and failure or cancellation |
 | W4 | Restart supervision, notifications and activation | Close the window, crash and restart the daemon, sign out/in, deny notification access, reopen the right result |
 | W5 | Versioned GUI/core bundle, runtime dependencies, signing, installer, upgrades, uninstall and release notes | Clean Windows 11 x64 standard-user install, upgrade from a prior build, rollback and uninstall with data retention, verified published checksums |

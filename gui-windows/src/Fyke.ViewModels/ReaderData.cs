@@ -13,23 +13,32 @@ public enum ReaderScope
     Folder,
     Feed,
     View,
+    Today,
 }
 
 public sealed record ReaderDestination(ReaderScope Scope, long Id, string Title, int Depth, long Count,
-    long? ParentId = null, long Entries = 0, long Starred = 0, string? RuleSummary = null)
+    long? ParentId = null, long Entries = 0, long Starred = 0, string? RuleSummary = null, TodayBadge Badge = TodayBadge.None)
 {
     public string Glyph => Scope switch
     {
         ReaderScope.All => "\uE8B7",
         ReaderScope.Starred => "\uE734",
         ReaderScope.View => "\uE71C",
+        ReaderScope.Today => "\uE787",
         ReaderScope.Folder => string.Empty,
         _ => "\uE8A1",
     };
 
-    public string CountText => Count > 0 ? Count.ToString(CultureInfo.CurrentCulture) : string.Empty;
+    public string CountText => Badge switch
+    {
+        TodayBadge.Writing => "Writing…",
+        TodayBadge.NewBrief => "\u25CF",
+        _ => Count > 0 ? Count.ToString(CultureInfo.CurrentCulture) : string.Empty,
+    };
 
-    public string AccessibleName => Count > 0
+    public string AccessibleName => Badge != TodayBadge.None
+        ? $"{Title}, {(Badge == TodayBadge.Writing ? "writing a brief" : "new brief")}"
+        : Count > 0
         ? string.Format(CultureInfo.CurrentCulture, "{0}, {1} {2}", Title, Count, Scope == ReaderScope.Starred ? "starred" : "unread")
         : Title;
 }
@@ -57,6 +66,7 @@ public sealed class ReaderData(IDaemonClient client)
         var feedsByFolder = feeds.ToLookup(feed => feed.FolderId);
         var rows = new List<ReaderDestination>
         {
+            new(ReaderScope.Today, 0, "Today", 0, 0),
             new(ReaderScope.All, 0, "All", 0, feeds.Sum(feed => feed.Unread)),
             new(ReaderScope.Starred, 0, "Starred", 0, feeds.Sum(feed => feed.Starred)),
         };

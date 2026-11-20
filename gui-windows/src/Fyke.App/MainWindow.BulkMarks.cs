@@ -30,7 +30,7 @@ public sealed partial class MainWindow
 
     private void UpdateBulkButton()
     {
-        var available = destination is { Scope: not ReaderScope.Starred };
+        var available = destination is { Scope: not (ReaderScope.Starred or ReaderScope.Today) };
         BulkReadButton.Visibility = available ? Visibility.Visible : Visibility.Collapsed;
         BulkReadButton.IsEnabled = available && CanChangeBulkMarks;
     }
@@ -47,7 +47,7 @@ public sealed partial class MainWindow
 
     private bool StartBulkMark(ReaderDestination? scope)
     {
-        if (!CanChangeBulkMarks || scope is null || scope.Scope == ReaderScope.Starred)
+        if (!CanChangeBulkMarks || scope is null || scope.Scope is ReaderScope.Starred or ReaderScope.Today)
         {
             return false;
         }

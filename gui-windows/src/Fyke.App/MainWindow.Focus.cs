@@ -103,7 +103,18 @@ public sealed partial class MainWindow
 
     private void FocusTimeline()
     {
-        if (Timeline.Items.Count == 0)
+        if (IsTodayShown)
+        {
+            if (BriefRows.Items.Count > 0)
+            {
+                FocusList(BriefRows);
+            }
+            else
+            {
+                WriteBriefButton.Focus(FocusState.Keyboard);
+            }
+        }
+        else if (Timeline.Items.Count == 0)
         {
             SearchButton.Focus(FocusState.Keyboard);
         }

@@ -78,6 +78,127 @@
                 <Setter Property="HorizontalAlignment" Value="Left" />
                 <Setter Property="Background" Value="{ThemeResource HairlineBrush}" />
             </Style>
+            <!-- Today and a brief, as the macOS reader draws them (gui/Sources/Reader/Today.swift, Brief.swift). -->
+            <Style x:Key="BriefInk" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource InkBrush}" />
+            </Style>
+            <Style x:Key="BriefParagraph" TargetType="RichTextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource InkBrush}" />
+            </Style>
+            <Style x:Key="BriefSoft" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource InkSoftBrush}" />
+            </Style>
+            <Style x:Key="BriefMuted" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource MutedBrush}" />
+            </Style>
+            <Style x:Key="BriefUnread" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource UnreadBrush}" />
+            </Style>
+            <Style x:Key="BriefRead" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource ReadBrush}" />
+            </Style>
+            <Style x:Key="BriefTag" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource SelectedBrush}" />
+                <Setter Property="CornerRadius" Value="4" />
+                <Setter Property="Height" Value="20" />
+                <Setter Property="Padding" Value="8,0" />
+            </Style>
+            <Style x:Key="BriefSpinner" TargetType="ProgressRing">
+                <Setter Property="Width" Value="12" />
+                <Setter Property="Height" Value="12" />
+                <Setter Property="Foreground" Value="{ThemeResource UnreadBrush}" />
+            </Style>
+            <Style x:Key="BriefDot" TargetType="Ellipse">
+                <Setter Property="Width" Value="8" />
+                <Setter Property="Height" Value="8" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Fill" Value="{ThemeResource UnreadBrush}" />
+            </Style>
+            <Style x:Key="BriefSoftIcon" TargetType="FontIcon">
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="Foreground" Value="{ThemeResource InkSoftBrush}" />
+            </Style>
+            <Style x:Key="BriefQuoteBar" TargetType="Border">
+                <Setter Property="Width" Value="2" />
+                <Setter Property="Background" Value="{ThemeResource UnreadBrush}" />
+            </Style>
+            <Style x:Key="BriefPopover" TargetType="FlyoutPresenter">
+                <Setter Property="Background" Value="{ThemeResource SurfaceBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource HairlineBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="10" />
+                <Setter Property="Padding" Value="16" />
+                <Setter Property="MaxWidth" Value="372" />
+            </Style>
+            <!-- Text-only buttons: a citation number, a source row, a quiet action. -->
+            <Style x:Key="BriefPlainButton" TargetType="Button">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Foreground" Value="{ThemeResource InkBrush}" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="CornerRadius" Value="4" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="UseSystemFocusVisuals" Value="True" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Grid x:Name="Chrome" Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}">
+                                <ContentPresenter x:Name="Content" Padding="{TemplateBinding Padding}"
+                                                  Content="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}"
+                                                  HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalContentAlignment="Center" />
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal" />
+                                        <VisualState x:Name="PointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="Chrome.Background" Value="{ThemeResource SelectedBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <VisualState.Setters>
+                                                <Setter Target="Chrome.Background" Value="{ThemeResource SelectedStrongBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Disabled">
+                                            <VisualState.Setters>
+                                                <Setter Target="Content.Opacity" Value="0.6" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <Style x:Key="BriefCitation" TargetType="Button" BasedOn="{StaticResource BriefPlainButton}">
+                <Setter Property="Foreground" Value="{ThemeResource UnreadBrush}" />
+                <Setter Property="Padding" Value="2,0" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+            <Style x:Key="BriefActiveCitation" TargetType="Button" BasedOn="{StaticResource BriefCitation}">
+                <Setter Property="Background" Value="{ThemeResource SelectedBrush}" />
+            </Style>
+            <Style x:Key="BriefSourceRow" TargetType="Button" BasedOn="{StaticResource BriefPlainButton}">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="Height" Value="36" />
+            </Style>
+            <Style x:Key="BriefQuietAction" TargetType="Button" BasedOn="{StaticResource BriefPlainButton}">
+                <Setter Property="Foreground" Value="{ThemeResource UnreadBrush}" />
+                <Setter Property="Padding" Value="10,0" />
+                <Setter Property="Height" Value="28" />
+                <Setter Property="CornerRadius" Value="6" />
+            </Style>
+            <Style x:Key="BriefPrimaryAction" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+                <Setter Property="Height" Value="32" />
+                <Setter Property="CornerRadius" Value="6" />
+            </Style>
+            <Style x:Key="BriefSecondaryAction" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+                <Setter Property="Height" Value="32" />
+                <Setter Property="CornerRadius" Value="6" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

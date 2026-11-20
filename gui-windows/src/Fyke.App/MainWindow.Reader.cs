@@ -67,6 +67,7 @@ public sealed partial class MainWindow
         InitializeCatalogEditing();
         InitializeBulkMarks();
         InitializeKeys();
+        InitializeToday(reading, ui);
         ShowArticle(null);
         UpdateMarkControls();
     }
@@ -87,9 +88,11 @@ public sealed partial class MainWindow
         {
             TrySaveFolderDisclosure();
             _ = LoadReaderAsync(refreshCatalog: true);
+            _ = LoadTodayAsync();
         }
         else
         {
+            StopToday();
             CloseSearch(restoreFocus: false);
             ClosePalette(restoreFocus: false);
             CloseAddFeed(restoreFocus: false);
@@ -108,6 +111,7 @@ public sealed partial class MainWindow
 
     private void QueueReaderChange(DaemonEvent change)
     {
+        QueueTodayChange(change);
         // Gap events also cover replay after pruned or reset daemon history.
         if ((change.IsGap || change.Type.StartsWith("entry.", StringComparison.Ordinal)
             || change.Type.StartsWith("feed.", StringComparison.Ordinal)
@@ -276,7 +280,8 @@ public sealed partial class MainWindow
                 request.Token.ThrowIfCancellationRequested();
                 var previous = destination;
                 var current = rows.FirstOrDefault(row => previous is not null
-                    && row.Scope == previous.Scope && row.Id == previous.Id) ?? rows[0];
+                    && row.Scope == previous.Scope && row.Id == previous.Id)
+                    ?? rows.First(row => row.Scope == ReaderScope.All);
 
                 catalog = rows;
                 UpdateFolderCatalog(rows);
@@ -287,6 +292,7 @@ public sealed partial class MainWindow
                 destination = current;
                 UpdateBulkButton();
                 ApplyVisibleDestinations();
+                UpdateTodayBadge();
             }
 
             if (destination is null)
@@ -298,6 +304,14 @@ public sealed partial class MainWindow
             ViewSummary.Text = destination.RuleSummary ?? string.Empty;
             ViewSummary.Visibility = ViewSummary.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
             EditViewButton.Visibility = destination.Scope == ReaderScope.View ? Visibility.Visible : Visibility.Collapsed;
+            ShowTodayMode();
+            if (IsTodayShown)
+            {
+                // Today lists briefs, not articles; its own request loads them.
+                await LoadTodayAsync();
+                return;
+            }
+
             var page = await reader.TimelineAsync(destination, cursor, request.Token, limit, unreadOnly);
             request.Token.ThrowIfCancellationRequested();
             if (append)
@@ -490,6 +504,7 @@ public sealed partial class MainWindow
     {
         ArticleHeading.Text = article?.Title ?? "Select an article";
         UpdateArticleSource(article?.FeedTitle);
+        UpdateTodayPanes();
     }
 
     private void UpdateArticleSource(string? feedTitle) =>

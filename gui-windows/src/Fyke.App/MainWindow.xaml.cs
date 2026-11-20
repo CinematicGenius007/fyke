@@ -81,6 +81,7 @@ public sealed partial class MainWindow : Window
     private async void OnClosed(object sender, WindowEventArgs args)
     {
         readerReloadTimer.Stop();
+        todayReloadTimer.Stop();
         bulkNoticeTimer.Stop();
         textSaveTimer.Stop();
         systemAppearance.ColorValuesChanged -= SystemColorsChanged;

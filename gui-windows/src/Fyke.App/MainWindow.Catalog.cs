@@ -30,7 +30,7 @@ public sealed partial class MainWindow
 
     private void PrepareDestinationActions(Grid row, ReaderDestination item)
     {
-        if (item.Scope == ReaderScope.Starred)
+        if (item.Scope is ReaderScope.Starred or ReaderScope.Today)
         {
             row.ContextFlyout = null;
             return;

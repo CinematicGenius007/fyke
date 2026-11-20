@@ -186,7 +186,7 @@ public sealed partial class MainWindow
 
         if (!lifetime.IsCancellationRequested && destination is { Scope: ReaderScope.View } active && active.Id == view.Id)
         {
-            NavigateToDestination(catalog[0], refreshCatalog: true);
+            NavigateToDestination(catalog.First(row => row.Scope == ReaderScope.All), refreshCatalog: true);
         }
         else
         {

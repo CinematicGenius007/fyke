@@ -12,6 +12,10 @@ namespace Fyke.ViewModels;
 /// </summary>
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower)]
 [JsonSerializable(typeof(ArticleBlock[]))]
+[JsonSerializable(typeof(Brief))]
+[JsonSerializable(typeof(Briefs.BriefList))]
+[JsonSerializable(typeof(Briefs.JobList))]
+[JsonSerializable(typeof(Briefs.RecipeList))]
 [JsonSerializable(typeof(CatalogEdits.OpmlDocument))]
 [JsonSerializable(typeof(CatalogEdits.OpmlImportCounts))]
 [JsonSerializable(typeof(CatalogEdits.RefreshQueue))]

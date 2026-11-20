@@ -34,6 +34,7 @@ public sealed class ReaderDataTests
 
         Assert.Equal(
             [
+                (ReaderScope.Today, "Today", 0, 0L),
                 (ReaderScope.All, "All", 0, 6L),
                 (ReaderScope.Starred, "Starred", 0, 4L),
                 (ReaderScope.View, "Zig", 0, 2L),

@@ -36,6 +36,7 @@
                 <KeyboardAccelerator Key="M" Invoked="ArticleMarkShortcut" />
                 <KeyboardAccelerator Key="S" Invoked="ArticleMarkShortcut" />
                 <KeyboardAccelerator Key="R" Invoked="RefreshSubscriptionsShortcut" />
+                <KeyboardAccelerator Key="R" Modifiers="Control" Invoked="WriteBriefShortcut" />
                 <KeyboardAccelerator Key="K" Modifiers="Control,Shift" Invoked="MarkAllReadShortcut" />
                 <KeyboardAccelerator Key="Z" Modifiers="Control" Invoked="UndoBulkShortcut" />
                 <KeyboardAccelerator Key="J" Invoked="NavigationShortcut" />
@@ -163,6 +164,9 @@
                                    FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource MutedBrush}" />
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Top">
+                        <TextBlock x:Name="TodayDate" Visibility="Collapsed" FontSize="13" VerticalAlignment="Center" Margin="0,0,4,0"
+                                   FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
+                                   Foreground="{ThemeResource MutedBrush}" AutomationProperties.AutomationId="TodayDate" />
                         <Button x:Name="EditViewButton" Width="32" Height="32" Padding="0" Visibility="Collapsed"
                                 Click="EditViewClicked" CornerRadius="{StaticResource RadiusControl}"
                                 AutomationProperties.AutomationId="EditViewButton" AutomationProperties.Name="Edit view"
@@ -209,6 +213,52 @@
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
+                <!-- Today: the briefs, newest first, under the brief being written. -->
+                <ListView Grid.Row="2" x:Name="BriefRows" Margin="8,0" Visibility="Collapsed" SelectionChanged="BriefRowChanged"
+                          AutomationProperties.Name="Briefs" AutomationProperties.AutomationId="BriefList">
+                    <ListView.Header>
+                        <StackPanel Padding="12,4,12,8" Spacing="8">
+                            <TextBlock Text="BRIEFS" FontSize="11" CharacterSpacing="60"
+                                       FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.SectionLabel, Mode=OneWay}"
+                                       Foreground="{ThemeResource MutedBrush}" AutomationProperties.HeadingLevel="Level2" />
+                            <Grid x:Name="WritingRow" Visibility="Collapsed" ColumnSpacing="8" Padding="0,4" AutomationProperties.LiveSetting="Polite">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <ProgressRing Width="12" Height="12" IsActive="True" VerticalAlignment="Center"
+                                              Foreground="{ThemeResource UnreadBrush}" AutomationProperties.Name="Working" />
+                                <StackPanel Grid.Column="1" Spacing="4">
+                                    <TextBlock Text="Writing a brief…" FontSize="14" FontFamily="{StaticResource FontUi}"
+                                               FontWeight="{x:Bind local:ReaderFontWeights.Shared.SectionLabel, Mode=OneWay}"
+                                               Foreground="{ThemeResource InkBrush}" />
+                                    <TextBlock x:Name="WritingDetail" FontSize="12" FontFamily="{StaticResource FontUi}"
+                                               TextTrimming="CharacterEllipsis" Foreground="{ThemeResource MutedBrush}" />
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock x:Name="BriefListEmpty" Visibility="Collapsed" FontSize="13" TextWrapping="Wrap"
+                                       Text="Briefs you write appear here, newest first." FontFamily="{StaticResource FontUi}"
+                                       Foreground="{ThemeResource MutedBrush}" />
+                        </StackPanel>
+                    </ListView.Header>
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="CornerRadius" Value="{StaticResource RadiusControl}" />
+                            <Setter Property="Margin" Value="0,2" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="vm:BriefListItem">
+                            <StackPanel Padding="4,12" Spacing="4" AutomationProperties.Name="{x:Bind AccessibleName}">
+                                <TextBlock Text="{x:Bind Detail}" FontSize="12" TextTrimming="CharacterEllipsis"
+                                           FontFamily="{StaticResource FontUi}" Foreground="{ThemeResource MutedBrush}" />
+                                <TextBlock Text="{x:Bind Title}" FontSize="18" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+                                           FontFamily="{StaticResource FontReading}" FontWeight="Medium"
+                                           DataContextChanged="BriefTitleChanged" />
+                                <TextBlock Text="{x:Bind From}" FontSize="13" FontFamily="{StaticResource FontUi}"
+                                           Foreground="{ThemeResource InkSoftBrush}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
                 <StackPanel Grid.Row="1" Margin="20,8" Spacing="8" x:Name="TimelineState">
                     <TextBlock x:Name="TimelineMessage" TextWrapping="Wrap" Foreground="{ThemeResource InkSoftBrush}"
                                FontFamily="{StaticResource FontUi}" FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
@@ -241,11 +291,22 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock x:Name="MarkStatus" FontSize="13" Visibility="Collapsed" TextWrapping="Wrap"
-                               VerticalAlignment="Center" FontFamily="{StaticResource FontUi}"
-                               FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
-                               Foreground="{ThemeResource InkSoftBrush}" AutomationProperties.LiveSetting="Polite" />
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <!-- An article opened from a brief's sources goes back to the brief. -->
+                        <Button x:Name="BackToBrief" Visibility="Collapsed" Click="BackToBriefClicked" Style="{StaticResource BriefQuietAction}"
+                                AutomationProperties.Name="Back to Brief" AutomationProperties.AutomationId="BackToBrief"
+                                FontFamily="{StaticResource FontUi}" FontSize="13">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <FontIcon Glyph="&#xE76B;" FontSize="11" />
+                                <TextBlock Text="Brief" />
+                            </StackPanel>
+                        </Button>
+                        <TextBlock x:Name="MarkStatus" FontSize="13" Visibility="Collapsed" TextWrapping="Wrap"
+                                   VerticalAlignment="Center" FontFamily="{StaticResource FontUi}"
+                                   FontWeight="{x:Bind local:ReaderFontWeights.Shared.Ui, Mode=OneWay}"
+                                   Foreground="{ThemeResource InkSoftBrush}" AutomationProperties.LiveSetting="Polite" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" x:Name="MarkButtons" Orientation="Horizontal" Spacing="4">
                         <Button x:Name="StarArticle" Width="32" Height="32" Padding="0" Click="StarArticleClicked"
                                 CornerRadius="{StaticResource RadiusControl}" AutomationProperties.AutomationId="StarArticle"
                                 AutomationProperties.AcceleratorKey="S">
@@ -310,6 +371,22 @@
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
+                <!-- Today's reader: the chosen brief, or what is happening in its place. Built in MainWindow.Today.cs. -->
+                <Grid x:Name="TodayPane" Grid.RowSpan="2" Visibility="Collapsed" Background="{ThemeResource GroundBrush}">
+                    <ScrollViewer x:Name="TodayScroller" IsTabStop="True" UseSystemFocusVisuals="True"
+                                  AutomationProperties.Name="Brief" AutomationProperties.AutomationId="TodayReader"
+                                  HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="TodayColumn" Margin="40,72,40,96" MaxWidth="640" HorizontalAlignment="Stretch" />
+                    </ScrollViewer>
+                    <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,16,0">
+                        <Button x:Name="WriteBriefButton" Width="32" Height="32" Padding="0" Click="WriteBriefClicked"
+                                CornerRadius="{StaticResource RadiusControl}" AutomationProperties.AutomationId="WriteBriefButton"
+                                AutomationProperties.Name="Write a new brief" AutomationProperties.AcceleratorKey="Ctrl+R"
+                                ToolTipService.ToolTip="Write a new brief (Ctrl+R)">
+                            <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                        </Button>
+                    </StackPanel>
+                </Grid>
             </Grid>
             <Grid Grid.Column="2" Grid.ColumnSpan="3" x:Name="SettingsPane" Visibility="Collapsed"
                   Background="{ThemeResource GroundBrush}" AutomationProperties.Name="Settings">

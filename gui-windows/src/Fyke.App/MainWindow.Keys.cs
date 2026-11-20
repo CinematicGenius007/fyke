@@ -72,6 +72,11 @@ public sealed partial class MainWindow
     /// <summary>Selects the next or previous article, which opens it, as J and K do on macOS.</summary>
     private bool MoveSelection(int offset)
     {
+        if (IsTodayShown)
+        {
+            return MoveBriefSelection(offset);
+        }
+
         if (articles.Count == 0)
         {
             return false;

@@ -117,6 +117,21 @@ try {
         if ($heading -and $heading.Current.Name -eq 'Starred') { $true }
     } | Out-Null
 
+    # Today lists briefs in place of articles. A new profile has none, so it says so and runs no writer.
+    $todayStateId = [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::AutomationIdProperty, 'TodayState')
+    Select-ReaderItem $items 'Today'
+    Wait-For 'the empty Today state' {
+        $state = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $todayStateId)
+        if ($state -and !$state.Current.IsOffscreen -and (Find-ByName $state 'No brief yet')) { $true }
+    } | Out-Null
+    Select-ReaderItem $items 'Starred'
+    Wait-For 'the Starred timeline after Today' {
+        $heading = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $headingId)
+        $state = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $todayStateId)
+        if ($heading -and $heading.Current.Name -eq 'Starred' -and (!$state -or $state.Current.IsOffscreen)) { $true }
+    } | Out-Null
+
     $opml = Join-Path $testHome 'fixture.opml'
     $urlAttribute = [Security.SecurityElement]::Escape($FeedUrl)
     [IO.File]::WriteAllText($opml, @"

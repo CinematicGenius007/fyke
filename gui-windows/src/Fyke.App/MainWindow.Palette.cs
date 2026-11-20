@@ -142,6 +142,7 @@ public sealed partial class MainWindow
                 ReaderScope.Folder => "Folder",
                 ReaderScope.Feed => "Feed",
                 ReaderScope.View => "Saved view",
+                ReaderScope.Today => "Briefs",
                 _ => "Library",
             };
             yield return new PaletteResult($"destination.{item.Scope}.{item.Id}", item.Title, detail, null,
@@ -188,7 +189,7 @@ public sealed partial class MainWindow
             yield return new("remove-destination", $"{removal} {editable.Title}", null, null,
                 () => OpenCatalogEdit(CatalogEditKind.Remove, editable));
         }
-        if (CanChangeBulkMarks && destination is { Scope: not ReaderScope.Starred } selected)
+        if (CanChangeBulkMarks && destination is { Scope: not (ReaderScope.Starred or ReaderScope.Today) } selected)
         {
             yield return new("mark-all", $"Mark all read in {selected.Title}", null,
                 "Ctrl+Shift+K", () => StartBulkMark(selected));

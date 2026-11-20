@@ -1,3 +1,4 @@
+using System;
 using System.ComponentModel;
 using Fyke.ViewModels;
 using Microsoft.UI.Xaml;
@@ -19,6 +20,10 @@ public sealed partial class ReaderTextStyle : INotifyPropertyChanged
     public double CompactSize => Layout.Size * 0.85;
     public double LineHeight => Layout.Size * Layout.LineSpacing;
 
+    /// <summary>A brief's paragraphs follow the reading size up to 21, as on macOS.</summary>
+    public double BriefSize => Math.Min(Layout.Size, 21);
+    public double BriefLineHeight => Math.Round(BriefSize * Layout.LineSpacing);
+
     internal void Apply(ReaderTextLayout layout)
     {
         if (layout == Layout)
@@ -39,6 +44,13 @@ public sealed partial class ReaderTextStyle : INotifyPropertyChanged
         {
             Source = this, Path = new PropertyPath(compact ? nameof(CompactSize) : nameof(Size)),
         });
+
+    internal void BindBrief(RichTextBlock text)
+    {
+        text.LineStackingStrategy = LineStackingStrategy.BlockLineHeight;
+        text.SetBinding(RichTextBlock.FontSizeProperty, new Binding { Source = this, Path = new PropertyPath(nameof(BriefSize)) });
+        text.SetBinding(RichTextBlock.LineHeightProperty, new Binding { Source = this, Path = new PropertyPath(nameof(BriefLineHeight)) });
+    }
 
     /// <summary>Gives every line the same height, so inline code cannot push a line down and a list
     /// marker with the same height sits on the first line's baseline.</summary>

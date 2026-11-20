@@ -99,7 +99,8 @@ public sealed partial class MainWindow
 
     private void UpdateMarkControls()
     {
-        ArticleActions.Visibility = articleReady ? Visibility.Visible : Visibility.Collapsed;
+        ArticleActions.Visibility = articleReady || openedFromBrief ? Visibility.Visible : Visibility.Collapsed;
+        MarkButtons.Visibility = articleReady ? Visibility.Visible : Visibility.Collapsed;
         if (!articleReady || openArticle is not { } article)
         {
             return;
