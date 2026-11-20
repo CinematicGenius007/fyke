@@ -81,12 +81,12 @@ public sealed class WritersTests
     [Fact]
     public void McpConfigNamesTheTier()
     {
-        var read = JsonDocument.Parse(AgentAccess.McpConfig(@"C:\Fyke\fyke.exe", AgentTier.Read)).RootElement
+        var read = JsonElement.Parse(AgentAccess.McpConfig(@"C:\Fyke\fyke.exe", AgentTier.Read))
             .GetProperty("mcpServers").GetProperty("fyke");
         Assert.Equal(@"C:\Fyke\fyke.exe", read.GetProperty("command").GetString());
         Assert.Equal(["mcp"], read.GetProperty("args").EnumerateArray().Select(arg => arg.GetString()));
 
-        var manage = JsonDocument.Parse(AgentAccess.McpConfig("fyke", AgentTier.Manage)).RootElement
+        var manage = JsonElement.Parse(AgentAccess.McpConfig("fyke", AgentTier.Manage))
             .GetProperty("mcpServers").GetProperty("fyke").GetProperty("args");
         Assert.Equal(["mcp", "--tier", "manage"], manage.EnumerateArray().Select(arg => arg.GetString()));
 
