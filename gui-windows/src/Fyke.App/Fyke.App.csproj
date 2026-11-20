@@ -12,6 +12,9 @@
     <!-- Debug symbols stay in the build folder; a published copy is what people download. -->
     <DebugType Condition="'$(_IsPublishing)' == 'true'">none</DebugType>
     <Platforms>x64</Platforms>
+    <!-- Made by tools/gen_windows_icon.py from the Mac icon. The executable carries it, so the
+         taskbar, Start menu, notifications and the installer show it. -->
+    <ApplicationIcon>Assets\Fyke.ico</ApplicationIcon>
     <!-- CsWinRT's source generator, which ships with the Windows SDK projection, generates the WinRT
          interfaces of what crosses into XAML, which AOT cannot build by reflection. Level 2 warns,
          so fails the build, for any type it would miss. Its generated code needs unsafe blocks. -->
@@ -30,6 +33,7 @@
     <ProjectReference Include="..\Fyke.Client\Fyke.Client.csproj" />
     <ProjectReference Include="..\Fyke.ViewModels\Fyke.ViewModels.csproj" />
     <Content Include="Fonts\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Fyke.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <!-- An AOT publish of an unpackaged app leaves out the compiled XAML and the resource index, so
        loading MainWindow fails with "XAML parsing failed" (microsoft/WindowsAppSDK#6394, fixed in

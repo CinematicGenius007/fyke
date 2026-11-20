@@ -19,6 +19,7 @@ namespace Fyke.App;
 internal static class RoutineNotifier
 {
     public const string Argument = "--notify";
+    public const string RemoveArgument = "--unregister-notifications";
 
     private static readonly Lazy<bool> Supported = new(() =>
     {
@@ -98,6 +99,25 @@ internal static class RoutineNotifier
         catch (Exception e) when (e is COMException or InvalidOperationException)
         {
             Trace.TraceWarning($"A routine notification was not shown: {e.Message}");
+        }
+    }
+
+    /// <summary>
+    /// The uninstaller's launch: removes Fyke from the notification settings and the
+    /// registration that lets a click start it.
+    /// </summary>
+    public static void RemoveRegistration()
+    {
+        try
+        {
+            if (Supported.Value)
+            {
+                AppNotificationManager.Default.UnregisterAll();
+            }
+        }
+        catch (Exception e) when (e is COMException or InvalidOperationException)
+        {
+            Trace.TraceWarning($"Notifications were not removed: {e.Message}");
         }
     }
 

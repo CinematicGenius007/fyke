@@ -109,6 +109,29 @@ jobs:
       - name: e2e_tui
         if: ${{ !cancelled() }}
         run: python tools/e2e_tui.py zig-out/bin/fyke.exe
+      # Two installers of the same build, one numbered older, so the test can upgrade one
+      # with the other. It runs last: it installs Fyke for the runner's user.
+      - name: Build the installer
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        env:
+          BUDGET_INSTALLER_MB: 28
+        run: |
+          python tools/windows_installer.py --app "$env:RUNNER_TEMP/fyke-desktop" --daemon zig-out/bin/fyke.exe --out "$env:RUNNER_TEMP/installer-older" --version 0.0.1 --install-inno
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/windows_installer.py --app "$env:RUNNER_TEMP/fyke-desktop" --daemon zig-out/bin/fyke.exe --out "$env:RUNNER_TEMP/installer"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $setup = Get-ChildItem "$env:RUNNER_TEMP/installer/Fyke-*-setup-x64.exe" | Select-Object -First 1
+          $size = $setup.Length / 1MB
+          "| Installer | {0:N1} MB | {1} MB |" -f $size, $env:BUDGET_INSTALLER_MB | Tee-Object -Append $env:GITHUB_STEP_SUMMARY
+          if ($size -gt [double]$env:BUDGET_INSTALLER_MB) { throw "The installer is over its size budget." }
+      - name: e2e_installer
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          $older = Get-ChildItem "$env:RUNNER_TEMP/installer-older/Fyke-0.0.1-setup-x64.exe"
+          $newer = Get-ChildItem "$env:RUNNER_TEMP/installer/Fyke-*-setup-x64.exe" | Select-Object -First 1
+          python tools/e2e_installer_windows.py $older.FullName $newer.FullName
 
   linux:
     timeout-minutes: 30

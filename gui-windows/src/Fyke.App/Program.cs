@@ -27,6 +27,13 @@ public static class Program
             return 0;
         }
 
+        // The uninstaller removes what registering for notifications left with Windows.
+        if (Array.IndexOf(Environment.GetCommandLineArgs(), RoutineNotifier.RemoveArgument) > 0)
+        {
+            RoutineNotifier.RemoveRegistration();
+            return 0;
+        }
+
         if (RedirectedToOpenWindow())
         {
             return 0;

@@ -183,6 +183,21 @@ A routine's **notify** action works as on macOS. While the window is open, the d
 
 There is one window per data folder, as on macOS. `Program.cs` replaces the generated entry point. A second launch, from Start, the taskbar or a shortcut, finds the open window through `AppInstance.FindOrRegisterForKey`, lends it the right to come forward, and hands its activation over before it exits. The open window restores itself if minimised and comes to the front (`MainWindow.Activation.cs`). The key is "Fyke", or "Fyke-" and a hash of `FYKE_HOME` when that is set (`SingleInstance`), so a test run or a second profile never lands in another run's window. The desktop smoke test launches a second copy and checks that it exits while the first stays open.
 
+## Installer
+
+`Fyke-<version>-setup-x64.exe` installs Fyke for the person signed in, with no administrator prompt. It is an [Inno Setup](https://jrsoftware.org/isinfo.php) script, `gui-windows/installer/Fyke.iss`, which `tools/windows_installer.py` compiles from the published app and `fyke.exe`. The release workflow builds it on Windows and publishes it with the archives and its line in `SHA256SUMS`.
+
+| What | How |
+|---|---|
+| Where | `%LOCALAPPDATA%\Programs\Fyke`: `Fyke.App.exe`, `fyke.exe` beside it, the fonts and the icon. The data stays in `%LOCALAPPDATA%\Fyke`, or wherever it was moved, so program files and data never mix. Windows 11 22H2 or later, x64. |
+| Start menu | A Fyke entry; a desktop shortcut is an unchecked option. |
+| Sign-in | Checked by default: runs `fyke service install`, so the supervised daemon starts at sign-in and now. |
+| PATH | Checked by default: the install folder is added to the user's `Path`, so `fyke` works in a new terminal. |
+| Upgrade | The same installer, newer. It closes Fyke's window as clicking close would, stops the daemon with `fyke daemon stop` so the database is closed, and uses the Restart Manager for anything still holding a file. It keeps the options chosen before, and starts the service again. The app also replaces an older daemon on its own. |
+| Uninstall | From Apps or the Start menu. It removes the notification registration (`Fyke.App.exe --unregister-notifications`), the sign-in entry, the PATH entry and the program files, and keeps every feed, article and setting. |
+
+The app's icon, `Assets/Fyke.ico`, is drawn from the Mac icon by `tools/gen_windows_icon.py`, which keeps the tile and packs the sizes Windows uses. The installer is not signed yet, so SmartScreen asks before it runs; signing is a release decision still open. Windows CI builds two installers of the same build, one numbered 0.0.1, and `tools/e2e_installer_windows.py` installs the older, upgrades it with the newer over the running daemon, and uninstalls, checking files, Start menu, PATH, the sign-in entry, the supervised daemon and that the data stays. The installer has a size budget of 28 MB.
+
 ## Testing
 
 | Layer | How |
@@ -203,7 +218,7 @@ Run the client integration check with `FYKE_TEST_BIN` set to the absolute path o
 | W2 | Add feed, folders, OPML, settings, storage and data move | Everything the macOS settings offer |
 | W3 | Views, Today, recipes, routines, Ask, catch-up, Activity, palette | The flows in reader-features.md, with the same operations as macOS |
 | W4 | Crash supervision, notifications with the window closed | Survives crash, sign-out and upgrade |
-| W5 | Installer, update, uninstall, release CI | Clean-machine install on Windows 11 |
+| W5 | Installer, update, uninstall, release CI. Built and checked in CI; signing open | Clean-machine install on Windows 11 |
 
 ## Architecture and review standards
 
@@ -258,7 +273,7 @@ Each row is a reviewable unit with evidence required before its gate is complete
 | W3c | Today, briefs, citations, recipes and writer choice done | Run a brief from a view, edit and preview its recipe, reopen the result, and follow citations in Windows |
 | W3d | Ask, Catch up and Activity done | Model tests for Activity grouping and words. Windows smoke opens Activity and a failing feed's health. Verify question and catch-up inputs, cited results, live job state, and failure or cancellation |
 | W4 | Restart supervision, notifications and activation | Close the window, crash and restart the daemon, sign out/in, deny notification access, reopen the right result |
-| W5 | Versioned GUI/core bundle, runtime dependencies, signing, installer, upgrades, uninstall and release notes | Clean Windows 11 x64 standard-user install, upgrade from a prior build, rollback and uninstall with data retention, verified published checksums |
+| W5 | Per-user installer, upgrades, uninstall and release CI with checksums done; signing and rollback open | Clean Windows 11 x64 standard-user install, upgrade from a prior build, rollback and uninstall with data retention, verified published checksums |
 
 Profile isolation is a manual release check. On a controlled Windows host, run `pwsh -File gui-windows/tests/account-isolation.ps1 -Daemon <path-to-fyke.exe>` from an elevated session that can create a local user and register an S4U task. The script checks access with the second account and removes the temporary task and account. Hosted Windows CI denied task registration before the probe ran, so cross-account isolation is still unverified. The check covers inherited permissions under the local profile. Access controls on user-selected data locations remain a separate release check.
 

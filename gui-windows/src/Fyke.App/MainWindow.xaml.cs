@@ -37,6 +37,7 @@ public sealed partial class MainWindow : Window
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBar);
+        AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "Fyke.ico"));
         // StackPanel has no font of its own, so the text elements bind to the face themselves.
         ReaderFaces.Shared.Bind(MessageText, nameof(ReaderFaces.Ui));
         ReaderFaces.Shared.Bind(DetailText, nameof(ReaderFaces.Ui));
