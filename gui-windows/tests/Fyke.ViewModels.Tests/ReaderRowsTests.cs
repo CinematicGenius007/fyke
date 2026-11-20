@@ -32,6 +32,22 @@ public sealed class ReaderRowsTests
     }
 
     [Fact]
+    public void AFeedKnowsTheFoldersThatHoldIt()
+    {
+        var folder = new ReaderDestination(ReaderScope.Folder, 1, "News", 0, 7);
+        var nested = new ReaderDestination(ReaderScope.Folder, 2, "Local", 1, 5, ParentId: 1);
+        var nestedFeed = new ReaderDestination(ReaderScope.Feed, 1, "City", 2, 5, ParentId: 2);
+        var unfiled = new ReaderDestination(ReaderScope.Feed, 3, "Radio", 0, 1);
+        ReaderDestination[] catalog = [folder, nested, nestedFeed, unfiled];
+
+        Assert.Equal([2L, 1L], ReaderRows.AncestorFolders(catalog, nestedFeed));
+        Assert.Equal([1L], ReaderRows.AncestorFolders(catalog, nested));
+        Assert.Empty(ReaderRows.AncestorFolders(catalog, unfiled));
+        // A folder that is gone from the catalog ends the walk.
+        Assert.Empty(ReaderRows.AncestorFolders(catalog, unfiled with { ParentId = 9 }));
+    }
+
+    [Fact]
     public void InsertingAHeadlineKeepsExistingRowsAndAvoidsReset()
     {
         var open = new TimelineArticle(2, "Open article", "News", false);

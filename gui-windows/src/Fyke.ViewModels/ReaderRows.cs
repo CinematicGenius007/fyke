@@ -25,6 +25,32 @@ public static class ReaderRows
         return visible;
     }
 
+    /// <summary>The folders that hold <paramref name="item"/>, nearest first.</summary>
+    public static IReadOnlyList<long> AncestorFolders(IReadOnlyList<ReaderDestination> catalog, ReaderDestination item)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(item);
+        if (item.Scope is not (ReaderScope.Feed or ReaderScope.Folder))
+        {
+            return [];
+        }
+
+        var parents = catalog.Where(row => row.Scope == ReaderScope.Folder).ToDictionary(row => row.Id, row => row.ParentId);
+        var ancestors = new List<long>();
+        // The bound guards against a cycle in a damaged catalog.
+        for (var parent = item.ParentId; parent is long id && ancestors.Count <= parents.Count; parent = parents.GetValueOrDefault(id))
+        {
+            if (!parents.ContainsKey(id))
+            {
+                break;
+            }
+
+            ancestors.Add(id);
+        }
+
+        return ancestors;
+    }
+
     public static void Reconcile<T, TKey>(
         ObservableCollection<T> current, IReadOnlyList<T> updated, Func<T, TKey> key)
         where TKey : notnull

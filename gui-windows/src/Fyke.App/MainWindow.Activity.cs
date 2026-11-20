@@ -456,7 +456,7 @@ public sealed partial class MainWindow
 
     /// <summary>
     /// What happened to a feed, what is kept, and the one next action, beside its row. Without an
-    /// anchor it opens beside the row when the row is in the list, and beside the list otherwise.
+    /// anchor it opens the folders that hide the feed and opens beside its row.
     /// </summary>
     private void ShowFeedHealth(ReaderDestination feed, FrameworkElement? anchor)
     {
@@ -467,6 +467,8 @@ public sealed partial class MainWindow
 
         if (anchor is null)
         {
+            // The popup points at the feed, so the folders that hide it open first.
+            RevealDestination(feed);
             Destinations.ScrollIntoView(feed);
             Destinations.UpdateLayout();
             anchor = Destinations.ContainerFromItem(feed) as FrameworkElement ?? Destinations;

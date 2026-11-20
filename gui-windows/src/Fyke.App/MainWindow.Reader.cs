@@ -211,6 +211,37 @@ public sealed partial class MainWindow
         }
     }
 
+    /// Opens the collapsed folders that hold <paramref name="item"/>, so its row is in the list.
+    private void RevealDestination(ReaderDestination item)
+    {
+        var opened = false;
+        foreach (var folder in ReaderRows.AncestorFolders(catalog, item))
+        {
+            opened |= collapsedFolders.Remove(folder);
+        }
+
+        if (!opened)
+        {
+            return;
+        }
+
+        ApplyVisibleDestinations();
+        // Rows that stayed keep their containers, so their chevrons are turned here.
+        foreach (var row in destinations.Where(row => row.Scope == ReaderScope.Folder))
+        {
+            if (Destinations.ContainerFromItem(row) is ListViewItem { ContentTemplateRoot: Panel panel })
+            {
+                // The chevron is the button in the icon column; the health warning sits in the last.
+                foreach (var button in panel.Children.OfType<Button>().Where(button => Grid.GetColumn(button) == 0))
+                {
+                    UpdateFolderDisclosure(button);
+                }
+            }
+        }
+
+        QueueFolderDisclosureSave();
+    }
+
     private void UpdateFolderDisclosure(Button button)
     {
         if (button.DataContext is not ReaderDestination { Scope: ReaderScope.Folder } folder)
