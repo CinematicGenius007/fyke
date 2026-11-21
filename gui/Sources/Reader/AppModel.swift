@@ -846,6 +846,27 @@ final class AppModel {
 
     /// Marks a feed, a folder or a view read at once, and offers Undo. The unread
     /// articles are read first so that exactly those can be put back.
+    /// Whether "Mark all read" applies where the reader is. Starred, Today and Routines are
+    /// not a set of feeds, so it is not offered there, as on Windows. Marking "everything"
+    /// from Starred used to read every feed.
+    var canMarkAllHere: Bool {
+        switch place {
+        case .all, .feed, .folder, .view: true
+        case .today, .starred, .routines: false
+        }
+    }
+
+    /// "Mark all read" for the place showing: one feed, one folder's tree, one view, or All.
+    func markAllHere() {
+        switch place {
+        case .all: markAllRead()
+        case .feed(let id): markAllRead(feed: id)
+        case .folder(let id): markAllRead(folder: id)
+        case .view(let id): markAllRead(view: id)
+        case .today, .starred, .routines: break
+        }
+    }
+
     func markAllRead(feed: Int64? = nil, folder: Int64? = nil, view: Int64? = nil) {
         Task {
             var params = ListParams(feedId: feed, folderId: folder, viewId: view, unreadOnly: view == nil ? true : nil, limit: 1000)

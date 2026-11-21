@@ -68,8 +68,11 @@ public sealed class WritersTests
         const string home = @"C:\Users\me";
         var codex = new Writer { Id = "codex", Installed = true, Available = true, Version = "0.9.1", Path = @"C:\Users\me\bin\codex.exe" };
         Assert.Equal(@"Ready · 0.9.1 · found at ~\bin\codex.exe", WriterText.Status(codex, home));
+        Assert.Equal("Not found on this PC", WriterText.Status(new Writer { Id = "codex" }, home));
         Assert.Equal("Not found on this PC",
-            WriterText.Status(new Writer { Id = "codex", Problem = "Not found on this Mac" }, home));
+            WriterText.Status(new Writer { Id = "codex", Problem = "Not found on this PC" }, home));
+        Assert.Equal("Found, but its version check failed",
+            WriterText.Status(new Writer { Id = "codex", Problem = "Found, but its version check failed" }, home));
         Assert.Equal("Sign in first.", WriterText.Status(codex with { Problem = " Sign in first. " }, home));
         Assert.Equal(WriterText.DefaultProfile, WriterText.Profile(new Writer { Id = "claude" }, home));
         Assert.Equal(@"~\.claude_personal", WriterText.Profile(new Writer { Id = "claude", Profile = @"C:\Users\me\.claude_personal" }, home));

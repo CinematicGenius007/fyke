@@ -260,9 +260,11 @@ public sealed partial class MainWindow
         string? problem = null;
         try
         {
-            recipeDraft.Load(await recipes.ResetAsync(recipe, lifetime.Token));
+            var reset = await recipes.ResetAsync(recipe, lifetime.Token);
+            recipeDraft.Load(reset);
             ShowRecipeText();
-            ShowBulkNotice($"Reset “{recipe.DisplayName}” to the built-in text. The earlier text stays in History.");
+            ShowBulkNotice($"Reset “{recipe.DisplayName}” to the built-in text.", offerUndo: true);
+            noticeUndo = () => UndoRecipeResetAsync(recipe, reset);
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
         {
@@ -571,6 +573,33 @@ public sealed partial class MainWindow
         recipeDraft.Revert();
         ShowRecipeText();
         RenderRecipe();
+    }
+
+    /// <summary>Puts back the text a reset replaced, and shows it if the recipe is still open unedited.</summary>
+    private async Task UndoRecipeResetAsync(Recipe before, Recipe reset)
+    {
+        try
+        {
+            var restored = await recipes.UndoResetAsync(before, reset, lifetime.Token);
+            if (recipeDraft.Refresh(restored))
+            {
+                ShowRecipeText();
+                RenderRecipe();
+            }
+
+            ShowBulkNotice($"Put back the earlier text of “{before.DisplayName}”.");
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+        }
+        catch (RecipeConflictException)
+        {
+            ShowBulkNotice($"“{before.DisplayName}” changed after the reset, so it was kept. The earlier text is in History.");
+        }
+        catch (Exception error) when (error is DaemonException or TimeoutException or JsonException)
+        {
+            ShowBulkNotice($"Fyke couldn’t put back the earlier text. {RecipeProblem(error)}");
+        }
     }
 
     private void RecipeResetClicked(object sender, RoutedEventArgs args) => _ = ResetRecipeAsync();

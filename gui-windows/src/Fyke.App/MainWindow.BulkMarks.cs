@@ -19,6 +19,12 @@ public sealed partial class MainWindow
     private DispatcherQueueTimer bulkNoticeTimer = null!;
     private bool bulkMarksBusy;
 
+    /// <summary>
+    /// A one-off undo for the change the notice reports, such as a removed routine or a recipe reset.
+    /// It takes Undo before the bulk-mark history, and goes when the notice changes.
+    /// </summary>
+    private Func<Task>? noticeUndo;
+
     private bool CanChangeBulkMarks => readerConnected && !lifetime.IsCancellationRequested && !bulkMarksBusy;
 
     private void InitializeBulkMarks()
@@ -120,7 +126,7 @@ public sealed partial class MainWindow
 
     private void UndoBulkClicked(object sender, RoutedEventArgs args)
     {
-        if (!StartRoutineUndo())
+        if (!StartNoticeUndo())
         {
             StartBulkUndo();
         }
@@ -129,7 +135,7 @@ public sealed partial class MainWindow
     private void UndoBulkShortcut(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
         // A text field keeps Ctrl+Z for its own text.
-        if (FocusManager.GetFocusedElement(Root.XamlRoot) is not TextBox && StartRoutineUndo())
+        if (FocusManager.GetFocusedElement(Root.XamlRoot) is not TextBox && StartNoticeUndo())
         {
             args.Handled = true;
         }
@@ -211,8 +217,8 @@ public sealed partial class MainWindow
 
     private void ShowBulkNotice(string message, bool offerUndo = false, bool temporary = true)
     {
-        // A routine's undo belongs to the notice that offered it.
-        routineUndo = null;
+        // A one-off undo belongs to the notice that offered it.
+        noticeUndo = null;
         UpdateBulkButton();
         bulkNoticeTimer.Stop();
         BulkNoticeText.Text = message;
@@ -226,7 +232,7 @@ public sealed partial class MainWindow
 
     private void HideBulkNotice()
     {
-        routineUndo = null;
+        noticeUndo = null;
         bulkNoticeTimer.Stop();
         BulkNotice.Visibility = Visibility.Collapsed;
     }

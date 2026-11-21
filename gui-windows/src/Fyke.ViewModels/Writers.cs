@@ -68,15 +68,16 @@ public static class WriterText
     /// <summary>The writer's problem, "Not found on this PC", or "Ready · version · found at path".</summary>
     public static string Status(Writer writer, string? home = null)
     {
-        // The daemon's own words for a missing writer name a Mac.
-        if (!writer.Installed)
-        {
-            return "Not found on this PC";
-        }
-
+        // The daemon says what stands in the way, in this platform's words, such as a
+        // version check that failed for a writer it did find.
         if (!string.IsNullOrWhiteSpace(writer.Problem))
         {
             return writer.Problem.Trim();
+        }
+
+        if (!writer.Installed)
+        {
+            return "Not found on this PC";
         }
 
         if (!writer.Available)

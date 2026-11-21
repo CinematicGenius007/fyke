@@ -260,6 +260,15 @@ def settings_route():
     play("another destination closes Settings", "cmd+, wait cmd+2 wait n wait", ["Needle one"])
 
 
+@check("mark-all")
+def mark_all():
+    """Mark all read covers the place showing. Starred is not a set of feeds, so the palette
+    does not offer it there (and the menu item is disabled); it used to mark every feed."""
+    play("Mark all read is not offered in Starred", "cmd+3 wait cmd+k markallread return wait wait", [])
+    play("Mark all read in All marks every article", "cmd+2 wait cmd+k markallread return wait wait",
+         ["Needle one", "Needle two", "Needle three"])
+
+
 @check("rename", tags=["sidebar"])
 def rename():
     """Renaming in the sidebar takes every key. The text holds letters that are reader

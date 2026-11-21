@@ -37,4 +37,9 @@ There are no releases yet. Everything below is built from source and is unreleas
 - Full-article extraction no longer garbles pages and scans less of each one.
 - The daemon replies before exiting when told to stop.
 - A broken `config.json` is kept safe instead of being overwritten.
+- macOS: a brief's sources note says "2 more read but not cited", not "2 mores".
+- macOS: Mark All Read is not offered in Starred, Today or Routines, as on Windows. In Starred it used to mark every feed.
+- A writer that is not installed is "Not found on this PC" on Windows and "Not found on this computer" on Linux, not "on this Mac". On Windows, a writer whose version check failed says so instead of "Not found".
+- Windows: resetting a recipe to its built-in text can be undone from the notice, as on macOS.
+- Windows: the Claude Code profile picker opens in the home folder, as on macOS. The app now uses Windows App SDK 2.6, whose folder picker can suggest a start folder.
 - macOS: renaming a folder, feed or view in the sidebar saves on Return. Before, the reader's shortcuts took Return, Esc and letters such as j or n away from the name field, so nothing was saved.

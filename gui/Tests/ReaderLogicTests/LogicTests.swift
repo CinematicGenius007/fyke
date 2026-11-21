@@ -171,3 +171,20 @@ import Testing
         #expect(DryRunWords.bars([0, 1, 100]) == [0, 0.12, 1])
     }
 }
+
+@Suite struct SourcesNoteTests {
+    @Test func readButNotCitedSaysMoreOnce() {
+        #expect(SourcesNote.text(omitted: 0, read: 4, cited: 2) == "2 more read but not cited")
+        #expect(SourcesNote.text(omitted: 0, read: 3, cited: 2) == "1 more read but not cited")
+    }
+
+    @Test func whatDidNotFitComesFirst() {
+        #expect(SourcesNote.text(omitted: 409, read: 16, cited: 3) == "409 more articles matched but did not fit, so the writer did not read them.")
+        #expect(SourcesNote.text(omitted: 1, read: 2, cited: 2) == "1 more article matched but did not fit, so the writer did not read them.")
+    }
+
+    @Test func nothingWhenEveryReadArticleIsCited() {
+        #expect(SourcesNote.text(omitted: 0, read: 2, cited: 2) == nil)
+        #expect(SourcesNote.text(omitted: 0, read: 0, cited: 2) == nil)
+    }
+}

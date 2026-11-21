@@ -213,6 +213,13 @@ public sealed class Recipes(IDaemonClient client)
             ["expected_revision"] = expectedRevision,
         }, ct);
 
+    /// <summary>
+    /// Takes back a reset: saves the text from before it over the revision the reset made, as on
+    /// macOS. A revision saved since is a <see cref="RecipeConflictException"/>, so nothing newer is lost.
+    /// </summary>
+    public Task<Recipe> UndoResetAsync(Recipe before, Recipe reset, CancellationToken ct) =>
+        SaveAsync(reset, before.Text, reset.Revision, ct, note: "Undo reset");
+
     /// <summary>Appends the built-in text as a new revision.</summary>
     public Task<Recipe> ResetAsync(Recipe recipe, CancellationToken ct) =>
         WriteAsync("recipes.reset", new JsonObject { ["id"] = recipe.Id, ["expected_revision"] = recipe.Revision }, ct);

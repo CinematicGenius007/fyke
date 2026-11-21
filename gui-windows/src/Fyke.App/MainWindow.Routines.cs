@@ -33,7 +33,6 @@ public sealed partial class MainWindow
     private string? routineDryRunProblem;
     private string? routineProblem;
     private string? routinesProblem;
-    private Func<Task>? routineUndo;
     private int routineChangesPending;
     private bool routinesListed;
     private bool routineSaving;
@@ -94,7 +93,7 @@ public sealed partial class MainWindow
         routinesListed = false;
         routineDryRun = null;
         routineDryRunId = null;
-        routineUndo = null;
+        noticeUndo = null;
         RoutinesNext.Text = string.Empty;
     }
 
@@ -782,7 +781,7 @@ public sealed partial class MainWindow
         RenderRoutines();
         _ = LoadRoutineDryRunAsync();
         ShowBulkNotice($"Removed “{copy.Name}”.", offerUndo: true);
-        routineUndo = async () =>
+        noticeUndo = async () =>
         {
             try
             {
@@ -799,15 +798,15 @@ public sealed partial class MainWindow
         RoutineRows.Focus(FocusState.Programmatic);
     }
 
-    /// <summary>Runs the routine undo the notice offers, if it is the routine's.</summary>
-    private bool StartRoutineUndo()
+    /// <summary>Runs the one-off undo the notice offers, such as a removed routine's or a recipe reset's.</summary>
+    private bool StartNoticeUndo()
     {
-        if (routineUndo is not { } undo || !readerConnected)
+        if (noticeUndo is not { } undo || !readerConnected)
         {
             return false;
         }
 
-        routineUndo = null;
+        noticeUndo = null;
         HideBulkNotice();
         _ = undo();
         return true;

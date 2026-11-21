@@ -80,6 +80,30 @@ public sealed class RecipesTests
     }
 
     [Fact]
+    public async Task UndoResetPutsTheEarlierTextOverTheResetRevision()
+    {
+        JsonElement? sent = null;
+        var recipes = new Recipes(new FakeClient
+        {
+            OnCall = (method, parameters) =>
+            {
+                Assert.Equal("recipes.put", method);
+                sent = parameters;
+                return JsonElement.Parse(RecipeReply.Replace("\"revision\":3", "\"revision\":5", StringComparison.Ordinal));
+            },
+        });
+        var before = new Recipe { Id = 1, Name = "Morning brief", Revision = 3, Text = "Mine." };
+        var reset = before with { Revision = 4, Text = "Built in." };
+
+        var restored = await recipes.UndoResetAsync(before, reset, CancellationToken.None);
+
+        Assert.Equal(5, restored.Revision);
+        Assert.Equal("Mine.", sent!.Value.GetProperty("text").GetString());
+        Assert.Equal(4, sent.Value.GetProperty("expected_revision").GetInt64());
+        Assert.Equal("Undo reset", sent.Value.GetProperty("note").GetString());
+    }
+
+    [Fact]
     public async Task AConflictCarriesTheNewerRecipe()
     {
         var data = JsonElement.Parse($$"""{"kind":"revision_conflict","current":{{RecipeReply}}}""");

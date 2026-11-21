@@ -28,8 +28,8 @@
          referenced component ships with it, and the metapackage adds machine learning (onnxruntime,
          DirectML), AI, Widgets and DWriteCore, about 45 MB that Fyke never loads. WinUI brings
          InteractiveExperiences and WebView2 with it; Foundation holds the file pickers. -->
-    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="1.8.260204000" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="1.8.260203002" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.6.5" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="2.6.5" />
     <ProjectReference Include="..\Fyke.Client\Fyke.Client.csproj" />
     <ProjectReference Include="..\Fyke.ViewModels\Fyke.ViewModels.csproj" />
     <Content Include="Fonts\**\*" CopyToOutputDirectory="PreserveNewest" />
