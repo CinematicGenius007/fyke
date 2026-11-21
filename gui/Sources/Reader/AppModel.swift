@@ -263,6 +263,10 @@ final class AppModel {
             if let url = URL(string: ProcessInfo.processInfo.environment["FYKE_ADDRESS"] ?? "") { web = WebState(address: url) }
         case "delete-folder":
             if let folder = folders.first { confirmation = .deleteFolder(folder) }
+        case "rename-folder":
+            if let folder = folders.first { renaming = .folder(folder.id) }
+        case "rename-feed":
+            if let feed = feeds.first { renaming = .feed(feed.id) }
         case "search":
             search.show()
             search.query = ProcessInfo.processInfo.environment["FYKE_QUERY"] ?? ""

@@ -260,7 +260,40 @@ def settings_route():
     play("another destination closes Settings", "cmd+, wait cmd+2 wait n wait", ["Needle one"])
 
 
-@check("font-weight", tags=["settings", "fonts"])
+@check("rename", tags=["sidebar"])
+def rename():
+    """Renaming in the sidebar takes every key. The text holds letters that are reader
+    shortcuts (j, n, s, m, r, o, u, t), Return saves it, and Esc leaves the name as it was."""
+    typed = "jumpsnorth"
+
+    def renamed(screen, sql, original):
+        launch({"FYKE_SCREEN": screen, "FYKE_KEYS": f"wait {typed} return wait"}, timeout=60)
+        name = column(sql)[0]
+        # Focus may select the old name, so the typing replaces it, or leave the caret after it.
+        return None if name in (typed, original + typed) else f"expected {typed!r}, got {name!r}"
+
+    folder = call("folders.add", {"name": "Reading"})["id"]
+    sql = f"SELECT name FROM folders WHERE id = {folder}"
+    problem = renamed("rename-folder", sql, "Reading")
+    if problem:
+        fail("Return saves a folder's new name", problem)
+    ok("Return saves a folder's new name, with shortcut letters in it")
+    before = column(sql)[0]
+    launch({"FYKE_SCREEN": "rename-folder", "FYKE_KEYS": "wait xyz esc wait"}, timeout=60)
+    if column(sql)[0] != before:
+        fail("Esc cancels a rename", column(sql)[0])
+    ok("Esc cancels a rename")
+    call("folders.remove", {"id": folder, "delete_contents": False})
+
+    feed = column("SELECT id FROM feeds ORDER BY id")[0]
+    problem = renamed("rename-feed", f"SELECT coalesce(title_override, title) FROM feeds WHERE id = {feed}", "Local")
+    if problem:
+        fail("Return saves a feed's new name", problem)
+    ok("Return saves a feed's new name")
+    call("feeds.update", {"id": feed, "title": "Local"})
+
+
+@check("font-weight",tags=["settings", "fonts"])
 def font_weight():
     """Weights saved in the config are read at launch and kept, and the Reading tab with
     its weight menus draws."""

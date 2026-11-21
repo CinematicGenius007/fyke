@@ -37,3 +37,4 @@ There are no releases yet. Everything below is built from source and is unreleas
 - Full-article extraction no longer garbles pages and scans less of each one.
 - The daemon replies before exiting when told to stop.
 - A broken `config.json` is kept safe instead of being overwritten.
+- macOS: renaming a folder, feed or view in the sidebar saves on Return. Before, the reader's shortcuts took Return, Esc and letters such as j or n away from the name field, so nothing was saved.
