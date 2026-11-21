@@ -21,21 +21,18 @@ namespace Fyke.App;
 [WinRT.GeneratedBindableCustomProperty]
 public sealed partial class ReaderFaces : INotifyPropertyChanged
 {
-    // The fonts that ship in Fonts/, by family. Any other family is looked up in the system.
-    private static readonly Dictionary<string, string> BundledFiles = new(StringComparer.OrdinalIgnoreCase)
+    // The fonts that ship in Fonts/, by family, as the Mac bundles them. Any other family is
+    // looked up in the system. A font file is a collection of its own, so a family's italic
+    // is reached through its own file; without one, WinUI slants the upright.
+    private static readonly Dictionary<string, (string Upright, string? Italic)> BundledFiles = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Newsreader"] = "Newsreader-Variable.ttf",
-        ["Inter"] = "Inter-Variable.ttf",
-        ["JetBrains Mono"] = "JetBrainsMono-Variable.ttf",
+        ["Newsreader"] = ("Newsreader-Variable.ttf", "Newsreader-Italic-Variable.ttf"),
+        ["Source Serif 4"] = ("SourceSerif4-Variable.ttf", "SourceSerif4-Italic-Variable.ttf"),
+        ["Inter"] = ("Inter-Variable.ttf", null),
+        ["JetBrains Mono"] = ("JetBrainsMono-Variable.ttf", "JetBrainsMono-Italic-Variable.ttf"),
     };
 
-    // Families the Mac bundles and Windows does not, with what stands in for them.
-    private static readonly Dictionary<string, string> StandIns = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["Source Serif 4"] = "Newsreader",
-    };
-
-    private readonly Dictionary<string, FontFamily> families = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<(string Family, bool Italic), FontFamily> families = new();
 
     private ReaderFaces() => Apply(ReaderLook.Default);
 
@@ -46,6 +43,10 @@ public sealed partial class ReaderFaces : INotifyPropertyChanged
     internal ReaderLook Look { get; private set; } = null!;
     public FontFamily Reading { get; private set; } = null!;
     public FontFamily Title { get; private set; } = null!;
+    /// <summary>The reading face's italic, for emphasis in articles and briefs.</summary>
+    public FontFamily ReadingItalic { get; private set; } = null!;
+    /// <summary>The title face's italic, for emphasis in headings.</summary>
+    public FontFamily TitleItalic { get; private set; } = null!;
     public FontFamily Ui { get; private set; } = null!;
     public FontFamily Code { get; private set; } = null!;
     public CornerRadius RadiusControl { get; private set; }
@@ -63,6 +64,8 @@ public sealed partial class ReaderFaces : INotifyPropertyChanged
         Look = look;
         Reading = Family(look.Reading);
         Title = Family(look.Title);
+        ReadingItalic = Family(look.Reading, italic: true);
+        TitleItalic = Family(look.Title, italic: true);
         Ui = Family(look.Ui);
         Code = Family(look.Code);
         RadiusControl = new CornerRadius(look.RadiusControl);
@@ -103,16 +106,17 @@ public sealed partial class ReaderFaces : INotifyPropertyChanged
         tokens["RadiusSheet"] = RadiusSheet;
     }
 
-    // One FontFamily per family, so that switching back and forth reuses the loaded font.
-    private FontFamily Family(string name)
+    // One FontFamily per family and style, so that switching back and forth reuses the
+    // loaded font. A system family keeps its own italic, so it needs no second entry.
+    private FontFamily Family(string name, bool italic = false)
     {
-        var family = StandIns.GetValueOrDefault(name, name);
-        if (!families.TryGetValue(family, out var font))
+        var bundled = BundledFiles.TryGetValue(name, out var files);
+        var file = italic && files.Italic is string italicFile ? italicFile : files.Upright;
+        var key = (name, bundled && file == files.Italic);
+        if (!families.TryGetValue(key, out var font))
         {
-            font = BundledFiles.TryGetValue(family, out var file)
-                ? new FontFamily($"ms-appx:///Fonts/{file}#{family}")
-                : new FontFamily(family);
-            families[family] = font;
+            font = bundled ? new FontFamily($"ms-appx:///Fonts/{file}#{name}") : new FontFamily(name);
+            families[key] = font;
         }
 
         return font;

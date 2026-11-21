@@ -148,7 +148,10 @@ internal sealed class ArticleBlockRenderer(ReaderFaces faces,
                     break;
                 case "em":
                 case "strong":
-                    Span style = node.Kind == "em" ? new Italic() : new Span();
+                    // Emphasis takes the face's own italic, which WinUI would otherwise slant.
+                    Span style = node.Kind == "em"
+                        ? faces.Bind(new Italic(), emphasis == nameof(ReaderFontWeights.Title) ? nameof(ReaderFaces.TitleItalic) : nameof(ReaderFaces.ReadingItalic))
+                        : new Span();
                     if (node.Kind == "strong")
                     {
                         weights.Bind(style, TextElement.FontWeightProperty, emphasis);

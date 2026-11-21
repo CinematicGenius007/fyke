@@ -117,7 +117,7 @@ code, log = setup(OLD, "startup", "path")
 check("the older installer succeeds", code == 0, open(log, errors="replace").read()[-3000:])
 old_version = installed_version()
 check("it registers for Apps and features", old_version is not None)
-for name in ("Fyke.App.exe", "fyke.exe", r"Fonts\Newsreader-Variable.ttf", r"Assets\Fyke.ico", "Fyke.App.pri"):
+for name in ("Fyke.App.exe", "fyke.exe", r"Fonts\Newsreader-Variable.ttf", r"Fonts\SourceSerif4-Italic-Variable.ttf", r"Assets\Fyke.ico", "Fyke.App.pri"):
     check(f"it installs {name}", os.path.isfile(os.path.join(INSTALL, name)))
 check("it adds Fyke to the Start menu", os.path.isfile(START_MENU))
 check("it adds the install folder to PATH", any(entry.lower() == INSTALL.lower() for entry in user_path()), user_path())
