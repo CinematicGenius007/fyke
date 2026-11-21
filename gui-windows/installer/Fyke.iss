@@ -12,8 +12,9 @@
 ;   %LOCALAPPDATA%\Fyke or wherever it was moved, apart from the program files.
 ; - Adds Fyke to the Start menu, and optionally fyke to PATH and the background
 ;   service to sign-in (`fyke service install`, which starts it now as well).
-; - An upgrade closes Fyke and stops the daemon cleanly before replacing files, and
-;   starts the service again after. The app replaces an older daemon by itself too.
+; - An upgrade closes the Fyke installed here (not a copy run from elsewhere) and stops
+;   the daemon cleanly before replacing files, and starts the service again after.
+;   The app replaces an older daemon by itself too.
 ; - Uninstalling removes the sign-in entry, PATH entry, notification registration
 ;   and program files, and keeps every article, feed and setting.
 
@@ -104,19 +105,27 @@ Type: dirifempty; Name: "{app}"
 const
   EnvironmentKey = 'Environment';
 
-{ Closes this person's Fyke windows, as clicking close would, then whatever is left. }
+{ Closes the Fyke windows that run from this install, as clicking close would, then ends
+  any still open after two seconds. Matching the full path leaves alone a copy run from
+  anywhere else, such as a build being tested, and other people's, whose installs are in
+  their own profiles. }
 procedure CloseApp();
 var
   Code: Integer;
-  Filter: String;
+  App: String;
+  Script: String;
 begin
-  Filter := '/FI "IMAGENAME eq Fyke.App.exe" /FI "USERNAME eq ' + GetUserNameString() + '"';
-  { taskkill exits with 0 when it found a window to close. }
-  if Exec(ExpandConstant('{sys}\taskkill.exe'), Filter, '', SW_HIDE, ewWaitUntilTerminated, Code) and (Code = 0) then
-  begin
-    Sleep(1500);
-    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F ' + Filter, '', SW_HIDE, ewWaitUntilTerminated, Code);
-  end;
+  App := ExpandConstant('{app}\Fyke.App.exe');
+  StringChangeEx(App, '''', '''''', True);
+  Script :=
+    '$app = ''' + App + '''; ' +
+    '$open = @(Get-Process -Name Fyke.App -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $app }); ' +
+    'foreach ($p in $open) { [void]$p.CloseMainWindow() }; ' +
+    'if ($open) { $open | Wait-Process -Timeout 2 -ErrorAction SilentlyContinue; ' +
+    '$open | Where-Object { -not $_.HasExited } | Stop-Process -Force -ErrorAction SilentlyContinue }';
+  Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+    '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' + Script + '"',
+    '', SW_HIDE, ewWaitUntilTerminated, Code);
 end;
 
 { Stops the daemon cleanly, so its database is closed before its files are replaced. A

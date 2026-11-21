@@ -131,8 +131,21 @@ check("the data folder is outside the install", os.path.isfile(os.path.join(home
 with open(os.path.join(home, "kept.txt"), "w") as marker:
     marker.write("the person's own file")
 
+# The installed app is open, and so is a copy run from somewhere else. A stand-in with no
+# window does for that copy: the installer must not touch it, window or not.
+app = subprocess.Popen([os.path.join(INSTALL, "Fyke.App.exe")], env=dict(env, FYKE_HEADLESS="1"))
+elsewhere = os.path.join(root, "elsewhere")
+os.makedirs(elsewhere)
+shutil.copy(os.path.join(os.environ["SystemRoot"], "System32", "ping.exe"), os.path.join(elsewhere, "Fyke.App.exe"))
+other = subprocess.Popen([os.path.join(elsewhere, "Fyke.App.exe"), "-n", "600", "127.0.0.1"],
+                         stdout=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
+check("the installed app is open", not wait_for(lambda: app.poll() is not None, 5), app.poll())
+
 # An upgrade, over the running daemon, choosing nothing: the tasks chosen before stay.
 code, log = setup(NEW)
+check("the upgrade closes the installed app", wait_for(lambda: app.poll() is not None, 10))
+check("and leaves a Fyke.App.exe run from elsewhere", other.poll() is None, other.poll())
+other.kill()
 check("the newer installer succeeds over a running daemon", code == 0, open(log, errors="replace").read()[-3000:])
 check("the version is the newer one", installed_version() not in (None, old_version), installed_version())
 check("there is still one entry in PATH", sum(entry.lower() == INSTALL.lower() for entry in user_path()) == 1, user_path())
