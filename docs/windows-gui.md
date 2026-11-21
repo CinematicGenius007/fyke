@@ -42,7 +42,7 @@ In `Fyke.App`, `MainWindow.xaml` holds the window's frame, and `MainWindow.*.cs`
 
 The published app is self-contained and compiled ahead of time (Native AOT), so it needs no .NET or Windows App SDK install and starts without a JIT. It references only the Windows App SDK components it uses, WinUI and Foundation; the SDK's metapackage would add about 45 MB of machine learning, AI and Widgets runtimes. Nothing reads types by reflection: the daemon's JSON goes through a System.Text.Json source-generated context, and XAML binds with `x:Bind`. The libraries set `IsAotCompatible`, and the app fails the build on trimming and AOT warnings.
 
-CI publishes the app once, runs the desktop smoke test against that copy, and fails when it outgrows its budget of 70 MB on disk or 28 MB zipped. The step summary lists the largest files. In November 2026 the app measured 63 MB on disk and 25.5 MB zipped, down from 139 MB and 52 MB.
+CI publishes the app once, runs the desktop smoke test against that copy, and fails when it outgrows its budget of 74 MB on disk or 29 MB zipped. The step summary lists the largest files. In November 2026 the app measured 63 MB on disk and 25.5 MB zipped, down from 139 MB and 52 MB. Moving from Windows App SDK 1.8 to 2.6, for a folder picker that can suggest where to start, grew the runtime from 67.1 MB to 72.7 MB on disk and from 27.1 MB to 28.9 MB zipped.
 
 ## Talking to the daemon
 

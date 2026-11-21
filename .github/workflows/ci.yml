@@ -64,8 +64,8 @@ jobs:
         if: ${{ !cancelled() }}
         shell: pwsh
         env:
-          BUDGET_ON_DISK_MB: 70
-          BUDGET_ZIPPED_MB: 28
+          BUDGET_ON_DISK_MB: 74
+          BUDGET_ZIPPED_MB: 29
         run: |
           $out = "$env:RUNNER_TEMP/fyke-desktop"
           $shipped = Get-ChildItem $out -Recurse -File
