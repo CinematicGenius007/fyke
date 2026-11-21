@@ -84,7 +84,7 @@ public sealed partial class MainWindow
             {
                 var before = existing;
                 OfferViewUndo($"Changed “{saved.Name}”.", $"Fyke couldn’t put back “{before.Name}”.",
-                    () => ViewUndo.UndoEditAsync(reader.Views, before, lifetime.Token));
+                    async () => await ViewUndo.UndoEditAsync(reader.Views, before, lifetime.Token));
             }
         }
 
@@ -199,7 +199,7 @@ public sealed partial class MainWindow
         }
 
         OfferViewUndo(ViewUndo.Removed(removed.Name, users.Count), $"Fyke couldn’t restore “{removed.Name}”.",
-            () => ViewUndo.UndoRemoveAsync(reader.Views, routines, removed, position, users, lifetime.Token));
+            async () => await ViewUndo.UndoRemoveAsync(reader.Views, routines, removed, position, users, lifetime.Token));
     });
 
     private static bool SameView(SavedView a, SavedView b) => a.Name == b.Name && a.Sentence == b.Sentence;
