@@ -14,56 +14,8 @@ jobs:
   checks:
     uses: ./.github/workflows/ci.yml
 
-  # The Windows installer is built on Windows: Inno Setup and the WinUI app need it.
-  windows-installer:
-    needs: checks
-    runs-on: windows-latest
-    timeout-minutes: 45
-    env:
-      ZIG_VERSION: 0.17.1
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Check the tag
-        run: python tools/release.py --check "$env:GITHUB_REF_NAME"
-
-      - name: Install Zig
-        shell: pwsh
-        run: |
-          $zip = Join-Path $env:RUNNER_TEMP "zig.zip"
-          Invoke-WebRequest "https://ziglang.org/download/$env:ZIG_VERSION/zig-x86_64-windows-$env:ZIG_VERSION.zip" -OutFile $zip
-          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
-          if ($hash -ne "b03f477a1943673e02aca0f570e8030dffd536ce1f45cbc4d3326ec31159562e") { throw "Zig checksum mismatch: $hash" }
-          $target = Join-Path $env:RUNNER_TEMP "zig"
-          Expand-Archive $zip -DestinationPath $target
-          Add-Content $env:GITHUB_PATH (Get-ChildItem $target -Directory | Select-Object -First 1).FullName
-
-      # The same target as the fyke archive for Windows that release.py builds.
-      - run: zig build -Drelease -Dtarget=x86_64-windows-gnu
-
-      - uses: actions/setup-dotnet@v4
-        with:
-          global-json-file: gui-windows/global.json
-
-      - name: Publish the app
-        working-directory: gui-windows
-        shell: pwsh
-        run: |
-          $version = (Get-Content ../VERSION).Trim()
-          dotnet publish src/Fyke.App -c Release -r win-x64 -p:Platform=x64 -p:Version=$version -o "$env:RUNNER_TEMP/fyke-desktop"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Build the installer
-        run: python tools/windows_installer.py --app "$env:RUNNER_TEMP/fyke-desktop" --daemon zig-out/bin/fyke.exe --out dist --install-inno
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-installer
-          path: dist/Fyke-*-setup-x64.exe
-          if-no-files-found: error
-
   publish:
-    needs: [checks, windows-installer]
+    needs: checks
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -87,22 +39,9 @@ jobs:
       - name: Build every target
         run: python3 tools/release.py
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-installer
-          path: dist
-
-      - name: Add the installer to the checksums and notes
-        run: |
-          cd dist
-          sha256sum Fyke-*-setup-x64.exe >> SHA256SUMS
-          setup=$(ls Fyke-*-setup-x64.exe)
-          printf '\n### Windows\n\n`%s` installs Fyke for the current user, with no administrator prompt. Uninstalling keeps your feeds and articles. The installer is not signed yet, so SmartScreen may ask before it runs.\n' "$setup" >> NOTES.md
-          cat SHA256SUMS
-
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/*.zip dist/Fyke-*-setup-x64.exe dist/SHA256SUMS \
+          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/*.zip dist/SHA256SUMS \
             --title "Fyke ${GITHUB_REF_NAME#v}" --notes-file dist/NOTES.md --verify-tag

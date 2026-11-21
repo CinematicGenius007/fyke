@@ -31,7 +31,7 @@ The [v2 design page](https://app.paper.design/file/01M6R7CJ81MKH0TMWJ8KNC6QGX/p-
 - `src/windows_startup.zig` uses `HKCU` Run for sign-in startup, through the per-user supervisor in `src/supervise.zig`. `src/systemd.zig` and `src/launchd.zig` use service managers.
 - `gui/Sources/Reader/Daemon.swift` provides socket calls and events. `AppModel.swift`, `Sidebar.swift`, and `RootView.swift` own navigation/view state; `ReaderPane.swift` renders blocks.
 - `gui/tokens.css` is exported from Paper. `tools/gen_tokens.py` generates Swift tokens. Do not edit `Tokens.swift` or silently change the bundled reading default.
-- Windows CI compiles the WinUI scaffold and runs the client and view-model suites. Desktop execution and GUI packaging are tracked in [the Windows delivery plan](windows-gui.md).
+- Windows CI builds `fyke.exe` and runs the end-to-end suites against it. The desktop app for Windows and Linux is being rebuilt with Tauri 2; see [ADR 0004](decisions/0004-desktop-tauri.md).
 
 ## Shared core changes
 
@@ -104,6 +104,8 @@ Keep CLI, TUI, socket, and MCP able to inspect and manage these definitions. Nat
 
 ## Windows first
 
+> **Superseded.** The C# and WinUI 3 stack below was built and then removed; Windows and Linux now share one Tauri 2 app ([ADR 0004](decisions/0004-desktop-tauri.md)). The lifecycle, notification and acceptance requirements in this section still apply to it.
+
 ### Proposed stack and project
 
 Use C# with WinUI 3 for the first prototype, in a proposed `gui-windows/` project. This follows the native-toolkit direction; finalize the toolkit ADR only after the reading/IPC prototype passes. Preserve the macOS client rather than moving it into a shared UI framework.
@@ -113,8 +115,6 @@ Use native navigation/controls, Inter/Newsreader/JetBrains Mono where the design
 Create a C# protocol client with typed DTOs, cancellation, framing/body limits, separate event/long-running connections, and API-version compatibility handling. Prototype `.NET` `AddressFamily.Unix` against Fyke's current Windows socket. Use `FYKE_HOME` and the existing location pointer. Do not introduce named pipes or TCP without a demonstrated compatibility problem and an ADR.
 
 ### Windows delivery slices
-
-The [Windows delivery plan](windows-gui.md#remaining-launch-work) tracks current evidence and the smaller review units within these slices.
 
 | Slice | Planned changes | Gate |
 |---|---|---|
@@ -133,7 +133,7 @@ Retain sign-in/session scope: no requirement for a machine-wide Windows service 
 
 Use a small native notification delivery mode/helper that connects to the daemon outbox. It presents local app notifications and routes activation by stable run IDs. Keep domain state and all SQLite access in the daemon. Microsoft documents [desktop app notifications](https://learn.microsoft.com/en-us/windows/apps/develop/notifications/) and [registration/activation for console applications](https://learn.microsoft.com/windows/apps/develop/notifications/app-notifications/app-notifications-console). Task Scheduler documents [failure restarts](https://learn.microsoft.com/en-us/windows/win32/taskschd/taskschedulerschema-restartonfailure-settingstype-element); the prototype still needs to prove the intended Fyke lifecycle.
 
-The first direct-download GUI release uses an unpackaged per-user Inno Setup installer that bundles the compatible `fyke.exe`, fonts and the self-contained GUI, which also posts notifications (`--notify`). CI installs, upgrades and uninstalls it on Windows (`tools/e2e_installer_windows.py`); see [Installer](windows-gui.md#installer). Signing and a clean-machine run outside CI remain. MSIX/Store distribution can follow once packaged identity, data location, CLI availability, service registration, and update behavior are proven. Microsoft documents [unpackaged deployment requirements](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/unpackage-winui-app?tabs=csharp).
+The first direct-download GUI release uses a per-user installer that bundles the compatible `fyke.exe`, fonts and the GUI, which also posts notifications (`--notify`). CI installs, upgrades and uninstalls it on Windows. The WinUI installer that did this (`tools/windows_installer.py`, removed with the WinUI app) is in git history at `bd837fa`. Signing and a clean-machine run outside CI remain. MSIX/Store distribution can follow once packaged identity, data location, CLI availability, service registration, and update behavior are proven. Microsoft documents [unpackaged deployment requirements](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/unpackage-winui-app?tabs=csharp).
 
 Use a stable per-user installation path. Update GUI/helper/core as one compatible set; stop background processes before replacing executables, preserve data, and restart according to the user's preference. Uninstall removes startup/notification registration but retains reading data unless the user explicitly chooses deletion. Signing credentials and published distribution require a separate release action; preparing builds does not publish them.
 

@@ -63,8 +63,7 @@ RULES = [
     (["tools/e2e_gui.py"], [], ["snapshots", "keys"]),
     # The app. Pure logic has unit tests; each view file names the screens it draws.
     (["gui/Sources/ReaderLogic/*", "gui/Tests/*"], ["swift-test"], []),
-    (["gui/tokens.css", "tools/gen_tokens.py", "gui/Fonts/*", "gui-windows/src/Fyke.App/Fonts/*"], ["tokens"], ["snapshots"]),
-    (["gui-windows/src/Fyke.App/Themes/Tokens.xaml"], ["tokens"], []),
+    (["gui/tokens.css", "tools/gen_tokens.py", "gui/Fonts/*"], ["tokens"], ["snapshots"]),
     (["gui/Package.swift"], ["swift-test"], ["snapshots"]),
     (["gui/Sources/Reader/Activity.swift"], [], ["activity"]),
     (["gui/Sources/Reader/AddFeed.swift"], [], ["all"]),
