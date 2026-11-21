@@ -25,6 +25,8 @@ The WinUI app was removed. Its last full state is commit `bd837fa` on `main` ("W
 
 ## Consequences
 
+- The plan for building it is [the desktop brief](../desktop-tauri-brief.md).
+
 - The UI runs and is tested in a browser on any machine, so most checks need no Windows PC.
 - WebView2 uses more memory than a native toolkit. The app keeps size and memory budgets, measured in CI.
 - `src/notify.zig` still looks for `Fyke.App.exe --notify` beside `fyke.exe` on Windows. The Tauri app takes over that name or the daemon is changed to match it.
