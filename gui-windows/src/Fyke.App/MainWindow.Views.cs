@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -69,10 +70,22 @@ public sealed partial class MainWindow
         if (saved is not null && existing is null)
         {
             NavigateToDestination(new(ReaderScope.View, saved.Id, saved.Name, 0, 0, RuleSummary: saved.Sentence), refreshCatalog: true);
+            var made = saved;
+            OfferViewUndo($"Saved “{made.Name}” as a view.", $"Fyke couldn’t take back “{made.Name}”.", async () =>
+            {
+                await ViewUndo.UndoCreateAsync(reader.Views, made, lifetime.Token);
+                return null;
+            }, leaving: made.Id);
         }
         else if (saved is not null || requiresReload)
         {
             await LoadReaderAsync(refreshCatalog: true);
+            if (saved is not null && existing is not null && !SameView(existing, saved))
+            {
+                var before = existing;
+                OfferViewUndo($"Changed “{saved.Name}”.", $"Fyke couldn’t put back “{before.Name}”.",
+                    () => ViewUndo.UndoEditAsync(reader.Views, before, lifetime.Token));
+            }
         }
 
         async Task ApplyAsync(ContentDialogButtonClickEventArgs args, bool preview)
@@ -153,29 +166,21 @@ public sealed partial class MainWindow
         }
     });
 
+    /// <summary>
+    /// Deletes at once and offers Undo, as on macOS, instead of asking first. Routines that
+    /// look in the view are turned off and detached; Undo makes the view again at its place
+    /// and points them back at it.
+    /// </summary>
     private Task DeleteViewAsync(ReaderDestination view) => RunViewDialogAsync(async () =>
     {
-        var confirm = CreateViewDialog($"Delete “{view.Title}”?", "The articles in this view stay in your feeds.", "Delete view");
-        if (await confirm.ShowAsync() != ContentDialogResult.Primary || lifetime.IsCancellationRequested)
-        {
-            return;
-        }
-
+        var removed = await reader.Views.GetAsync(view.Id, lifetime.Token);
+        var position = ViewMovePosition(view.Id, 0) ?? 0;
+        IReadOnlyList<Routine> users = [];
         var result = await reader.Views.RemoveAsync(view.Id, detach: false, lifetime.Token);
         if (result.Kind == "in_use")
         {
-            var usage = (result.RoutineIds?.Length ?? 0) == 1
-                ? "A routine uses this view. Deleting the view will turn off that routine and remove its view selection."
-                : "Routines use this view. Deleting the view will turn them off and remove their view selection.";
-            var detach = CreateViewDialog("This view is used by routines", usage, "Delete view and turn off routines");
-            if (lifetime.IsCancellationRequested)
-            {
-                return;
-            }
-            if (await detach.ShowAsync() != ContentDialogResult.Primary || lifetime.IsCancellationRequested)
-            {
-                return;
-            }
+            var ids = result.RoutineIds ?? [];
+            users = [.. (await routines.ListAsync(lifetime.Token)).Where(routine => routine.Id is { } id && ids.Contains(id))];
             result = await reader.Views.RemoveAsync(view.Id, detach: true, lifetime.Token);
         }
 
@@ -192,7 +197,47 @@ public sealed partial class MainWindow
         {
             await LoadReaderAsync(refreshCatalog: true);
         }
+
+        OfferViewUndo(ViewUndo.Removed(removed.Name, users.Count), $"Fyke couldn’t restore “{removed.Name}”.",
+            () => ViewUndo.UndoRemoveAsync(reader.Views, routines, removed, position, users, lifetime.Token));
     });
+
+    private static bool SameView(SavedView a, SavedView b) => a.Name == b.Name && a.Sentence == b.Sentence;
+
+    /// <summary>Shows the notice for a view change, whose Undo (the button or Ctrl+Z) runs
+    /// <paramref name="undo"/> and opens the view it returns.</summary>
+    private void OfferViewUndo(string message, string failure, Func<Task<SavedView?>> undo, long? leaving = null)
+    {
+        ShowBulkNotice(message, offerUndo: true);
+        noticeUndo = async () =>
+        {
+            try
+            {
+                if (leaving is { } id && destination is { Scope: ReaderScope.View } open && open.Id == id)
+                {
+                    NavigateToDestination(catalog.First(row => row.Scope == ReaderScope.All), refreshCatalog: false);
+                }
+
+                var view = await undo();
+                if (view is not null)
+                {
+                    NavigateToDestination(new(ReaderScope.View, view.Id, view.Name, 0, 0, RuleSummary: view.Sentence), refreshCatalog: true);
+                }
+                else
+                {
+                    await LoadReaderAsync(refreshCatalog: true);
+                }
+            }
+            catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+            {
+            }
+            catch (Exception error) when (error is DaemonException or TimeoutException or JsonException or ArgumentException or RoutineConflictException)
+            {
+                ShowBulkNotice($"{failure} {ViewFailure(error)}");
+                await LoadReaderAsync(refreshCatalog: true);
+            }
+        };
+    }
 
     private async Task RunViewDialogAsync(Func<Task> action)
     {

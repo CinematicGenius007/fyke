@@ -882,12 +882,18 @@ try {
     } | Out-Null
 
     Invoke-PaletteResult 'Delete Renamed fixture view' 'Delete Renamed fixture view'
-    Invoke-ViewDialogButton 'Delete view'
-    # The routine uses the view, so deleting it asks to turn the routine off.
-    Invoke-ViewDialogButton 'Delete view and turn off routines'
+    # Deleting happens at once, with no dialog. The routine that uses the view is turned off,
+    # and Undo makes the view again and points the routine back at it.
     Wait-For 'All to reopen after deleting the active view' {
         $heading = Find-ById 'TimelineHeading'
-        if ($heading.Current.Name -eq 'All' -and !(Find-ByName $items 'Renamed fixture view')) { $true }
+        $notice = Find-ById 'BulkNoticeText'
+        if ($heading.Current.Name -eq 'All' -and !(Find-ByName $items 'Renamed fixture view') -and
+            $notice -and $notice.Current.Name -eq "Deleted $([char]0x201C)Renamed fixture view$([char]0x201D) and turned off the routine that used it.") { $true }
+    } | Out-Null
+    Invoke-Button 'BulkNoticeUndo'
+    Wait-For 'the deleted view to come back and open' {
+        $heading = Find-ById 'TimelineHeading'
+        if ($heading.Current.Name -eq 'Renamed fixture view' -and (Find-ByName $items 'Renamed fixture view')) { $true }
     } | Out-Null
 
     & $daemonPath status

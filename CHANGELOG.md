@@ -8,6 +8,7 @@ There are no releases yet. Everything below is built from source and is unreleas
 
 ### Added
 
+- Windows: creating, editing and deleting a saved view can be undone from the notice or with **Ctrl+Z**, as on macOS. Deleting no longer asks first; Undo also turns back on the routines the deletion turned off.
 - Windows: General has **Keep updating in the background**, as on macOS. It turns the daemon at sign-in on or off without reinstalling.
 - **`fyke --version`** prints the release number, which comes from the `VERSION` file.
 - **Windows (preview).** `fyke.exe` builds for Windows 10 1803 and later, and runs the daemon, the command line and `fyke mcp`, checked in continuous integration. `fyke tui` runs in the Windows console, and `fyke service install` starts the daemon at sign-in through the `Run` key. `fyke data move` works there too, through a pointer file in `%LOCALAPPDATA%\Fyke`. Releases are not signed, so SmartScreen warns the first time: choose More info, then Run anyway.

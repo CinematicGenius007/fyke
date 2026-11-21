@@ -103,7 +103,7 @@ The timeline search button and Ctrl+F open the search panel. It uses `entries.se
 
 Saved views appear below Starred in daemon order and also appear in the palette. Their timelines show the daemon's rule sentence and load articles through `entries.list` with `view_id`. An article stays open when a mark removes it from the timeline. The timeline edit button and the view's context menu reopen the rule. Updates use the last read revision through `views.put`. A stale revision leaves the latest rule in place and prompts the editor to reload it on close. View events refresh the sidebar and current timeline after changes from MCP or another window.
 
-Use a view's sidebar menu to reorder or delete it. Deletion asks for confirmation and, if the daemon reports linked routines, asks separately before disabling and detaching them. Undo for view creation, editing, and deletion is planned.
+Use a view's sidebar menu to reorder or delete it. Creating, editing and deleting a view happen at once, and the notice offers Undo (or **Ctrl+Z**), as on macOS. Deleting a view that routines use turns those routines off and detaches them, and the notice says how many. Undo makes the view again at its old place and points the routines that are still detached back at it, turned on. A routine changed elsewhere in the meantime is left as it is. The logic lives in `ViewUndo` in Fyke.ViewModels and is covered by `ViewUndoTests`.
 
 ## Today and briefs
 
