@@ -89,6 +89,17 @@
                                       MinWidth="0" OnContent="" OffContent="" AutomationProperties.Name="Fetch full articles"
                                       AutomationProperties.AutomationId="FullTextToggle" />
                     </Grid>
+                    <Border Height="1" Background="{ThemeResource HairlineBrush}" />
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <StackPanel Spacing="4" VerticalAlignment="Center">
+                            <TextBlock Text="Keep updating in the background" Style="{StaticResource SettingsLabel}" />
+                            <TextBlock Text="Starts when you sign in, even with this window closed." Style="{StaticResource SettingsDetail}" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1" x:Name="BackgroundToggle" x:FieldModifier="internal" IsEnabled="False"
+                                      MinWidth="0" OnContent="" OffContent="" AutomationProperties.Name="Keep updating in the background"
+                                      AutomationProperties.AutomationId="BackgroundToggle" />
+                    </Grid>
                 </StackPanel>
                 <StackPanel Spacing="8">
                     <TextBlock Text="Privacy" Style="{StaticResource SettingsTitle}" AutomationProperties.HeadingLevel="Level2" />

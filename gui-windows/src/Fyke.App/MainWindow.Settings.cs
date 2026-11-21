@@ -66,6 +66,7 @@ public sealed partial class MainWindow
         InitializeAppearance();
         InitializeWriters();
         InitializeStorage();
+        InitializeBackgroundUpdates();
         SettingsPane.SettingsTabs.SelectionChanged += SettingsTabChanged;
         SettingsPane.SettingsTabs.SelectedItem = SettingsPane.GeneralSettingsTab;
 
@@ -138,6 +139,7 @@ public sealed partial class MainWindow
             TimelinePane.Visibility = TimelineDivider.Visibility = ArticlePane.Visibility = Visibility.Collapsed;
             SettingsPane.Visibility = Visibility.Visible;
             _ = ReadSettingsAsync();
+            _ = ReadBackgroundUpdatesAsync();
             if (SettingsPane.SettingsTabs.SelectedItem == SettingsPane.AgentsSettingsTab)
             {
                 _ = LoadWritersAsync();
@@ -161,6 +163,7 @@ public sealed partial class MainWindow
         }
 
         _ = ReadSettingsAsync();
+        _ = ReadBackgroundUpdatesAsync();
         if (SettingsPane.SettingsTabs.SelectedItem == SettingsPane.AgentsSettingsTab)
         {
             _ = LoadWritersAsync();
