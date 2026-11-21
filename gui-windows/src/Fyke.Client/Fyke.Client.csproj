@@ -1,9 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <!-- Trimming and AOT analyzers: the app is published trimmed, so reflection here is a build error. -->
-    <IsAotCompatible>true</IsAotCompatible>
-    <RootNamespace>Fyke.Client</RootNamespace>
-    <AssemblyName>Fyke.Client</AssemblyName>
-  </PropertyGroup>
-</Project>

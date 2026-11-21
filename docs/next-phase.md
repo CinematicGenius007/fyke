@@ -171,7 +171,7 @@ Keep the Zig daemon and protocol. UI language changes do not require a core rewr
 | Direction | Proposed stack | Benefit and cost |
 |---|---|---|
 | Native Linux | Rust + GTK4/libadwaita | Fits the GTK/GNOME ecosystem; adds Rust and a separate client. Test outside GNOME before calling it a general Linux desktop release |
-| Native Windows | C# + WinUI 3 | Fits the Windows App SDK and desktop controls; adds .NET/XAML and Windows-specific build and packaging work |
+| Native Windows | C# + WinUI 3 | Built, then removed: Windows-only builds and a 76 MB app. Superseded by one Tauri 2 app for Windows and Linux ([ADR 0004](decisions/0004-desktop-tauri.md)) |
 | Shared Linux/Windows alternative | C# + Avalonia | Shares more presentation code; changes the roadmap's native-toolkit direction and still needs platform integration testing |
 
 These are recommendations, not measured winners. GTK documents [language bindings](https://www.gtk.org/docs/language-bindings/) including [Rust](https://www.gtk.org/docs/language-bindings/rust/); GNOME describes [GTK/libadwaita application development](https://developer.gnome.org/documentation/tutorials/beginners.html). Microsoft recommends [WinUI 3 for new Windows applications](https://learn.microsoft.com/en-us/windows/apps/). Avalonia documents [Windows, Linux, and macOS support](https://docs.avaloniaui.net/docs/supported-platforms). Verify current target-version and distribution requirements when implementing.
