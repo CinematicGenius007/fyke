@@ -25,6 +25,7 @@ const win = struct {
     extern "kernel32" fn AssignProcessToJobObject(job: windows.HANDLE, process: windows.HANDLE) callconv(.winapi) windows.BOOL;
     extern "kernel32" fn TerminateJobObject(job: windows.HANDLE, exit_code: windows.UINT) callconv(.winapi) windows.BOOL;
     extern "kernel32" fn ResumeThread(thread: windows.HANDLE) callconv(.winapi) windows.DWORD;
+    extern "kernel32" fn FreeConsole() callconv(.winapi) windows.BOOL;
     /// JobObjectExtendedLimitInformation.
     const extended_limit_information: c_int = 9;
     /// JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE.
@@ -82,6 +83,14 @@ pub fn keepStdHandlesFromChildren() void {
         _ = win.SetHandleInformation(h, win.handle_flag_inherit, 0);
     }
 }
+/// Lets go of the console this process was started with. A program started from the
+/// `Run` key at sign-in gets a console window of its own; a background process lets it
+/// go at once so the window closes.
+pub fn leaveConsole() void {
+    if (comptime !is_windows) return;
+    _ = win.FreeConsole();
+}
+
 /// A child and every process it starts, ended together. A writer is often a wrapper
 /// (`cmd /c`, an npm `.cmd` shim) around the program that does the work, and that
 /// program holds the output pipes. Ending only the wrapper would leave it running

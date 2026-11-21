@@ -151,11 +151,13 @@ pub const ConfigSet = struct {
         full_text: ?bool = null,
         remove_read_after_days: ?i64 = null,
         ui: ?std.json.Value = null,
+        ui_patch: ?std.json.Value = null,
         ai: ?std.json.Value = null,
     };
     pub const Result = Ok;
 
     pub fn run(s: *Service, arena: std.mem.Allocator, p: Params) !Result {
+        if (p.ui != null and p.ui_patch != null) return error.InvalidConfig;
         try save(s, arena, p);
         if (p.full_text) |enabled| {
             s.full_text.store(enabled, .monotonic);
@@ -196,6 +198,14 @@ pub const ConfigSet = struct {
         try root.object.put(arena, "ai", ai);
     }
 
+    fn mergeUiField(arena: std.mem.Allocator, current: ?std.json.Value, patch: std.json.Value) !std.json.Value {
+        var field = current orelse return patch;
+        if (field != .object or patch != .object) return patch;
+        var keys = patch.object.iterator();
+        while (keys.next()) |entry| try field.object.put(arena, entry.key_ptr.*, entry.value_ptr.*);
+        return field;
+    }
+
     /// Other keys in the file are the owner's, so they survive untouched. A file that
     /// does not parse is refused rather than replaced, because it holds an edit.
     fn save(s: *Service, arena: std.mem.Allocator, p: Params) !void {
@@ -211,6 +221,18 @@ pub const ConfigSet = struct {
         if (p.full_text) |enabled| try root.object.put(arena, "full_text", .{ .bool = enabled });
         if (p.remove_read_after_days) |days| try root.object.put(arena, "remove_read_after_days", .{ .integer = days });
         if (p.ui) |ui| try root.object.put(arena, "ui", ui);
+        if (p.ui_patch) |changes| {
+            if (changes != .object) return error.InvalidConfig;
+            var ui = root.object.get("ui") orelse std.json.Value{ .object = .empty };
+            if (ui != .object) return error.InvalidConfig;
+            var keys = changes.object.iterator();
+            while (keys.next()) |entry| {
+                const key = entry.key_ptr.*;
+                const value = try mergeUiField(arena, ui.object.get(key), entry.value_ptr.*);
+                try ui.object.put(arena, key, value);
+            }
+            try root.object.put(arena, "ui", ui);
+        }
         if (p.ai) |changes| try mergeAi(s, arena, &root, changes);
         const out = try std.fmt.allocPrint(arena, "{f}\n", .{std.json.fmt(root, .{ .whitespace = .indent_2 })});
         try s.home.writeFile(s.io, .{ .sub_path = "config.json.tmp", .data = out });

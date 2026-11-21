@@ -71,6 +71,8 @@ Planned: `entries.tag`, to add or remove tags recorded with their source. `notes
 
 Built: `feeds.add`, `feeds.preview`, `feeds.update`, `feeds.remove`, `feeds.refresh`, `feeds.refresh_all`, `feeds.queue`, `folders.add`, `folders.rename`, `folders.move`, `folders.remove`, `config.set`, `storage.free`, `opml.import`, `daemon.stop`, `daemon.housekeep`.
 
+`config.set` accepts `ui` to replace the interface settings or `ui_patch` to update named fields under `ui`. A patch preserves omitted fields under the daemon's config lock. When the existing field and its patch are both objects, the daemon updates the named keys one level inside that field. Each supplied key at that level replaces its previous value. A `weights` patch can therefore change one font role while preserving the other roles. Send one form per request. A malformed configuration file remains on disk for repair.
+
 `folders.remove` hands a folder's subfolders and feeds to its parent. With `delete_contents` it deletes them, with their entries. `storage.free` trims articles read long ago, drops all but the newest copy of each feed, and compacts the database.
 
 Planned: `lenses.put`, `lenses.run`, `runners.put`.
@@ -112,7 +114,7 @@ Errors use JSON-RPC error objects with stable numeric codes and a `data.kind` st
 
 Requests are limited to 1 MiB per line. A longer one closes that connection.
 
-`events.subscribe` takes `since_seq` and turns the connection into a one-way stream, so a client keeps a second connection for requests. After a reconnect, it resumes from its last sequence number.
+`events.subscribe` takes `since_seq` and turns the connection into a one-way stream, so a client keeps a second connection for requests. After a reconnect, it resumes from its last sequence number. A client that posts routine notifications itself, as the GUIs do, also sends `notifies: true`. When a `routine.notify` event reaches no such client within two seconds, the daemon starts the app installed with it to post one: the bundle that holds it on macOS (`open -g -j … --args --notify`), `Fyke.App.exe --notify` beside it on Windows. Events less than ten seconds apart post once. A daemon with no app beside it posts nothing, and `FYKE_HEADLESS` turns this off. `FYKE_NOTIFIER` names another program to run with `--notify`, for tests.
 
 `connection.restrict` takes a `tier` and lowers this connection for good. New connections start at `manage`, since anything that can open the socket already owns the data. `fyke mcp` restricts itself before accepting any agent request.
 
@@ -142,7 +144,7 @@ fyke service uninstall
 fyke service status
 ```
 
-Clients start the daemon when none is running, and give up on a daemon that does not answer within 120 s. `fyke service install` runs it from login, replacing any daemon already running: a launch agent on macOS, a `systemd` user unit (`fyke.service`) on Linux. Either restarts it after a crash and not after a clean `fyke daemon stop`, which returns once the daemon has exited. On Linux the unit starts with the first login session, and starting at boot needs `loginctl enable-linger`, which `fyke` does not run for you. Other systems report `Unsupported`. Planned: `fyke digest`.
+Clients start the daemon when none is running, and give up on a daemon that does not answer within 120 s. `fyke service install` runs it from login, replacing any daemon already running: a launch agent on macOS, a `systemd` user unit (`fyke.service`) on Linux, and on Windows a `Run` key value that starts `fyke daemon --supervise`. Each restarts it after a crash and not after a clean `fyke daemon stop`, which returns once the daemon has exited. On Linux the unit starts with the first login session, and starting at boot needs `loginctl enable-linger`, which `fyke` does not run for you. Other systems report `Unsupported`. Planned: `fyke digest`.
 
 ## MCP server
 

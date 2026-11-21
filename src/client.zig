@@ -107,14 +107,29 @@ pub const Connector = struct {
     environ: *const std.process.Environ.Map,
     home_path: []const u8,
 
+    /// How a connection that finds nothing listening starts the daemon.
+    pub const Start = enum {
+        /// It does not, and fails with `error.DaemonNotRunning`.
+        none,
+        /// It starts the daemon itself, as every client does.
+        daemon,
+        /// It starts `fyke daemon --supervise`, which starts the daemon again after a
+        /// crash (`supervise.zig`). Only `fyke service install` on Windows asks for this.
+        supervised,
+    };
+
     /// Connects, starting the daemon if nothing is listening and `autostart` is set.
     pub fn connect(k: Connector, client: *Client, autostart: bool) !void {
+        return k.connectStarting(client, if (autostart) .daemon else .none);
+    }
+
+    pub fn connectStarting(k: Connector, client: *Client, start: Start) !void {
         const path = try std.fmt.allocPrint(k.arena, "{s}/{s}", .{ k.home_path, daemon.socket_name });
         const address = try Io.net.UnixAddress.init(path);
 
         const stream = address.connect(k.io) catch stream: {
-            if (!autostart) return error.DaemonNotRunning;
-            try k.startDaemon();
+            if (start == .none) return error.DaemonNotRunning;
+            try k.startDaemon(start == .supervised);
             var attempts: usize = 0;
             while (true) : (attempts += 1) {
                 break :stream address.connect(k.io) catch |err| {
@@ -129,7 +144,7 @@ pub const Connector = struct {
         client.writer = stream.writer(k.io, &client.out_buffer);
     }
 
-    fn startDaemon(k: Connector) !void {
+    fn startDaemon(k: Connector, supervised: bool) !void {
         try data_home.ensure(k.io, k.home_path);
 
         const self = try std.process.executablePathAlloc(k.io, k.arena);
@@ -138,12 +153,35 @@ pub const Connector = struct {
         // receive the Ctrl+C meant for this client.
         platform.keepStdHandlesFromChildren();
         _ = try std.process.spawn(k.io, .{
-            .argv = &.{ self, "daemon", "--log" },
+            .argv = if (supervised)
+                &.{ self, "daemon", "--supervise", "--log", "--home", k.home_path }
+            else
+                &.{ self, "daemon", "--log" },
             .environ_map = k.environ,
             .stdin = .ignore,
             .stdout = .ignore,
             .stderr = .ignore,
             .pgid = if (platform.is_windows) null else 0,
         });
+    }
+
+    /// Returns once the daemon has exited, so that what runs next starts a new one
+    /// instead of reaching the one that is shutting down. The daemon's lock is the proof:
+    /// the kernel releases it only when the process ends.
+    pub fn waitForExit(k: Connector) !void {
+        const path = try std.fmt.allocPrint(k.arena, "{s}/{s}", .{ k.home_path, daemon.lock_name });
+        const lock_file = Io.Dir.cwd().openFile(k.io, path, .{ .mode = .read_write }) catch |err| switch (err) {
+            error.FileNotFound => return,
+            else => return err,
+        };
+        defer lock_file.close(k.io);
+        for (0..1000) |_| {
+            if (try lock_file.tryLock(k.io, .exclusive)) {
+                lock_file.unlock(k.io);
+                return;
+            }
+            try k.io.sleep(.fromMilliseconds(10), .awake);
+        }
+        return error.DaemonStillRunning;
     }
 };

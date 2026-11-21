@@ -81,13 +81,15 @@ final class CommandModel {
             Command(id: "do.refresh", group: .act, title: "Refresh feeds", symbol: "arrow.clockwise", shortcut: "R") { model.refresh() },
             Command(id: "do.add", group: .act, title: "Add feed", symbol: "plus", shortcut: "⌘N") { model.showingAddFeed = true },
             Command(id: "do.folder", group: .act, title: "New folder", symbol: "folder.badge.plus") { model.newFolder(in: nil) },
-            Command(id: "do.markall", group: .act, title: "Mark all read in \(model.placeTitle)", symbol: "checkmark.circle") { markAll(model) },
             Command(id: "do.activity", group: .act, title: "Show activity", symbol: "waveform.path.ecg") { model.showingActivity = true },
             Command(id: "do.unread", group: .act, title: model.unreadOnly ? "Show all articles" : "Show unread only", symbol: "circle", shortcut: "U") { model.toggleUnreadOnly() },
             Command(id: "do.shortcuts", group: .act, title: "Keyboard shortcuts", symbol: "keyboard", shortcut: "?") { model.showingShortcuts = true },
             Command(id: "do.settings", group: .act, title: "Settings", symbol: "gearshape", shortcut: "⌘,") { model.openSettings() },
             Command(id: "do.agents", group: .act, title: "Settings · Agents", symbol: "gearshape") { model.openSettings(.Agents) },
         ]
+        if model.canMarkAllHere {
+            out.append(Command(id: "do.markall", group: .act, title: "Mark all read in \(model.placeTitle)", symbol: "checkmark.circle") { model.markAllHere() })
+        }
         if model.undo.canUndo {
             out.append(Command(id: "do.undo", group: .act, title: "Undo: \(model.undo.stack.last?.message ?? "")", symbol: "arrow.uturn.backward", shortcut: "⌘Z") { model.undo.undoLast() })
         }
@@ -103,15 +105,6 @@ final class CommandModel {
             })
         }
         return out
-    }
-
-    private static func markAll(_ model: AppModel) {
-        switch model.place {
-        case .feed(let id): model.markAllRead(feed: id)
-        case .folder(let id): model.markAllRead(folder: id)
-        case .view(let id): model.markAllRead(view: id)
-        default: model.markAllRead()
-        }
     }
 }
 

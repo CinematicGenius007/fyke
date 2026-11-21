@@ -8,8 +8,11 @@ There are no releases yet. Everything below is built from source and is unreleas
 
 ### Added
 
+- Windows: creating, editing and deleting a saved view can be undone from the notice or with **Ctrl+Z**, as on macOS. Deleting no longer asks first; Undo also turns back on the routines the deletion turned off.
+- Windows: General has **Keep updating in the background**, as on macOS. It turns the daemon at sign-in on or off without reinstalling.
 - **`fyke --version`** prints the release number, which comes from the `VERSION` file.
 - **Windows (preview).** `fyke.exe` builds for Windows 10 1803 and later, and runs the daemon, the command line and `fyke mcp`, checked in continuous integration. `fyke tui` runs in the Windows console, and `fyke service install` starts the daemon at sign-in through the `Run` key. `fyke data move` works there too, through a pointer file in `%LOCALAPPDATA%\Fyke`. Releases are not signed, so SmartScreen warns the first time: choose More info, then Run anyway.
+- **Windows installer.** `Fyke-<version>-setup-x64.exe` installs the Windows app and `fyke` for the current user, with no administrator prompt. It adds Fyke to the Start menu, can put `fyke` on PATH and keep feeds up to date from sign-in, and upgrades in place. Uninstalling keeps your feeds and articles.
 - **Linux.** `fyke`, `fyke tui` and `fyke mcp` build for Linux. `fyke service install` writes a `systemd` user unit, `fyke.service`, that starts the daemon at login and restarts it after a crash.
 - **Daemon.** One background process owns the database, polls feeds in the background and serves every client over a local socket. It starts on demand, and `fyke service install` runs it from login as a `launchd` agent (macOS) or a `systemd` user unit (Linux).
 - **Feeds.** RSS 0.90, 0.91, 1.0 and 2.0, Atom 1.0 and JSON Feed 1.0 and 1.1. Conditional requests send validators and accept `304`. Redirects, `410`, `Retry-After`, compressed bodies, feed discovery from a page address, and OPML import and export are handled. Private addresses are refused.
@@ -36,3 +39,11 @@ There are no releases yet. Everything below is built from source and is unreleas
 - Full-article extraction no longer garbles pages and scans less of each one.
 - The daemon replies before exiting when told to stop.
 - A broken `config.json` is kept safe instead of being overwritten.
+- macOS: a brief's sources note says "2 more read but not cited", not "2 mores".
+- macOS: Mark All Read is not offered in Starred, Today or Routines, as on Windows. In Starred it used to mark every feed.
+- A writer that is not installed is "Not found on this PC" on Windows and "Not found on this computer" on Linux, not "on this Mac". On Windows, a writer whose version check failed says so instead of "Not found".
+- Windows: resetting a recipe to its built-in text can be undone from the notice, as on macOS.
+- Windows: themes that read in Source Serif 4 show it, instead of Newsreader. Italic text in articles uses the typeface's real italic instead of a slanted upright. The app is 2 MB larger on disk for Source Serif 4.
+- Windows: an upgrade or uninstall closes only the Fyke it installed. It used to close every `Fyke.App.exe` you had open, a build being tested included.
+- Windows: the Claude Code profile picker opens in the home folder, as on macOS. The app now uses Windows App SDK 2.6, whose folder picker can suggest a start folder; the app is 5.6 MB larger on disk for it.
+- macOS: renaming a folder, feed or view in the sidebar saves on Return. Before, the reader's shortcuts took Return, Esc and letters such as j or n away from the name field, so nothing was saved.

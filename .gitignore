@@ -4,3 +4,4 @@ corpus/
 .build/
 .venv/
 dist/
+__pycache__/

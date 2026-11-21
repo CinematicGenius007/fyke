@@ -7,6 +7,7 @@ struct ReaderApp: App {
     @State private var model = AppModel()
 
     init() {
+        Notifier.postAndQuitIfAsked()
         Fonts.registerBundled()
     }
 
@@ -57,7 +58,8 @@ struct ReaderApp: App {
                 }
                 .disabled(model.library.recipes.isEmpty)
                 Divider()
-                Button("Mark All Read") { Self.markAll(model) }.keyboardShortcut("k", modifiers: [.command, .shift])
+                Button("Mark All Read") { model.markAllHere() }.keyboardShortcut("k", modifiers: [.command, .shift])
+                    .disabled(!model.canMarkAllHere)
             }
             CommandGroup(replacing: .help) {
                 Button("Keyboard Shortcuts") { model.showingShortcuts = true }
@@ -76,15 +78,6 @@ extension ReaderApp {
             catchUp.undo()
         } else {
             model.undo.undoLast()
-        }
-    }
-
-    @MainActor static func markAll(_ model: AppModel) {
-        switch model.place {
-        case .feed(let id): model.markAllRead(feed: id)
-        case .folder(let id): model.markAllRead(folder: id)
-        case .view(let id): model.markAllRead(view: id)
-        default: model.markAllRead()
         }
     }
 }

@@ -139,7 +139,7 @@ if os.name != "nt":
   check("data directory is owner-only", stat.S_IMODE(os.stat(home).st_mode) == 0o700, oct(os.stat(home).st_mode))
   check("socket is owner-only", stat.S_IMODE(os.stat(home + "/fyked.sock").st_mode) == 0o600)
 p = subprocess.run([RSS, "daemon"], env=env, capture_output=True, text=True, timeout=10)
-check("a second daemon refuses to start", p.returncode == 1 and "AlreadyRunning" in p.stderr, p.stderr)
+check("a second daemon refuses to start", p.returncode == 3 and "AlreadyRunning" in p.stderr, p.stderr)
 check("first daemon survives that", rss("status").returncode == 0)
 
 # Protocol
@@ -338,7 +338,7 @@ opml = f"""<opml version="2.0"><body>
 <outline text="Tech"><outline text="Zig"><outline text="A &amp; B" xmlUrl="{base}/a?x=1&amp;y=2" htmlUrl="{base}/"/></outline>
 <outline text="Two" xmlUrl="{base}/b"/></outline>
 <outline text="Top" xmlUrl="{base}/c"/><outline text="Bad" xmlUrl="ftp://example.com/x"/></body></opml>"""
-path = home + "/in.opml"
+path = os.path.join(home, "Abonnements à lire.opml")
 open(path, "w").write(opml)
 out = rss("import", path, "--allow-private").stdout
 check("import adds feeds", "3 added, 0 already" in out, out)
@@ -472,8 +472,13 @@ check("the retry fetches the article", wait_for(lambda: full_row("Flaky")[0] == 
 check("a 404 is final", wait_for(lambda: full_row("Gone")[0] == "failed", 15), full_row("Gone"))
 check("and is not tried again", flaky["hits"]["/gone"] == 1, flaky["hits"])
 
-dead = socket.socket(); dead.bind(("127.0.0.1", 0)); dead_port = dead.getsockname()[1]; dead.close()
-outage_items = "".join(f"<item><title>Dead {i}</title><guid>d{i}</guid><link>http://127.0.0.1:{dead_port + i}/a</link><description>Short.</description></item>" for i in range(6))
+# Let the OS choose six distinct unused ports. Release them before connecting:
+# a bound socket that has not called listen can time out instead of refusing.
+dead_sockets = [socket.socket() for _ in range(6)]
+for dead in dead_sockets:
+    dead.bind(("127.0.0.1", 0))
+dead_ports = [dead.getsockname()[1] for dead in dead_sockets]
+outage_items = "".join(f'<item><title>Dead {i}</title><guid>d{i}</guid><link>http://127.0.0.1:{port}/a</link><description>Short.</description></item>' for i, port in enumerate(dead_ports))
 class Outage(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def do_GET(self):
@@ -481,6 +486,8 @@ class Outage(http.server.BaseHTTPRequestHandler):
         self.send_response(200); self.send_header("Content-Type", "application/rss+xml"); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
 outage_server = Server(("127.0.0.1", 0), Outage)
 threading.Thread(target=outage_server.serve_forever, daemon=True).start()
+for dead in dead_sockets:
+    dead.close()
 rss("add", f"http://127.0.0.1:{outage_server.server_address[1]}/feed.xml", "--allow-private")
 time.sleep(8)
 rows = json.loads(rss("query", "SELECT full_status, full_attempts FROM entries WHERE title LIKE 'Dead %'").stdout)["rows"]
@@ -556,6 +563,15 @@ check("config.set keeps the ui object", "result" in op("config.set", ui={"theme"
 saved = json.load(open(ops_home + "/config.json"))
 check("and the owner's own keys", saved["owner_key"] == 7 and saved["ui"]["theme"] == "dark", saved)
 check("config.get returns it", op("config.get")["result"]["ui"]["tokens"]["light"]["ground"] == "#000000")
+check("a UI patch is accepted", "result" in op("config.set", ui_patch={"loadImages": True}))
+got = op("config.get")["result"]["ui"]
+check("a UI patch preserves other settings", got == dict(saved["ui"], loadImages=True), got)
+check("a patch and replacement cannot be combined", "error" in op("config.set", ui={}, ui_patch={"loadImages": False}))
+check("an invalid patch changes no settings", "error" in op("config.set", ui_patch=[]) and op("config.get")["result"]["ui"] == got)
+check("a UI patch accepts a font weight object", "result" in op("config.set", ui_patch={"weights": {"reading": 1, "title": -1}}))
+check("a UI patch accepts a single font weight", "result" in op("config.set", ui_patch={"weights": {"reading": 2}}))
+weights = op("config.get")["result"]["ui"]
+check("a weight update preserves other roles and settings", weights == dict(got, weights={"reading": 2, "title": -1}), weights)
 text = open(ops_home + "/config.json").read().replace('"dark"', '"terminal"').replace('"full_text"', '"x"')
 open(ops_home + "/config.json", "w").write(text.rstrip()[:-1] + ',"full_text": false,"remove_read_after_days": 60}')
 got = op("config.get")["result"]

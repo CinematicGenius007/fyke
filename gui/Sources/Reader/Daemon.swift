@@ -247,7 +247,8 @@ final class Daemon: @unchecked Sendable {
         AsyncStream { continuation in
             let thread = Thread { [self] in
                 var seq = since
-                struct Subscribe: Encodable { let sinceSeq: Int64 }
+                // The app posts routine notifications itself, so the daemon leaves them to it.
+                struct Subscribe: Encodable { let sinceSeq: Int64; let notifies = true }
                 while !Thread.current.isCancelled {
                     do {
                         // The stream is quiet when nothing happens, so no read timeout.

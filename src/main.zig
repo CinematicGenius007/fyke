@@ -12,6 +12,7 @@ const mcp = @import("mcp.zig");
 const platform = @import("platform.zig");
 const ops = @import("ops.zig");
 const tui = @import("tui.zig");
+const supervise = @import("supervise.zig");
 
 const Io = std.Io;
 const Client = client_module.Client;
@@ -95,6 +96,7 @@ const App = struct {
     arena: std.mem.Allocator,
     io: Io,
     client: *Client,
+    connector: client_module.Connector,
     out: *Io.Writer,
     home_path: []const u8,
 
@@ -143,6 +145,13 @@ pub fn main(init: std.process.Init) !u8 {
         try homeDirectory(arena, io, init.environ_map);
 
     if (std.mem.eql(u8, command, "daemon") and args.positional() == null) {
+        if (args.has("--supervise")) {
+            supervise.run(io, arena, home_path, args.has("--log")) catch |err| {
+                std.debug.print("fyke: daemon: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+            return 0;
+        }
         daemon.run(
             init.gpa,
             io,
@@ -154,7 +163,8 @@ pub fn main(init: std.process.Init) !u8 {
             },
         ) catch |err| {
             std.debug.print("fyke: daemon: {s}\n", .{@errorName(err)});
-            return 1;
+            // A supervisor reads this as "another daemon owns the folder" and stops.
+            return if (err == error.AlreadyRunning) supervise.exit_already_running else 1;
         };
         return 0;
     }
@@ -212,7 +222,7 @@ pub fn main(init: std.process.Init) !u8 {
             std.debug.print("fyke: cannot reach the daemon: {s}\n", .{@errorName(err)});
             return 1;
         };
-        const app: App = .{ .arena = arena, .io = io, .client = &client, .out = out, .home_path = home_path };
+        const app: App = .{ .arena = arena, .io = io, .client = &client, .connector = connector, .out = out, .home_path = home_path };
         entry[1](app, args) catch |err| switch (err) {
             error.Usage => {
                 try out.writeAll(usage);
@@ -434,31 +444,13 @@ fn daemonCommand(app: App, args: Args) !void {
     const action = args.positional() orelse return error.Usage;
     if (!std.mem.eql(u8, action, "stop")) return error.Usage;
     _ = try app.client.call(ops.DaemonStop, .{});
-    try waitForDaemonExit(app);
-}
-
-/// Returns once the daemon has exited, so that a command run next starts a new one
-/// instead of reaching the one that is shutting down. The daemon's lock is the proof:
-/// the kernel releases it only when the process ends.
-fn waitForDaemonExit(app: App) !void {
-    const path = try std.fmt.allocPrint(app.arena, "{s}/{s}", .{ app.home_path, daemon.lock_name });
-    const lock_file = Io.Dir.cwd().openFile(app.io, path, .{ .mode = .read_write }) catch |err| switch (err) {
-        error.FileNotFound => return,
-        else => return err,
-    };
-    defer lock_file.close(app.io);
-    for (0..1000) |_| {
-        if (try lock_file.tryLock(app.io, .exclusive)) {
-            lock_file.unlock(app.io);
-            return;
-        }
-        try app.io.sleep(.fromMilliseconds(10), .awake);
-    }
-    return error.DaemonStillRunning;
+    try app.connector.waitForExit();
 }
 
 test {
     _ = autostart;
+    _ = supervise;
+    _ = @import("notify.zig");
     _ = @import("launchd.zig");
     _ = @import("systemd.zig");
     _ = data_move;

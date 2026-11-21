@@ -5,6 +5,7 @@ const std = @import("std");
 const fetch = @import("fetch.zig");
 const ops = @import("ops.zig");
 const data_home = @import("data_home.zig");
+const notify = @import("notify.zig");
 const platform = @import("platform.zig");
 const service = @import("service.zig");
 const store = @import("store.zig");
@@ -233,13 +234,16 @@ fn writeError(out: *Io.Writer, id: std.json.Value, code: i32, kind: []const u8) 
 
 /// Turns this connection into a one-way stream of events, starting after
 /// `since_seq`. Clients use a second connection for requests, and reconnect from
-/// their last seen sequence number, so they miss nothing.
+/// their last seen sequence number, so they miss nothing. A client that sets
+/// `notifies` posts routine notifications itself, so the daemon does not (`notify.zig`).
 fn subscribe(s: *Service, out: *Io.Writer, id: std.json.Value, params: std.json.Value) !void {
     var seq: i64 = 0;
+    var notifies = false;
     if (params == .object) {
         if (params.object.get("since_seq")) |value| {
             if (value == .integer) seq = value.integer;
         }
+        if (params.object.get("notifies")) |value| notifies = value == .bool and value.bool;
     }
     try out.print("{{\"jsonrpc\":\"2.0\",\"id\":{f},\"result\":{{\"subscribed\":true}}}}\n", .{std.json.fmt(id, .{})});
     try out.flush();
@@ -255,12 +259,16 @@ fn subscribe(s: *Service, out: *Io.Writer, id: std.json.Value, params: std.json.
         };
         s.unlockReader();
 
+        var notify_seq: i64 = 0;
         for (events) |event| {
             try out.print("{{\"jsonrpc\":\"2.0\",\"method\":\"event\",\"params\":{f}}}\n", .{std.json.fmt(event, .{})});
             seq = event.seq;
+            if (notifies and std.mem.eql(u8, event.type, notify.event_type)) notify_seq = event.seq;
         }
         if (events.len != 0) {
+            // A client that has gone fails this write, so only a live one takes the event.
             try out.flush();
+            if (notify_seq != 0) notify.delivered(s, notify_seq);
             continue;
         }
         s.events_lock.lockUncancelable(s.io);

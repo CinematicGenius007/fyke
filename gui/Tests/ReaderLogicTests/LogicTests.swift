@@ -10,22 +10,23 @@ import Testing
         #expect(SidebarIndent.leading(depth: 3) == 76)
     }
 
-    @Test func childTextLinesUpWithParentText() {
+    @Test func aChildStartsOneStepInsideItsParent() {
         for depth in 0..<5 {
             let folderText = SidebarIndent.textStart(depth: depth, hasIcon: true)
             let feedText = SidebarIndent.textStart(depth: SidebarIndent.feedDepth(folderDepth: depth), hasIcon: false)
             let childFolderChevron = SidebarIndent.leading(depth: depth + 1)
-            #expect(feedText == folderText)
+            let childFolderText = SidebarIndent.textStart(depth: depth + 1, hasIcon: true)
+            #expect(feedText == folderText + SidebarIndent.step)
             #expect(childFolderChevron == folderText)
+            #expect(childFolderText == feedText)
         }
     }
 
     @Test func siblingsShareOneIndent() {
-        // A feed and a folder side by side in one folder: the feed's name and the
-        // folder's chevron start at the same x.
+        // A feed and a folder side by side in one folder: their names start at the same x.
         let parent = 1
         let feed = SidebarIndent.textStart(depth: SidebarIndent.feedDepth(folderDepth: parent), hasIcon: false)
-        let folder = SidebarIndent.leading(depth: parent + 1)
+        let folder = SidebarIndent.textStart(depth: parent + 1, hasIcon: true)
         #expect(feed == folder)
     }
 
@@ -168,5 +169,22 @@ import Testing
         #expect(DryRunWords.summary(counts: [10, 4, 12, 7, 5, 0, 0]) == "Would have caught 38 articles over 5 days, about 8 each.")
         #expect(DryRunWords.summary(counts: [0, 0]) == "Nothing would have matched last week.")
         #expect(DryRunWords.bars([0, 1, 100]) == [0, 0.12, 1])
+    }
+}
+
+@Suite struct SourcesNoteTests {
+    @Test func readButNotCitedSaysMoreOnce() {
+        #expect(SourcesNote.text(omitted: 0, read: 4, cited: 2) == "2 more read but not cited")
+        #expect(SourcesNote.text(omitted: 0, read: 3, cited: 2) == "1 more read but not cited")
+    }
+
+    @Test func whatDidNotFitComesFirst() {
+        #expect(SourcesNote.text(omitted: 409, read: 16, cited: 3) == "409 more articles matched but did not fit, so the writer did not read them.")
+        #expect(SourcesNote.text(omitted: 1, read: 2, cited: 2) == "1 more article matched but did not fit, so the writer did not read them.")
+    }
+
+    @Test func nothingWhenEveryReadArticleIsCited() {
+        #expect(SourcesNote.text(omitted: 0, read: 2, cited: 2) == nil)
+        #expect(SourcesNote.text(omitted: 0, read: 0, cited: 2) == nil)
     }
 }

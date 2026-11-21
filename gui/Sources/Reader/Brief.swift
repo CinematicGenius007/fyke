@@ -197,12 +197,8 @@ struct SourceList: View {
             ForEach(artifact.citations) { citation in
                 SourceRow(citation: citation) { open(citation.entryId) }
             }
-            if artifact.omittedCount > 0 {
-                Text("\(Plural.count(Int(artifact.omittedCount), "more article")) matched but did not fit, so the writer did not read them.")
-                    .font(.ui(13)).foregroundStyle(p.muted).padding(.top, 8).padding(.leading, 28)
-            } else if artifact.inputCount > Int64(artifact.citations.count) {
-                Text("\(Plural.count(Int(artifact.inputCount) - artifact.citations.count, "more")) read but not cited")
-                    .font(.ui(13)).foregroundStyle(p.muted).padding(.top, 8).padding(.leading, 28)
+            if let note = SourcesNote.text(omitted: Int(artifact.omittedCount), read: Int(artifact.inputCount), cited: artifact.citations.count) {
+                Text(note).font(.ui(13)).foregroundStyle(p.muted).padding(.top, 8).padding(.leading, 28)
             }
         }
     }

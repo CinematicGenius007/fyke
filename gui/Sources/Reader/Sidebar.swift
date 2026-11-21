@@ -34,7 +34,7 @@ struct Sidebar: View {
     @State private var dropTarget = false
 
     /// Folders first, then feeds, at each level. A closed folder hides what it holds.
-    /// A feed sits one level below its folder, so its name lines up with the folder's.
+    /// A feed's name starts one step inside its folder's name, level with a sibling folder's.
     private func rows(parent: Int64? = nil, depth: Int = 0) -> [TreeRow] {
         var rows: [TreeRow] = []
         for folder in model.childFolders(of: parent) {
@@ -691,7 +691,7 @@ struct MoveDialog: View {
         ZStack {
             p.scrim.ignoresSafeArea()
             VStack(alignment: .leading, spacing: 0) {
-                Text(move.phase == .asking || isFailed ? "Move your data?" : "Moving your data")
+                Text(heading)
                     .font(.title(family, 22, .semibold)).tracking(-0.22).padding(.bottom, 6)
                 switch move.phase {
                 case .asking: asking
@@ -709,9 +709,12 @@ struct MoveDialog: View {
         }
     }
 
-    private var isFailed: Bool {
-        if case .failed = move.phase { return true }
-        return false
+    private var heading: String {
+        switch move.phase {
+        case .asking: "Move your data?"
+        case .moving: "Moving your data"
+        case .failed(let reason): AppModel.moveFailureHeading(reason)
+        }
     }
 
     private var summary: some View {

@@ -36,6 +36,56 @@ jobs:
       - run: zig build test
       - run: zig build -Drelease
 
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: gui-windows/global.json
+      - name: Desktop client against the real daemon
+        working-directory: gui-windows
+        shell: pwsh
+        run: |
+          $env:FYKE_TEST_BIN = Join-Path $env:GITHUB_WORKSPACE "zig-out/bin/fyke.exe"
+          dotnet test tests/Fyke.Client.Tests -c Release --filter FullyQualifiedName~RealDaemonTests
+
+      # The smoke test runs the published copy, the one people download, compiled ahead of time.
+      - name: Publish and smoke test the WinUI app
+        working-directory: gui-windows
+        shell: pwsh
+        run: |
+          dotnet publish src/Fyke.App -c Release -r win-x64 -p:Platform=x64 -o "$env:RUNNER_TEMP/fyke-desktop"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($file in 'MainWindow.xbf', 'Fyke.App.pri') {
+            if (-not (Test-Path "$env:RUNNER_TEMP/fyke-desktop/$file")) { throw "The published app is missing $file." }
+          }
+          python ./tests/run-desktop-smoke.py "$env:RUNNER_TEMP/fyke-desktop/Fyke.App.exe" "$env:GITHUB_WORKSPACE/zig-out/bin/fyke.exe"
+
+      # Every change shows its cost in size, and one that outgrows the budget fails. Raising a
+      # budget is a decision for the pull request that needs it, not a side effect.
+      - name: Check the published app's size
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        env:
+          BUDGET_ON_DISK_MB: 76
+          BUDGET_ZIPPED_MB: 30
+        run: |
+          $out = "$env:RUNNER_TEMP/fyke-desktop"
+          $shipped = Get-ChildItem $out -Recurse -File
+          $onDisk = ($shipped | Measure-Object Length -Sum).Sum / 1MB
+          $zip = "$out.zip"
+          Compress-Archive "$out/*" $zip -CompressionLevel Optimal
+          $zipped = (Get-Item $zip).Length / 1MB
+          $largest = $shipped | Sort-Object Length -Descending | Select-Object -First 12 |
+            ForEach-Object { "| {0} | {1:N1} MB |" -f $_.FullName.Substring($out.Length + 1), ($_.Length / 1MB) }
+          $report = @(
+            '| Published app | Size | Budget |', '|---|---|---|'
+            '| On disk ({0} files) | {1:N1} MB | {2} MB |' -f $shipped.Count, $onDisk, $env:BUDGET_ON_DISK_MB
+            '| Zipped | {0:N1} MB | {1} MB |' -f $zipped, $env:BUDGET_ZIPPED_MB
+            '', '| Largest files | Size |', '|---|---|'
+          ) + $largest
+          $report -join "`n" | Tee-Object -Append $env:GITHUB_STEP_SUMMARY
+          if ($onDisk -gt [double]$env:BUDGET_ON_DISK_MB -or $zipped -gt [double]$env:BUDGET_ZIPPED_MB) {
+            throw "The published app is over its size budget."
+          }
+
       # Each script is its own step, so that one failure does not hide the others.
       - name: e2e
         if: ${{ !cancelled() }}
@@ -59,6 +109,29 @@ jobs:
       - name: e2e_tui
         if: ${{ !cancelled() }}
         run: python tools/e2e_tui.py zig-out/bin/fyke.exe
+      # Two installers of the same build, one numbered older, so the test can upgrade one
+      # with the other. It runs last: it installs Fyke for the runner's user.
+      - name: Build the installer
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        env:
+          BUDGET_INSTALLER_MB: 28
+        run: |
+          python tools/windows_installer.py --app "$env:RUNNER_TEMP/fyke-desktop" --daemon zig-out/bin/fyke.exe --out "$env:RUNNER_TEMP/installer-older" --version 0.0.1 --install-inno
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/windows_installer.py --app "$env:RUNNER_TEMP/fyke-desktop" --daemon zig-out/bin/fyke.exe --out "$env:RUNNER_TEMP/installer"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $setup = Get-ChildItem "$env:RUNNER_TEMP/installer/Fyke-*-setup-x64.exe" | Select-Object -First 1
+          $size = $setup.Length / 1MB
+          "| Installer | {0:N1} MB | {1} MB |" -f $size, $env:BUDGET_INSTALLER_MB | Tee-Object -Append $env:GITHUB_STEP_SUMMARY
+          if ($size -gt [double]$env:BUDGET_INSTALLER_MB) { throw "The installer is over its size budget." }
+      - name: e2e_installer
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          $older = Get-ChildItem "$env:RUNNER_TEMP/installer-older/Fyke-0.0.1-setup-x64.exe"
+          $newer = Get-ChildItem "$env:RUNNER_TEMP/installer/Fyke-*-setup-x64.exe" | Select-Object -First 1
+          python tools/e2e_installer_windows.py $older.FullName $newer.FullName
 
   linux:
     timeout-minutes: 30
@@ -97,3 +170,48 @@ jobs:
       - name: e2e_tui
         if: ${{ !cancelled() }}
         run: python3 tools/e2e_tui.py zig-out/bin/fyke
+
+  # The Windows GUI's library and view-model tests. They need no Windows, so they run on both
+  # systems: a bug that only the Unix socket on one of them shows is found here. Pull requests run
+  # them only when gui-windows/ changed; pushes to main and the release workflow always do.
+  windows-dotnet:
+    name: windows-dotnet (${{ matrix.os }})
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Did gui-windows change?
+        id: gate
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$BASE_SHA" HEAD | grep -q '^gui-windows/'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "gui-windows/ is unchanged, so its tests are skipped."
+          fi
+
+      # The SDK version is the one in gui-windows/global.json.
+      - uses: actions/setup-dotnet@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          global-json-file: gui-windows/global.json
+
+      - name: Client tests
+        if: steps.gate.outputs.run == 'true'
+        run: dotnet test gui-windows/tests/Fyke.Client.Tests -c Release
+      - name: View-model tests
+        if: ${{ steps.gate.outputs.run == 'true' && !cancelled() }}
+        run: dotnet test gui-windows/tests/Fyke.ViewModels.Tests -c Release

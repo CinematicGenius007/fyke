@@ -37,6 +37,24 @@ def check(name, ok, detail=""):
         print("FAIL", name, detail)
         cleanup(); sys.exit(1)
     passed += 1; print("ok  ", name)
+def daemons():
+    """The fyke processes serving this test's folder, as {pid: command line}."""
+    script = ("Get-CimInstance Win32_Process -Filter \"Name='fyke.exe'\" | "
+              "ForEach-Object { \"$($_.ProcessId)`t$($_.CommandLine)\" }")
+    p = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True, timeout=60)
+    found = {}
+    for line in p.stdout.splitlines():
+        pid, _, command = line.partition("\t")
+        if home.lower() in command.lower():
+            found[int(pid)] = command
+    return found
+def wait_for(predicate, seconds):
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        found = predicate()
+        if found: return found
+        time.sleep(0.2)
+    return None
 def cleanup():
     fyke("daemon", "stop")
     reg("delete", KEY, "/v", "Fyke", "/f")
@@ -49,9 +67,28 @@ p = fyke("service", "install")
 check("install succeeds", p.returncode == 0 and "installed" in p.stdout, p.stdout + p.stderr)
 text = value() or ""
 check("the value is in the Run key", text != "", text)
-check("it runs this binary with the daemon arguments", FYKE.lower() in text.lower() and " daemon --log " in text, text)
+check("it runs this binary under the supervisor", FYKE.lower() in text.lower() and " daemon --supervise --log " in text, text)
 check("it names the data folder", home.lower() in text.lower(), text)
 check("the daemon is running now", os.path.exists(home + r"\fyked.sock") or fyke("status").returncode == 0)
+
+running = daemons()
+supervisors = [pid for pid, command in running.items() if " --supervise " in command]
+children = [pid for pid, command in running.items() if " --supervise " not in command]
+check("a supervisor runs the daemon", len(supervisors) == 1 and len(children) == 1, running)
+
+# A crash: the supervisor starts the daemon again.
+subprocess.run(["taskkill", "/F", "/PID", str(children[0])], capture_output=True, timeout=30)
+restarted = wait_for(lambda: [pid for pid, command in daemons().items()
+                              if " --supervise " not in command and pid != children[0]], 15)
+check("the supervisor restarts a daemon that crashed", restarted, daemons())
+check("the restarted daemon answers", fyke("status").returncode == 0)
+
+# A clean stop is the person's choice, and the supervisor goes with the daemon.
+p = fyke("daemon", "stop")
+check("daemon stop succeeds", p.returncode == 0, p.stdout + p.stderr)
+check("a clean stop ends the supervisor too", wait_for(lambda: not daemons() or None, 10), daemons())
+p = fyke("service", "install")
+check("installing again starts it again", p.returncode == 0 and len(daemons()) == 2, daemons())
 
 p = fyke("service", "status")
 check("status reports installed", p.stdout.strip() == "installed", p.stdout + p.stderr)
@@ -63,11 +100,12 @@ fyke("daemon", "stop")
 time.sleep(0.5)
 command = text.split("REG_SZ", 1)[1].strip()
 subprocess.Popen(command, creationflags=0x00000008 | 0x00000200, close_fds=True)
-deadline = time.time() + 10
-while time.time() < deadline and not os.path.exists(home + r"\fyked.sock"):
-    time.sleep(0.1)
+# The socket file outlives a daemon on Windows, so wait for the supervisor's child, not
+# the file. A client started sooner would start a daemon of its own.
+wait_for(lambda: [pid for pid, command in daemons().items() if " --supervise " not in command], 15)
 p = fyke("status")
 check("the stored command starts a working daemon", p.returncode == 0, p.stdout + p.stderr)
+check("under its supervisor", any(" --supervise " in command for command in daemons().values()), daemons())
 
 p = fyke("service", "uninstall")
 check("uninstall succeeds", p.returncode == 0, p.stdout + p.stderr)

@@ -2,7 +2,7 @@
 
 This document specifies saved views, recipes, briefs, answers, routines, catch-up and the Activity line: what each does, the operations that serve it, and how the macOS GUI presents it. Interface rules are in [design-rules.md](design-rules.md); the boards are on the [v2 design page](https://app.paper.design/file/01M6R7CJ81MKH0TMWJ8KNC6QGX/p-9-0). Every capability below is one set of operations in `src/ops.zig`, so the socket, CLI and MCP reach it in the same way as the GUI.
 
-The longer-term design in [next-phase.md](next-phase.md) and [aggregator.md](aggregator.md) goes further (story clustering, per-feed refresh policies, closed-window notification delivery). Where this document and those differ, this document describes what is built and those describe what is planned.
+The longer-term design in [next-phase.md](next-phase.md) and [aggregator.md](aggregator.md) goes further (story clustering, per-feed refresh policies). Where this document and those differ, this document describes what is built and those describe what is planned.
 
 ## Concepts
 
@@ -123,7 +123,7 @@ The daemon's scheduler runs due routines at startup, on changes and within 60 se
 
 `routines.dry_run` evaluates the view over the last 7 days, over the current local calendar day and the preceding six days, and reports matches per day and the configured actions. Day boundaries follow daylight-saving changes.
 
-Notify appends a `routine.notify` event. The GUI turns it into a system notification while it is running. Delivery with every window closed is planned.
+Notify appends a `routine.notify` event. A running GUI turns it into a system notification. With the app closed, the daemon starts it in a mode that posts the notification and quits without opening a window (`src/notify.zig`). Clicking the notification opens Fyke.
 
 ## Catch-up and undo
 

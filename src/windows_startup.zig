@@ -1,7 +1,7 @@
 //! `fyke service` on Windows: starts the daemon when the person signs in, by adding a
 //! value to their `Run` key. Windows has no per-user service manager to hand the daemon
-//! to, so unlike `launchd.zig` and `systemd.zig` nothing restarts it after a crash. The
-//! next client starts it again on demand, as it does on any system.
+//! to, so the value starts `fyke daemon --supervise` (`supervise.zig`), which starts the
+//! daemon again after a crash as launchd and systemd do.
 //!
 //! The key is the person's own (`HKEY_CURRENT_USER`), so no administrator is needed, and
 //! the registry is read and written through `reg.exe`, which ships with Windows.
@@ -46,7 +46,7 @@ fn writeQuoted(w: *Io.Writer, text: []const u8) !void {
 /// value there has no environment of its own.
 pub fn writeCommand(w: *Io.Writer, program: []const u8, home: []const u8) !void {
     try writeQuoted(w, program);
-    try w.writeAll(" daemon --log --home ");
+    try w.writeAll(" daemon --supervise --log --home ");
     try writeQuoted(w, home);
 }
 
@@ -72,9 +72,9 @@ pub fn install(connector: client_module.Connector, user_home: []const u8) !void 
     try data_home.ensure(io, connector.home_path);
     if (!try reg(io, &.{ "reg", "add", run_key, "/v", value_name, "/t", "REG_SZ", "/d", out.written(), "/f" })) return error.RegistryFailed;
 
-    // Nothing starts the daemon until the next sign-in, so start it now.
+    // Nothing starts the daemon until the next sign-in, so start it now, supervised.
     var client: client_module.Client = undefined;
-    try connector.connect(&client, true);
+    try connector.connectStarting(&client, .supervised);
     client.stream.close(io);
 }
 
@@ -99,6 +99,9 @@ fn stopRunning(connector: client_module.Connector) !void {
     if (connector.connect(&client, false)) |_| {
         _ = client.call(ops.DaemonStop, .{}) catch {};
         client.stream.close(connector.io);
+        // A daemon still shutting down would hold the folder, and the supervisor started
+        // next would find it taken and stop.
+        try connector.waitForExit();
     } else |_| {}
 }
 
@@ -107,7 +110,7 @@ test "the command quotes paths and passes the daemon's arguments" {
     defer out.deinit();
     try writeCommand(&out.writer, "C:\\Program Files\\Fyke\\fyke.exe", "D:\\My Data\\");
     try std.testing.expectEqualStrings(
-        "\"C:\\Program Files\\Fyke\\fyke.exe\" daemon --log --home \"D:\\My Data\\\\\"",
+        "\"C:\\Program Files\\Fyke\\fyke.exe\" daemon --supervise --log --home \"D:\\My Data\\\\\"",
         out.written(),
     );
 }

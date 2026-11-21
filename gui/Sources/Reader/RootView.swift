@@ -84,6 +84,9 @@ struct RootView: View {
         if model.confirmation != nil { return .handled }
         // These hold their own focus and keys.
         if model.catchUp != nil || model.commands.isShowing || model.search.isShowing { return .ignored }
+        // A name being edited in the sidebar takes every key: Return saves it, Esc cancels,
+        // and letters such as j or n are text, not reader shortcuts.
+        if model.renaming != nil { return .ignored }
         if model.showingShortcuts {
             if press.key == .escape || press.characters == "?" { model.showingShortcuts = false }
             return .handled

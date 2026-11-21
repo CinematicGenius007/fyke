@@ -220,6 +220,11 @@ print(json.dumps({"title":"Morning brief","sections":[{"heading":"News","claims"
                         "esac\n")
             os.chmod(executable,0o700)
         env["PATH"] = home+"/bin"+os.pathsep+env.get("PATH","")
+        # Stands in for the app the daemon starts to post a notification.
+        notifier = home+"/bin/notifier"
+        with open(notifier,"w") as f: f.write(f"#!/bin/sh\necho \"$*\" >> {shlex.quote(home+'/notified')}\n")
+        os.chmod(notifier,0o700)
+        env["FYKE_NOTIFIER"] = notifier
     def probes(name, what="--version"):
         return [line.rstrip("\n").split("|") for line in open(home+"/"+name+".probes") if line.startswith(what+"|")]
 
@@ -379,7 +384,18 @@ print(json.dumps({"title":"Morning brief","sections":[{"heading":"News","claims"
         check("routine get list",call("routines.get",id=rid)["id"]==rid and len(call("routines.list")["items"])==1)
         check("dry run",len(call("routines.dry_run",id=rid)["days"])==7)
         check("view in use",call("views.remove",id=vid)["kind"]=="in_use")
+        if os.name != "nt":
+            # An app that posts notifications itself takes the event, so the daemon does not.
+            app = unix_socket(); app.connect(home+"/fyked.sock"); app_lines = app.makefile("rb")
+            app.sendall(b'{"jsonrpc":"2.0","id":1,"method":"events.subscribe","params":{"since_seq":0,"notifies":true}}\n')
+            app_lines.readline()
+            threading.Thread(target=lambda: [None for _ in app_lines], daemon=True).start()
         run=wait_job(call,call("routines.run",id=rid),"done")
+        if os.name != "nt":
+            time.sleep(3)
+            check("a running app takes the notification",not os.path.exists(home+"/notified"))
+            # Shutting down first wakes the reading thread, which would hold the reader.
+            app.shutdown(socket.SHUT_RDWR); app_lines.close(); app.close()
         runs=call("routines.runs",id=rid)["items"]
         check("captured before actions",len(runs[0]["matches"])==2 and len(runs[0]["results"])==5)
         check("routine state",call("views.list")["items"][0]["total"]==0)
@@ -387,6 +403,11 @@ print(json.dumps({"title":"Morning brief","sections":[{"heading":"News","claims"
         wait_job(call,{"id":runs[0]["results"][-1]["job_id"]},"done")
         check("routine revision conflict",call("routines.put",id=rid,name="Tidy",view_id=vid,schedule={"kind":"daily","time":"09:00"},actions=[{"kind":"notify"}],expected_revision=0)["kind"]=="revision_conflict")
         again=wait_job(call,call("routines.run",id=rid),"done")
+        if os.name != "nt":
+            deadline=time.monotonic()+8
+            while time.monotonic()<deadline and not os.path.exists(home+"/notified"): time.sleep(.1)
+            check("with no app running, the daemon starts it to post",
+                  os.path.exists(home+"/notified") and open(home+"/notified").read()=="--notify\n")
         check("routine watermark",call("routines.runs",id=rid)["items"][0]["matches"]==[])
         call("routines.put",id=rid,name="Tidy",view_id=vid,schedule={"kind":"weekly","time":"09:00","days":[1,3]},actions=[{"kind":"notify"}],expected_revision=1)
         check("next local run",call("routines.get",id=rid)["next_run_at"] is not None)

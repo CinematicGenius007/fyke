@@ -148,6 +148,14 @@ fn runQuick(s: *Service, a: std.mem.Allocator, argv: []const []const u8, env: *c
     });
 }
 
+/// What a client shows for a writer that is not installed, in the words of the platform
+/// the daemon runs on.
+const not_found = switch (builtin.os.tag) {
+    .macos => "Not found on this Mac",
+    .windows => "Not found on this PC",
+    else => "Not found on this computer",
+};
+
 /// Finds a writer, reads its version, then asks it whether it is signed in, so that
 /// "available" means a brief can actually be written. `problem` says in words what
 /// stands in the way.
@@ -163,7 +171,7 @@ fn probe(s: *Service, a: std.mem.Allocator, name: []const u8) !std.json.Value {
         .available = false,
         .installed = false,
         .error_name = @errorName(err),
-        .problem = "Not found on this Mac",
+        .problem = not_found,
         .profile = profile,
     });
     if (!version.term.success()) return store.object(a, .{

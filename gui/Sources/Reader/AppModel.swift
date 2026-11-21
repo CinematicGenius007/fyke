@@ -239,7 +239,7 @@ final class AppModel {
             if event.type == "view.changed", case .view = place { try? await reloadEntries() }
             if event.type == "artifact.new", place == .today, selectedBrief == nil { selectedBrief = library.briefs.first?.id }
         case "routine.notify":
-            Notifier.post(title: "Fyke", body: "A routine has something for you")
+            Notifier.post()
         default:
             scheduleReload()
         }
@@ -263,6 +263,10 @@ final class AppModel {
             if let url = URL(string: ProcessInfo.processInfo.environment["FYKE_ADDRESS"] ?? "") { web = WebState(address: url) }
         case "delete-folder":
             if let folder = folders.first { confirmation = .deleteFolder(folder) }
+        case "rename-folder":
+            if let folder = folders.first { renaming = .folder(folder.id) }
+        case "rename-feed":
+            if let feed = feeds.first { renaming = .feed(feed.id) }
         case "search":
             search.show()
             search.query = ProcessInfo.processInfo.environment["FYKE_QUERY"] ?? ""
@@ -744,7 +748,7 @@ final class AppModel {
             } else {
                 // Past "starting" the data and the link are in place, and only the restart failed.
                 let moved = result.output.contains("starting")
-                move.phase = .failed(moved ? "Your data moved, but Fyke could not restart. Opening Fyke again usually fixes this." : Self.moveFailure(result.errors))
+                move.phase = .failed(moved ? Self.movedButNotRestarted : Self.moveFailure(result.errors))
                 await reload()
             }
         }
@@ -775,6 +779,13 @@ final class AppModel {
             let errors = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
             return (process.terminationStatus, seen.value, errors)
         }.value
+    }
+
+    static let movedButNotRestarted = "Your data moved, but Fyke could not restart. Opening Fyke again usually fixes this."
+
+    /// A failed move says what happened, not what was asked: the data stayed, or only the restart failed.
+    static func moveFailureHeading(_ reason: String) -> String {
+        reason == movedButNotRestarted ? "Fyke didn\u{2019}t restart" : "Your data wasn\u{2019}t moved"
     }
 
     /// The command names what stopped it, and only a few of these a person can cause.
@@ -835,6 +846,27 @@ final class AppModel {
 
     /// Marks a feed, a folder or a view read at once, and offers Undo. The unread
     /// articles are read first so that exactly those can be put back.
+    /// Whether "Mark all read" applies where the reader is. Starred, Today and Routines are
+    /// not a set of feeds, so it is not offered there, as on Windows. Marking "everything"
+    /// from Starred used to read every feed.
+    var canMarkAllHere: Bool {
+        switch place {
+        case .all, .feed, .folder, .view: true
+        case .today, .starred, .routines: false
+        }
+    }
+
+    /// "Mark all read" for the place showing: one feed, one folder's tree, one view, or All.
+    func markAllHere() {
+        switch place {
+        case .all: markAllRead()
+        case .feed(let id): markAllRead(feed: id)
+        case .folder(let id): markAllRead(folder: id)
+        case .view(let id): markAllRead(view: id)
+        case .today, .starred, .routines: break
+        }
+    }
+
     func markAllRead(feed: Int64? = nil, folder: Int64? = nil, view: Int64? = nil) {
         Task {
             var params = ListParams(feedId: feed, folderId: folder, viewId: view, unreadOnly: view == nil ? true : nil, limit: 1000)

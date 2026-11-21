@@ -14,10 +14,11 @@ public enum SidebarIndent {
 
     public static func leading(depth: Int) -> Double { edge + step * Double(max(depth, 0)) }
 
-    /// Folders draw a chevron in the icon column, feeds draw none. A feed is one level
-    /// below its folder, so its name lines up with the folder's name. A feed at the top
-    /// level sits at depth 1 for the same reason: its name lines up with All and Starred.
-    public static func feedDepth(folderDepth: Int?) -> Int { (folderDepth ?? 0) + 1 }
+    /// Folders draw a chevron in the icon column, feeds draw none, so a feed's name starts
+    /// where its depth's icon would. Inside a folder a feed is a child: its name starts one
+    /// step inside the folder's name, level with a sibling folder's name. A feed at the top
+    /// level sits at depth 1, so its name lines up with All, Starred and top-level folders.
+    public static func feedDepth(folderDepth: Int?) -> Int { folderDepth.map { $0 + 2 } ?? 1 }
 
     /// Where the text of a row starts.
     public static func textStart(depth: Int, hasIcon: Bool) -> Double {
@@ -214,5 +215,15 @@ public enum DryRunWords {
 public enum Plural {
     public static func count(_ number: Int, _ noun: String, _ plural: String? = nil) -> String {
         "\(number.formatted()) \(number == 1 ? noun : plural ?? noun + "s")"
+    }
+}
+
+/// The line under a brief's or an answer's sources. Articles that matched but did not fit
+/// were never read, so that comes first; otherwise it counts what was read but not cited.
+/// Windows has the same wording in `BriefText.SourcesNote`.
+public enum SourcesNote {
+    public static func text(omitted: Int, read: Int, cited: Int) -> String? {
+        if omitted > 0 { return "\(Plural.count(omitted, "more article")) matched but did not fit, so the writer did not read them." }
+        return read > cited ? "\(Plural.count(read - cited, "more", "more")) read but not cited" : nil
     }
 }
