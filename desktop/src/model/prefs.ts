@@ -234,8 +234,10 @@ function createPrefs() {
       setUI(reconcile(withTestMode(decodeUI(reply.ui))));
       lastTheme = active();
       readFile = true;
-    } catch (error) {
-      setFileProblem(error instanceof Error ? error.message : String((error as { message?: string }).message ?? error));
+    } catch {
+      // The file was not read, so nothing is known to be wrong with it. The window's banner
+      // says why the call failed.
+      setFileProblem(null);
       readFile = false;
     }
   }

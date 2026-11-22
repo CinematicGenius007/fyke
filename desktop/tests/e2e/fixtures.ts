@@ -157,10 +157,10 @@ export const discussionTest = test.extend<{ threadFeed: number }>({
 
 /** A data folder of its own, empty or with what `before` puts there, and a bridge to it,
  * for checks that cannot share the worker's daemon: the first run and an older daemon. */
-export async function ownHome(before?: (home: string) => Promise<void>) {
+export async function ownHome(before?: (home: string) => Promise<void> | void, extra: (home: string) => Record<string, string> = () => ({})) {
   const home = mkdtempSync(process.platform === "win32" ? join(process.env.TEMP ?? ".", "fyke-o-") : "/tmp/fyke-o-");
   await before?.(home);
-  const env = { ...process.env, FYKE_HOME: home, FYKE_BIN: fyke, FYKE_HEADLESS: "1" } as Record<string, string>;
+  const env = { ...process.env, FYKE_HOME: home, FYKE_BIN: fyke, FYKE_HEADLESS: "1", ...extra(home) } as Record<string, string>;
   const bridge = spawn("bun", [join(desktop, "tools/bridge.ts"), "--port", "0"], { env, stdio: ["ignore", "pipe", "pipe"] });
   const address = JSON.parse(await firstLine(bridge, "bridge.ts")) as { port: number; token: string };
   return {

@@ -296,7 +296,12 @@ function createApp() {
         .catch(() => null);
       return (stats?.api_version ?? 0) >= API_VERSION;
     };
-    if (await current()) return;
+    // A service that does not answer at all is not replaced: `start` says it did not start.
+    // An older one may answer with a refusal, such as an unknown method, which has a code.
+    const first = await transport()
+      .call<Stats>("stats.get")
+      .catch((error: unknown) => RPCFailure.from(error));
+    if (first instanceof RPCFailure ? first.code === undefined || first.code === null : (first.api_version ?? 0) >= API_VERSION) return;
     await transport()
       .call("daemon.stop")
       .catch(() => undefined);

@@ -8,6 +8,8 @@ struct RPCFailure: LocalizedError {
     var kind: String?
     /// Anything else the refusal carries, such as the routines that use a view.
     var data: JSON?
+    /// The daemon's JSON-RPC error code. Set only when the daemon answered.
+    var code: Int64?
 
     var errorDescription: String? { message }
 
@@ -89,6 +91,7 @@ private struct Request<P: Encodable>: Encodable {
 
 private struct Response<R: Decodable>: Decodable {
     struct Failure: Decodable {
+        let code: Int64?
         let message: String
         let data: JSON?
     }
@@ -206,7 +209,7 @@ final class Daemon: @unchecked Sendable {
         data.append(10)
         try connection.send(data)
         let response = try decoder().decode(Response<R>.self, from: connection.readLine())
-        if let failure = response.error { throw RPCFailure(message: failure.message, kind: failure.data?["kind"]?.string, data: failure.data) }
+        if let failure = response.error { throw RPCFailure(message: failure.message, kind: failure.data?["kind"]?.string, data: failure.data, code: failure.code) }
         guard let result = response.result else { throw RPCFailure(message: "The daemon sent an empty reply") }
         return result
     }

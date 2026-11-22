@@ -8,7 +8,13 @@ import { createInterface } from "node:readline";
 import { expect, test } from "@playwright/test";
 import { ownHome } from "./fixtures";
 
-test("an older daemon is stopped and the current one takes its place", async ({ page }) => {
+const olds = {
+  "an older daemon": { api_version: 1, feeds: 0, entries: 0, unread: 0, due: 0, failing: 0, last_event_seq: 0, in_flight: 0 },
+  // One that answers with a refusal is running all the same, so it is replaced too.
+  "a daemon older than stats.get": null,
+};
+
+for (const [which, stats] of Object.entries(olds)) test(`${which} is stopped and the current one takes its place`, async ({ page }) => {
   const asked: string[] = [];
   const open = new Set<Socket>();
   const old = createServer((socket) => {
@@ -17,8 +23,8 @@ test("an older daemon is stopped and the current one takes its place", async ({ 
     createInterface({ input: socket }).on("line", (line) => {
       const request = JSON.parse(line) as { id: number; method: string };
       asked.push(request.method);
-      const reply = request.method === "stats.get"
-        ? { result: { api_version: 1, feeds: 0, entries: 0, unread: 0, due: 0, failing: 0, last_event_seq: 0, in_flight: 0 } }
+      const reply = request.method === "stats.get" && stats
+        ? { result: stats }
         : request.method === "daemon.stop"
           ? { result: true }
           : { error: { code: -32601, message: "Method not found" } };

@@ -470,18 +470,34 @@ def unread_snapshot(name, screen):
 
 check("shot:feed", tags=["feed", "snapshots"])(lambda: unread_snapshot("feed", "feed"))
 check("shot:view-empty", tags=["view-empty", "snapshots"])(empty_view_snapshot)
-def first_run_snapshot():
-    """A picture of the first run: a data folder of its own with no feeds, whose daemon
-    stops again after."""
-    empty = tempfile.mkdtemp(prefix="fyke-f-", dir=TMP)
+def own_home_snapshot(name, prepare=lambda home: {}):
+    """A picture with a data folder of its own, which `prepare` may change and whose
+    daemon stops again after. With nothing prepared it is the first run: no feeds."""
+    own = tempfile.mkdtemp(prefix="fyke-f-", dir=TMP)
     try:
-        snapshot("first-run", {"FYKE_HOME": empty})
+        snapshot(name, {"FYKE_HOME": own, **prepare(pathlib.Path(own))})
     finally:
-        subprocess.run([str(app / "fyke"), "daemon", "stop"], env=dict(env, FYKE_HOME=empty), capture_output=True, timeout=60)
-        shutil.rmtree(empty, ignore_errors=True)
+        subprocess.run([str(app / "fyke"), "daemon", "stop"], env=dict(env, FYKE_HOME=own), capture_output=True, timeout=60)
+        shutil.rmtree(own, ignore_errors=True)
 
 
-check("shot:first-run", tags=["first-run", "snapshots"])(first_run_snapshot)
+def silent_service(home):
+    """S30: a stand-in for fyke that exits at once, so the service never answers."""
+    program = home / "fyke-silent"
+    program.write_text("#!/bin/sh\nexit 0\n")
+    program.chmod(0o755)
+    return {"FYKE_BIN": str(program)}
+
+
+def config_mistake(home):
+    """S30: config.json that cannot be parsed."""
+    (home / "config.json").write_text('{"ui": {"theme": "light",, }')
+    return {}
+
+
+check("shot:first-run", tags=["first-run", "snapshots"])(lambda: own_home_snapshot("first-run"))
+check("shot:unavailable", tags=["unavailable", "snapshots"])(lambda: own_home_snapshot("unavailable", silent_service))
+check("shot:config-mistake", tags=["config-mistake", "snapshots"])(lambda: own_home_snapshot("config-mistake", config_mistake))
 for theme in ["newsprint", "terminal"]:
     check(f"shot:all-{theme}", tags=[f"all-{theme}", "themes", "snapshots"])(lambda theme=theme: theme_snapshot(theme))
 

@@ -195,13 +195,21 @@ final class AppModel {
     }
 
     /// The daemon outlives the app, so after an update it can be an older one, and
-    /// nothing else would replace it. Stopping it is safe: the next call starts ours.
+    /// nothing else would replace it. Stopping it is safe: the next call starts ours. A
+    /// service that does not answer at all is not replaced: `start` says it did not start.
     private func replaceOutdatedDaemon() async {
         func current() async -> Bool {
             let stats: Stats? = try? await Daemon.shared.call("stats.get")
             return (stats?.apiVersion ?? 0) >= Daemon.apiVersion
         }
-        guard await !current() else { return }
+        do {
+            let stats: Stats = try await Daemon.shared.call("stats.get")
+            guard (stats.apiVersion ?? 0) < Daemon.apiVersion else { return }
+        } catch let failure as RPCFailure where failure.code != nil {
+            // An older service answered with a refusal, such as an unknown method.
+        } catch {
+            return
+        }
         let _: Ok? = try? await Daemon.shared.call("daemon.stop")
         for _ in 0..<50 {
             try? await Task.sleep(for: .milliseconds(100))

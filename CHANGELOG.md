@@ -40,6 +40,7 @@ There are no releases yet. Everything below is built from source and is unreleas
 
 ### Fixed
 
+- macOS and desktop apps: when the background service does not start, the window says so at once instead of trying to replace it for about two and a half minutes, and a failed settings read is no longer called a config.json mistake. A theme chosen at launch holds even then.
 - macOS app: picking one feed from several advertised by a site keeps that feed’s own name.
 
 - macOS app: a folder name that is already taken now shows why it was refused.
