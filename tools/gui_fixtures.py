@@ -13,8 +13,13 @@ import http.server, json, os, pathlib, socketserver, subprocess, sys, threading,
 
 # Writes a brief or an answer that cites the first sources it is given, as the writer
 # contract in docs/reader-features.md asks, without calling any model.
-WRITER_SOURCE = """import json, re, sys
+# A file named writer-fails beside it makes it fail instead, for the "Brief not written"
+# pictures.
+WRITER_SOURCE = """import json, pathlib, re, sys
 text = sys.stdin.read()
+if pathlib.Path(__file__).with_name("writer-fails").exists():
+    sys.stderr.write("The stand-in writer was asked to fail.\\n")
+    sys.exit(1)
 found = re.search(r"UNTRUSTED SOURCES JSON:\\n(.*)\\nEND SOURCES", text, re.S)
 ids = [s["id"] for s in json.loads(found.group(1))] if found else []
 print(json.dumps({"title": "Needles, briefly", "sections": [{"heading": "", "claims": [

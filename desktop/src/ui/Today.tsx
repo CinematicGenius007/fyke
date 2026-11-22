@@ -89,13 +89,15 @@ export function TodayReader() {
             </Match>
             <Match when={working()}>{(job) => (
               <BriefState title={`Reading your articles with the ${model.library.state.recipes[0]?.name ?? "recipe"} recipe`} label="Writing your brief" tone="working"
-                detail={`${writerName(job().writer)} is working. Nothing changes in your articles while it writes; keep reading.`}
-                action="Cancel" run={() => void model.cancelJob(job().id)} />
+                detail={`${stateWriter(job().writer)} · ${secondsSince(job().createdAt)} s so far, usually under a minute. Nothing changes in your articles while it writes; keep reading.`}
+                action="Cancel" run={() => void model.cancelJob(job().id)}
+                secondary={{ label: "Read the articles instead", run: () => model.go({ kind: "all" }) }} />
             )}</Match>
             <Match when={failed()}>{(job) => (
-              <BriefState title={`${writerName(job().writer)} could not write the brief`} label="Brief not written" tone="failed"
+              <BriefState title={`${stateWriter(job().writer)} could not write the brief`} label="Brief not written" tone="failed"
                 detail={`${job().error ?? "It stopped before it finished."} Nothing was lost: your articles and earlier briefs are as they were.`}
-                action="Try again" run={() => void model.runBrief()} />
+                action="Try again" run={() => void model.runBrief()}
+                secondary={{ label: "Choose a writer", run: () => model.openSettings("Agents") }} />
             )}</Match>
             <Match when={!model.selectedBrief()}>
               <BriefState title="No brief yet" label="Today"
@@ -126,14 +128,27 @@ export function TodayReader() {
   );
 }
 
-function BriefState(props: { title: string; label: string; tone?: "empty" | "working" | "failed"; detail: string; action: string; run: () => void }) {
+/** The writer as Today.swift names it in its states: `writer.capitalized`. */
+function stateWriter(id: string | null | undefined) {
+  return id ? id.replace(/\w\S*/g, (word) => word[0].toUpperCase() + word.slice(1).toLowerCase()) : "The writer";
+}
+
+/** Whole seconds since a job started, as Today.swift counts them when it draws. */
+function secondsSince(start: Date | null | undefined) {
+  return Math.max(0, Math.floor((Date.now() - (start?.getTime() ?? Date.now())) / 1000));
+}
+
+function BriefState(props: { title: string; label: string; tone?: "empty" | "working" | "failed"; detail: string; action: string; run: () => void; secondary?: { label: string; run: () => void } }) {
   return (
     <div class="reader-scroll scroll">
       <div class="brief-state inline-empty">
         <InlineLabel tone={props.tone}>{props.label}</InlineLabel>
         <h2 class="inline-title">{props.title}</h2>
         <p class="inline-detail">{props.detail}</p>
-        <Action kind="primary" onClick={props.run}>{props.action}</Action>
+        <div class="inline-actions">
+          <Action kind={props.tone === "working" ? "secondary" : "primary"} onClick={props.run}>{props.action}</Action>
+          {props.secondary && <Action kind="quiet" onClick={props.secondary.run}>{props.secondary.label}</Action>}
+        </div>
       </div>
     </div>
   );

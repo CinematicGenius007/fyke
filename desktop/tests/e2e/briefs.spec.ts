@@ -1,3 +1,5 @@
+import { rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterRoutineSave, type Daemon, expect, reset, test } from "./fixtures";
 
 async function published(daemon: Daemon) {
@@ -57,6 +59,38 @@ for (const theme of ["light", "dark"] as const) {
     });
   }
 }
+
+/** Runs a brief to its end with the stand-in writer, told to fail (tools/gui_fixtures.py). */
+async function writeFailing(daemon: Daemon) {
+  const flag = join(daemon.home, "writer-fails");
+  writeFileSync(flag, "");
+  try {
+    const jobs = () => daemon.call<{ items: { id: number; status?: string; state?: string }[] }>("jobs.list", { limit: 50 });
+    const last = Math.max(0, ...(await jobs()).items.map((job) => job.id));
+    await daemon.call("briefs.run", { rule: { state: "unread" } });
+    await expect.poll(async () => (await jobs()).items.filter((job) => job.id > last).map((job) => job.status ?? job.state)).toEqual(["failed"]);
+  } finally {
+    rmSync(flag, { force: true });
+  }
+}
+
+// Both themes before the brief that clears the failure, as the Mac takes them.
+test("shot:today-failed", async ({ app, daemon }, info) => {
+  test.skip(info.project.name !== "webkit", "pictures compare against the Mac in WebKit");
+  await afterRoutineSave(daemon);
+  if (!(await published(daemon)).length) await publish(daemon);
+  await writeFailing(daemon);
+  try {
+    for (const theme of ["light", "dark"] as const) {
+      const page = await app.open({ FYKE_SCREEN: "today" }, theme);
+      await expect(page.getByRole("heading", { name: "Codex could not write the brief" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Choose a writer" })).toBeVisible();
+      await app.snapshot(`today-failed-${theme}`);
+    }
+  } finally {
+    await publish(daemon);
+  }
+});
 
 test("recipes save revisions, show history and can undo a reset", async ({ app, daemon }) => {
   const before = await recipe(daemon);

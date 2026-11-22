@@ -511,6 +511,39 @@ def config_mistake(home):
     return {}
 
 
+def write_brief(fails):
+    """Runs a brief to its end with the stand-in writer, told to fail or not."""
+    flag = pathlib.Path(home) / "writer-fails"
+    if fails:
+        flag.write_text("")
+    try:
+        last = max((job["id"] for job in call("jobs.list", {"limit": 50})["items"]), default=0)
+        call("briefs.run", {"rule": {"state": "unread"}})
+        deadline = time.monotonic() + 60
+        while True:
+            jobs = [job for job in call("jobs.list", {"limit": 50})["items"] if job["id"] > last]
+            if jobs and all(job.get("status", job.get("state")) in ("done", "failed", "cancelled") for job in jobs):
+                return jobs
+            if time.monotonic() > deadline:
+                fail("write a brief", f"jobs did not finish: {jobs}")
+            time.sleep(0.2)
+    finally:
+        flag.unlink(missing_ok=True)
+
+
+def brief_failed_snapshot():
+    """S3: Today after the writer failed, then a brief that succeeds so the failure no
+    longer needs anyone."""
+    jobs = write_brief(fails=True)
+    if not any(job.get("status", job.get("state")) == "failed" for job in jobs):
+        fail("the stand-in writer fails", f"jobs: {jobs}")
+    try:
+        snapshot("today-failed", {"FYKE_SCREEN": "today"})
+    finally:
+        write_brief(fails=False)
+
+
+check("shot:today-failed", tags=["today-failed", "snapshots"], needs=["brief"])(brief_failed_snapshot)
 check("shot:first-run", tags=["first-run", "snapshots"])(lambda: own_home_snapshot("first-run"))
 check("shot:unavailable", tags=["unavailable", "snapshots"])(lambda: own_home_snapshot("unavailable", silent_service))
 check("shot:config-mistake", tags=["config-mistake", "snapshots"])(lambda: own_home_snapshot("config-mistake", config_mistake))
