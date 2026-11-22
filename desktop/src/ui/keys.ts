@@ -8,16 +8,50 @@ function typing(target: EventTarget | null): boolean {
   return !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
 }
 
+/** The Mac's menu commands (ReaderApp.swift `commands`), with Ctrl for Command. Each
+ * key also stops what the webview would do with it (K1–K13). */
+function command(event: KeyboardEvent): boolean {
+  const model = app();
+  const key = event.key.toLowerCase();
+  const shift = event.shiftKey;
+  // A dialog is modal: nothing behind it acts.
+  if (model.state.confirmation) return false;
+  const go = (kind: "today" | "all" | "starred" | "routines") => () => model.go({ kind });
+  const plain: Record<string, () => void> = {
+    ",": () => model.openSettings(),
+    n: () => model.set("showingAddFeed", true),
+    f: () => model.search.show(),
+    "1": go("today"),
+    "2": go("all"),
+    "3": go("starred"),
+    "4": go("routines"),
+    "0": () => model.set("showingActivity", (v) => !v),
+    // Text being edited keeps its own undo.
+    z: () => (typing(event.target) ? undefined : model.undo.undoLast()),
+    // Ctrl+S saves what is in front; the search panel takes it while it shows.
+    s: () => undefined,
+  };
+  const shifted: Record<string, () => void> = {
+    k: () => model.canMarkAllHere() && model.markAllHere(),
+  };
+  const run = (shift ? shifted : plain)[key];
+  if (!run) return false;
+  if (key === "z" && typing(event.target)) return false;
+  event.preventDefault();
+  run();
+  return true;
+}
+
 export function handleKey(event: KeyboardEvent): void {
   const model = app();
   if (event.defaultPrevented || event.isComposing) return;
-  if (event.ctrlKey || event.metaKey || event.altKey) {
-    if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "z" && !typing(event.target)) {
-      event.preventDefault();
-      model.undo.undoLast();
-    }
+  if (event.ctrlKey || event.metaKey) {
+    if (!event.altKey) command(event);
     return;
   }
+  if (event.altKey) return;
+  // These hold their own focus and keys.
+  if (model.search.state.isShowing) return;
   if (typing(event.target)) return;
   if (model.state.confirmation) return void event.preventDefault();
   if (model.state.renaming) return;
@@ -49,6 +83,7 @@ export function handleKey(event: KeyboardEvent): void {
     r: () => model.refresh(),
     a: () => model.set("showingAddFeed", true),
     t: () => model.set("showingType", (v) => !v),
+    "/": () => model.search.show(),
     "?": () => model.set("showingShortcuts", true),
   };
   // A focused button takes Return and Space itself.

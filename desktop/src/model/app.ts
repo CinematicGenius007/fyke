@@ -10,6 +10,9 @@ import type { Block, Entry, EntryPage, EntrySummary, Feed, Folder, Items, Stats 
 import { feedName, jobIsWriting } from "./types";
 import { Dates } from "../ui/format";
 import { createUndoCenter } from "./undo";
+import { createSearch } from "./search";
+import { Rule } from "../logic/Rule";
+import { ViewName } from "../logic/ViewName";
 
 /** The daemon this app speaks to (`api_version` in stats.get). */
 export const API_VERSION = 2;
@@ -61,9 +64,21 @@ interface State {
   healthFeed: number | null;
 }
 
-/** The words for a failure: the daemon names its refusals, and only some need words. */
+/** The daemon names its refusals. These are the ones a person can act on
+ * (AppModel.words(for:)); the rest keep the daemon's own message. */
+const knownFailures: [string, string][] = [
+  ["UnknownMethod", "This needs a newer Fyke service. Quit and open Fyke again."],
+  ["InvalidRule", "That rule has a word the reader cannot use."],
+  ["InvalidName", "Give it a name."],
+  ["RevisionConflict", "This changed elsewhere since you opened it."],
+  ["TierDenied", "Fyke's service refused the change."],
+  ["WriterNotFound", "No writer is installed. Choose one in Settings · Agents."],
+  ["ConflictingFilters", "A view cannot be combined with other filters."],
+];
+
 export function words(error: unknown): string {
-  return RPCFailure.from(error).message;
+  const failure = RPCFailure.from(error);
+  return knownFailures.find(([kind]) => failure.is(kind))?.[1] ?? failure.message;
 }
 
 function createApp() {
@@ -94,6 +109,7 @@ function createApp() {
 
   const library = createLibrary();
   const undo = createUndoCenter();
+  const search = createSearch();
   let pendingReload: ReturnType<typeof setTimeout> | undefined;
   let paused = false;
   let stopEvents: (() => void) | undefined;
@@ -315,6 +331,39 @@ function createApp() {
       if (place.kind === "today") set("selectedBrief", state.selectedBrief ?? library.state.briefs[0]?.id ?? null);
     });
     void reloadEntries().catch(() => undefined);
+  }
+
+  /** A search result opens in All unless the place on screen lists articles already. */
+  function openResult(id: number) {
+    search.close();
+    set("showingSettings", false);
+    if (!listsEntries()) go({ kind: "all" });
+    void open(id);
+  }
+
+  // MARK: Views
+
+  function saveSearchAsView() {
+    if (search.isBlank()) return;
+    const rule = Rule.fromSearch(search.state.query, search.state.unreadOnly);
+    search.close();
+    void saveAsView(rule);
+  }
+
+  async function saveAsView(rule: Rule, name?: string) {
+    const taken = new Set(library.state.views.map((v) => v.name));
+    const chosen = ViewName.unique(name ?? ViewName.suggest(rule), taken);
+    try {
+      const view = await library.saveView({ name: chosen, rule });
+      go({ kind: "view", id: view.id });
+      set("renaming", { kind: "view", id: view.id });
+      undo.push(`Saved “${view.name}” as a view`, async () => {
+        await library.removeView(view.id, true).catch(() => undefined);
+        if (samePlace(state.place, { kind: "view", id: view.id })) go({ kind: "all" });
+      });
+    } catch (error) {
+      fail(error);
+    }
   }
 
   function toggleUnreadOnly() {
@@ -586,6 +635,11 @@ function createApp() {
       case "shortcuts":
         set("showingShortcuts", true);
         break;
+      case "search":
+        // The words go in first, so the field starts with them selected, as on the Mac.
+        search.setQuery(mode.FYKE_QUERY ?? "");
+        search.show();
+        break;
     }
   }
 
@@ -602,6 +656,10 @@ function createApp() {
     openScreen,
     library,
     undo,
+    search,
+    openResult,
+    saveSearchAsView,
+    saveAsView,
     start,
     reload,
     reloadEntries,

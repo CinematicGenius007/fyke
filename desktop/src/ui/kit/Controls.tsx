@@ -81,3 +81,31 @@ export function Dot(props: { color: string; label?: string }) {
 export function When<T>(props: { value: T | null | undefined | false; children: (value: T) => JSX.Element }) {
   return <Show when={props.value}>{(value) => props.children(value())}</Show>;
 }
+
+export type ActionKind = "primary" | "secondary" | "quiet" | "link" | "inverse";
+
+/** A worded button (Kit.swift `ActionStyle`): 32 high, or 28 and a size smaller when compact. */
+export function Action(
+  props: { kind?: ActionKind; compact?: boolean; selected?: boolean; children: JSX.Element } & Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "children">,
+) {
+  const [own, rest] = splitProps(props, ["kind", "compact", "selected", "children", "class"]);
+  return (
+    <button
+      type="button"
+      class={`action ${own.kind ?? "secondary"}${own.class ? ` ${own.class}` : ""}`}
+      classList={{ compact: own.compact, selected: own.selected }}
+      {...rest}
+    >
+      {own.children}
+    </button>
+  );
+}
+
+/** A key's name in a small filled box, as menus and footers show it. */
+export function KeyHint(props: { text: string; onDark?: boolean }) {
+  return (
+    <kbd class="key-hint" classList={{ "on-dark": props.onDark }}>
+      {props.text}
+    </kbd>
+  );
+}

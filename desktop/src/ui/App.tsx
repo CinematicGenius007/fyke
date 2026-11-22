@@ -9,6 +9,7 @@ import { Icon } from "./kit/Icon";
 import { Rule } from "./kit/Controls";
 import { Panes } from "./Panes";
 import { ReaderPane } from "./Reader";
+import { SearchPanel } from "./SearchPanel";
 import { Sidebar } from "./Sidebar";
 import { Timeline } from "./Timeline";
 
@@ -45,6 +46,9 @@ export function App() {
           </Match>
         </Switch>
       </main>
+      <Show when={model.search.state.isShowing}>
+        <SearchPanel />
+      </Show>
       <div class="bottom-layer" aria-live="polite">
         <Show when={problem()}>
           {(text) => (

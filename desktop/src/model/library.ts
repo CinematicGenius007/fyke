@@ -2,6 +2,7 @@
 // (gui/Sources/Reader/Library.swift). This store only mirrors them: every change is an
 // operation, and an event says when to read them again.
 import { createStore, reconcile } from "solid-js/store";
+import { Rule } from "../logic/Rule";
 import { RPCFailure, transport } from "../transport";
 import {
   type Artifact,
@@ -138,6 +139,29 @@ export function createLibrary() {
       return state.routines
         .filter((r) => r.enabled && r.nextRunAt)
         .sort((a, b) => a.nextRunAt!.getTime() - b.nextRunAt!.getTime())[0];
+    },
+
+    /** Creates a view, or with `id` changes one. `revision` refuses a change made on top of
+     * someone else's. Returns the view as the daemon stored it. */
+    async saveView(change: { id?: number; name: string; rule: Rule; revision?: number }): Promise<SavedView> {
+      const reply = new J(
+        await transport().call("views.put", { id: change.id, name: change.name, rule: Rule.normalized(change.rule), expected_revision: change.revision }),
+      );
+      await loadViews();
+      const made = savedView(reply.get("view") ?? reply) ?? state.views.find((v) => v.id === reply.get("id")?.int);
+      if (!made) throw new RPCFailure({ message: "The daemon did not return the view" });
+      return made;
+    },
+
+    async moveView(id: number, position: number): Promise<void> {
+      await transport().call("views.move", { id, position });
+      await loadViews();
+    },
+
+    /** Fails with `in_use` while routines look in the view, unless they are detached. */
+    async removeView(id: number, detach: boolean): Promise<void> {
+      await transport().call("views.remove", { id, detach });
+      await loadViews();
     },
 
     /** Marks many articles, a thousand at a time, and returns what each was, for Undo. */

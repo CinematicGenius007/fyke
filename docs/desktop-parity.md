@@ -41,6 +41,7 @@ These are choices the brief left open, and the places where the Mac app and the 
 | D19 | Where the Playwright suite runs | On macOS (WebKit, compared with the Mac's pictures) and on Linux CI (WebKit and Chromium). Windows CI runs the unit tests, the Rust tests and a build. | The bridge reaches the daemon's AF_UNIX socket through Node's `net` module, which on Windows connects to named pipes only. The app itself uses Rust on Windows, so this limits the test bridge, not the app. |
 | D20 | Icons | The Mac's own glyphs (`Controls.swift` `Glyph`) are ported point for point. The SF Symbols it uses (magnifyingglass, calendar, tray, rectangle.stack, line.3.horizontal.decrease, clock.arrow.circlepath, gearshape, ellipsis) are drawn equivalents in `src/ui/kit/Icon.tsx`, so their pixels differ a little from the Mac's. | Apple licenses SF Symbols for its own platforms only; the app may not ship them. |
 | D21 | Text pixels | Text is set in the same fonts, sizes, weights and boxes, and macOS stem darkening stays on (`-webkit-font-smoothing: auto`, as AppKit draws). Glyphs still differ at their edges, and some lines sit one device pixel (0.5 pt) apart: CoreText in AppKit and WebKit snap a baseline to the pixel grid differently inside the same box, and the offset changes with font size (13 px text sits 0.5 pt higher, 11 px matches, 20 px sits 0.5 pt lower). So the 99.99 % pixel target cannot be reached on a screen with text; the reading screens reach 99.69–99.83 % after the anti-aliasing allowance. Pane dividers, rules and rows land on the same device pixel as the Mac's; chips end within a device pixel, from the width of the text inside them. Enlarged, Mac above and desktop below: [sidebar](desktop-parity/text-mac-over-desktop.png), [its difference](desktop-parity/text-diff.png), [reader](desktop-parity/reader-mac-over-desktop.png). | Rounding each line box to the pixel grid, as SwiftUI does, was tried and changed nothing: the boxes were on the grid already. Moving text by hand per size would fit one Mac and one font, and break on Windows and Linux, which rasterize differently again. |
+| D22 | Selected text in test pictures | The Mac takes its pictures in a window that is never key, so the search field's selected words show AppKit's inactive gray. The desktop's page has focus in Playwright and shows the active selection color. Both apps draw the system's colors; only the test windows differ. The Mac's picture also has the Today dot, from a brief its suite writes first; briefs come in phase 5. | Making the desktop draw an inactive selection while it has focus would be wrong in use. |
 
 ## F: Swift files and the TS or Rust module that takes each job
 
@@ -106,7 +107,7 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 | S7 | A feed with an article open | `feed` (new) | planned | |
 | S8 | A saved view: sentence rule, chips, editing in place | `view` | built | `view-light` 99.688 %, `view-dark` 99.740 % equal after the allowance; the sentence rule shows; editing in place is planned |
 | S9 | A view with nothing matching ("Nothing matches yet", "Include read articles") | `view-empty` (new) | planned | |
-| S10 | Search with results, and with none | `search`, `search-none` (new) | planned | |
+| S10 | Search with results, and with none | `search`, `search-none` (new) | built | `search-light` 99.468 %, `search-dark` 99.361 % equal after the allowance (D21, D22, K24); nothing found: `search.spec.ts` "nothing found opens nothing"; the `search-none` picture is planned |
 | S11 | Command palette | `palette` | planned | |
 | S12 | Shortcuts sheet | `shortcuts` (new) | planned | |
 | S13 | Catch-up: a card / finished / could not start | `catchup`, `catchup-done` (new) | planned | |
@@ -145,11 +146,11 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 |---|---|---|---|---|---|---|
 | K1 | ⌘, | Ctrl+, | Settings | | planned | |
 | K2 | ⌘N | Ctrl+N | Add feed | WebView2 opens a new window. Fyke prevents the default. | planned | |
-| K3 | ⌘S | Ctrl+S | Save search as view (and Save in the routine editor) | WebView2 offers to save the page. Fyke prevents the default. | planned | |
+| K3 | ⌘S | Ctrl+S | Save search as view (and Save in the routine editor) | WebView2 offers to save the page. Fyke prevents the default. | built | search: `search.spec.ts` "Ctrl+S keeps a search as a view, named for its words"; the routine editor is planned |
 | K4 | ⌘Z | Ctrl+Z | Undo (text field first, then catch-up, then the undo stack) | | planned | |
 | K5 | ⇧⌘Z | Ctrl+Shift+Z, and Ctrl+Y on Windows | Redo | Windows apps use Ctrl+Y, so it is added. | planned | |
 | K6 | ⌘K | Ctrl+K | Everything (palette) | WebView2 and Chromium focus the address or search bar. There is none, and Fyke prevents the default. | planned | |
-| K7 | ⌘F | Ctrl+F | Search | WebView2 and WebKitGTK open find-in-page. Fyke prevents the default. | planned | |
+| K7 | ⌘F | Ctrl+F | Search | WebView2 and WebKitGTK open find-in-page. Fyke prevents the default. | done | `search.spec.ts` "Ctrl+F, type and Return opens the first result" and the arrow, Esc and nothing-found scenarios |
 | K8 | ⌘1 ⌘2 ⌘3 ⌘4 | Ctrl+1 … Ctrl+4 | Today, All, Starred, Routines | | planned | |
 | K9 | ⌘J | Ctrl+J | Catch up | WebView2 opens downloads. Fyke prevents the default. | planned | |
 | K10 | ⌘0 | Ctrl+0 | Activity | WebView2 resets the zoom. Fyke prevents the default and turns off zoom hotkeys. | planned | |
@@ -163,7 +164,7 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 | K18 | n s m u | same | Next unread, star, read or unread, unread only | | built | s and m: `reading.spec.ts` "s stars the open article …"; n and u are bound, their scenario is planned |
 | K19 | o, ⇧O | o, Shift+O | Open page here, open in browser | | planned | |
 | K20 | c f r a t | same | Comments, fetch full, refresh, add feed, text and theme | | planned | |
-| K21 | / ? | same | Search, shortcuts sheet | | planned | |
+| K21 | / ? | same | Search, shortcuts sheet | | built | /: `search.spec.ts` "/ opens search too"; ? waits for the shortcuts sheet (planned) |
 | K22 | ← ↓ → (catch-up) | same | Skip, later, read now | | planned | |
 | K23 | — | Ctrl+P, Ctrl+U, Ctrl+Shift+I, F12, Ctrl+wheel and Ctrl+± zoom, the context menu | Webview defaults | Fyke prevents them in release builds (print, view source, devtools, zoom, and the browser's own menu). Fyke's right-click menus replace the context menu. | planned | |
 | K24 | Key hints shown in the UI ("⌘K", "⌘J", "⌘Z" in the toast, the shortcuts sheet, palette shortcuts) | "Ctrl+K", "Ctrl+J", "Ctrl+Z", … | Text | It is drawn from one table (`src/keys.ts`), so the hints and the bindings never differ. | planned | |
@@ -174,7 +175,7 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 | Id | Action | Undo message | Status | Evidence |
 |---|---|---|---|---|
 | U1 | Mark all read in a place | "Marked N article(s) in <name> as read" | planned | |
-| U2 | Save a search as a view | "Saved “X” as a view" | planned | |
+| U2 | Save a search as a view | "Saved “X” as a view" | done | `search.spec.ts` "Ctrl+Z takes the new view back" |
 | U3 | Change a view's rule | "Changed “X”" | planned | |
 | U4 | Remove a view (routines detach, then re-point on undo) | "Removed “X”" | planned | |
 | U5 | Reset a recipe to the built-in text | "Reset “X” to the built-in text" | planned | |

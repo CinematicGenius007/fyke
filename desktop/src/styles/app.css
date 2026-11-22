@@ -485,7 +485,8 @@ svg.icon .dots circle {
   display: grid;
   place-items: center;
   color: var(--muted);
-  visibility: hidden;
+  /* Out of the layout until it shows, as SwiftUI's `if row.starred || showing` leaves it. */
+  display: none;
 }
 .star-toggle.on {
   color: var(--unread);
@@ -494,7 +495,7 @@ svg.icon .dots circle {
 .star-toggle.showing,
 .entry-row:hover .star-toggle,
 .timeline-line:hover .star-toggle {
-  visibility: visible;
+  display: grid;
 }
 .entry-star {
   position: absolute;
@@ -917,4 +918,270 @@ svg.icon .dots circle {
 }
 .toast-undo:hover {
   background: rgb(255 255 255 / 12%);
+}
+
+/* Worded buttons (Kit.swift ActionStyle). */
+.action {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-control);
+  font-size: 14px;
+  font-weight: var(--ui-500);
+  white-space: nowrap;
+  color: var(--ink);
+  transition: background-color 0.12s;
+}
+.action.compact {
+  height: 28px;
+  font-size: 13px;
+}
+.action.quiet,
+.action.link {
+  padding: 0 10px;
+}
+.action.secondary {
+  background: var(--ground);
+  box-shadow: inset 0 0 0 1px var(--control);
+}
+.action.secondary:hover,
+.action.quiet:hover,
+.action.link:hover {
+  background: var(--selected);
+}
+.action.secondary:active,
+.action.quiet:active,
+.action.link:active,
+.action.selected {
+  background: var(--selected-strong);
+}
+.action.link {
+  color: var(--unread);
+}
+.action.primary {
+  background: var(--unread);
+  color: var(--on-accent);
+}
+.action.primary:hover {
+  background: color-mix(in srgb, var(--unread), black 8%);
+}
+.action.primary:active {
+  background: color-mix(in srgb, var(--unread), black 18%);
+}
+.action.inverse {
+  background: var(--ink);
+  color: var(--ground);
+}
+.action.inverse:hover {
+  background: color-mix(in srgb, var(--ink) 88%, transparent);
+}
+.action:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+.action.secondary:disabled {
+  background: var(--ground);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+.action.primary:disabled {
+  background: var(--selected-strong);
+}
+.action.quiet:disabled,
+.action.link:disabled {
+  background: none;
+}
+
+.key-hint {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--selected);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: var(--ui-500);
+}
+.key-hint.on-dark {
+  background: color-mix(in srgb, var(--ground) 12%, transparent);
+  color: color-mix(in srgb, var(--ground) 70%, transparent);
+}
+
+/* Over the window: a scrim that closes what it holds when clicked. */
+.scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--scrim);
+}
+
+/* Search (Search.swift SearchPanel). */
+.search-panel {
+  --sheet-ground: var(--ground);
+  width: 640px;
+  /* 96 below the Mac's 28 point title bar strip, which SwiftUI's overlay keeps clear of. */
+  margin-top: 124px;
+  display: flex;
+  flex-direction: column;
+  background: var(--sheet-ground);
+  border-radius: var(--radius-sheet);
+  box-shadow: inset 0 0 0 1px var(--control);
+}
+:root[data-dark="1"] .search-panel {
+  --sheet-ground: var(--surface);
+}
+.search-query {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px;
+}
+.search-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 20px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.search-field::placeholder {
+  color: var(--muted);
+}
+.search-count {
+  flex: none;
+  font-size: 13px;
+  color: var(--muted);
+}
+.search-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 20px 20px 22px;
+}
+.search-note-main {
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.search-note-main.muted,
+.search-note-detail {
+  color: var(--muted);
+}
+.search-note-detail {
+  font-size: 13px;
+}
+.search-none {
+  font-family: var(--font-title), serif;
+  font-size: 21px;
+  font-weight: var(--title-500);
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  overflow-y: auto;
+}
+/* SwiftUI's .frame(height: 64) centres the HStack, whose columns are top aligned. */
+.search-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 64px;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  text-align: left;
+}
+.search-row-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+.search-row.selected {
+  background: var(--selected);
+}
+.search-row-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.search-row-title {
+  font-family: var(--font-title), serif;
+  font-size: 18px;
+  font-weight: var(--title-500);
+  color: var(--unread);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-row-title.read {
+  color: var(--read);
+}
+.search-row-preview {
+  font-size: 13px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-mark {
+  color: var(--ink);
+  font-weight: var(--ui-600);
+}
+.search-row-meta {
+  flex: none;
+  width: 104px;
+  padding-top: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.search-row-meta > span {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-footer {
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+}
+.search-scope {
+  font-size: 13px;
+  font-weight: var(--ui-500);
+  color: var(--ink-soft);
+}
+.search-keys {
+  margin-left: auto;
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.search-footer .action {
+  margin-left: 8px;
 }
