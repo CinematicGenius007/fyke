@@ -1,0 +1,54 @@
+/* The fonts the Mac app bundles, from gui/Fonts, with their full weight and optical
+ * size axes. Optical size follows the text size, as CoreText does on the Mac. */
+@font-face {
+  font-family: "Inter";
+  src: url("../../../gui/Fonts/Inter[opsz,wght].ttf") format("truetype");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+}
+@font-face {
+  font-family: "Newsreader";
+  src: url("../../../gui/Fonts/Newsreader[opsz,wght].ttf") format("truetype");
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: block;
+}
+@font-face {
+  font-family: "Newsreader";
+  src: url("../../../gui/Fonts/Newsreader-Italic[opsz,wght].ttf") format("truetype");
+  font-style: italic;
+  font-weight: 200 800;
+  font-display: block;
+}
+@font-face {
+  font-family: "Source Serif 4";
+  src: url("../../../gui/Fonts/SourceSerif4[opsz,wght].ttf") format("truetype");
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: block;
+}
+@font-face {
+  font-family: "Source Serif 4";
+  src: url("../../../gui/Fonts/SourceSerif4-Italic[opsz,wght].ttf") format("truetype");
+  font-style: italic;
+  font-weight: 200 900;
+  font-display: block;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../../../gui/Fonts/JetBrainsMono[wght].ttf") format("truetype");
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: block;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../../../gui/Fonts/JetBrainsMono-Italic[wght].ttf") format("truetype");
+  font-style: italic;
+  font-weight: 100 800;
+  font-display: block;
+}
+:root {
+  font-optical-sizing: auto;
+}
