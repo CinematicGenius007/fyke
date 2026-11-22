@@ -1,6 +1,6 @@
 // The sidebar (gui/Sources/Reader/Sidebar.swift): places, views, the feed tree, then
 // Routines and the status line. Rows are 32 high; indent comes from SidebarIndent.
-import { For, type JSX, Match, Show, Switch } from "solid-js";
+import { For, type JSX, Match, onMount, Show, Switch } from "solid-js";
 import { SidebarIndent } from "../logic/SidebarIndent";
 import { app, type Place } from "../model/app";
 import { prefs } from "../model/prefs";
@@ -8,6 +8,7 @@ import type { Feed, Folder, SavedView } from "../model/types";
 import { feedName } from "../model/types";
 import { Dates } from "./format";
 import { Count, Dot, Rule, SectionLabel, Spinner, SymbolButton } from "./kit/Controls";
+import { float, type MenuItem } from "./Float";
 import { Icon, type IconName } from "./kit/Icon";
 
 type TreeRow = { kind: "folder"; folder: Folder; depth: number } | { kind: "feed"; feed: Feed; depth: number };
@@ -24,6 +25,7 @@ export function SidebarRow(props: {
   onClick: () => void;
   children?: JSX.Element;
   lead?: JSX.Element;
+  onMenu?: (event: MouseEvent) => void;
 }) {
   return (
     <button
@@ -34,6 +36,7 @@ export function SidebarRow(props: {
       aria-label={props.label ?? props.title}
       aria-current={props.selected ? "page" : undefined}
       onClick={() => props.onClick()}
+      onContextMenu={(event) => props.onMenu?.(event)}
     >
       <Show when={props.icon}>{(icon) => <Icon name={icon()} size={14} class="row-icon" />}</Show>
       {props.lead}
@@ -126,17 +129,136 @@ function SectionHeader(props: { title: string; help: string; onAdd: () => void }
   );
 }
 
+/** The text field that takes a row's place while it is renamed. Return keeps the
+ * name; Esc or a click elsewhere leaves it as it was. */
+function RenameField(props: { name: string; commit: (name: string) => void }) {
+  const model = app();
+  let field!: HTMLInputElement;
+  let done = false;
+  onMount(() => {
+    field.value = props.name;
+    field.focus();
+    field.select();
+  });
+  const cancel = () => {
+    if (done) return;
+    done = true;
+    model.set("renaming", null);
+  };
+  return (
+    <input
+      ref={field}
+      class="rename-field"
+      type="text"
+      spellcheck={false}
+      autocomplete="off"
+      aria-label={`Rename ${props.name}`}
+      onKeyDown={(event) => {
+        if (event.isComposing) return;
+        if (event.key === "Enter") {
+          event.preventDefault();
+          done = true;
+          props.commit(field.value);
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          cancel();
+        }
+      }}
+      onBlur={cancel}
+    />
+  );
+}
+
+const isRenaming = (kind: "feed" | "folder" | "view", id: number) => {
+  const renaming = app().state.renaming;
+  return renaming?.kind === kind && renaming.id === id;
+};
+
+/** The menu a view row opens (Views.swift ViewMenu). Brief, catch-up and routine rows
+ * join with those features. */
+function viewMenu(view: SavedView): MenuItem[] {
+  const model = app();
+  return [
+    { title: "Rename", run: () => model.set("renaming", { kind: "view", id: view.id }) },
+    { title: "Mark all read", run: () => model.markAllRead({ view: view.id }) },
+    "rule",
+    { title: "Move up", run: () => model.moveView(view.id, -1) },
+    { title: "Move down", run: () => model.moveView(view.id, 1) },
+    "rule",
+    { title: "Remove view", run: () => void model.removeView(view.id) },
+  ];
+}
+
+/** Sidebar.swift FolderRow `menu`. Catch up joins with catch-up. */
+function folderMenu(folder: Folder): MenuItem[] {
+  const model = app();
+  return [
+    { title: "Rename", run: () => model.set("renaming", { kind: "folder", id: folder.id }) },
+    { title: "New folder inside", run: () => void model.newFolder(folder.id) },
+    {
+      title: "Add feed here",
+      run: () => {
+        model.set("addFeedFolder", folder.id);
+        model.set("showingAddFeed", true);
+      },
+    },
+    { title: "Mark all read", run: () => model.markAllRead({ folder: folder.id }) },
+    "rule",
+    { title: "Delete folder…", run: () => model.set("confirmation", { kind: "deleteFolder", folder }) },
+  ];
+}
+
+/** Sidebar.swift FeedMenu, with Move to › beside it. */
+function feedMenu(feed: Feed): MenuItem[] {
+  const model = app();
+  const site = feed.site_url;
+  return [
+    { title: "Refresh", run: () => void model.refreshFeed(feed.id) },
+    { title: "Rename", run: () => model.set("renaming", { kind: "feed", id: feed.id }) },
+    { title: "Move to", submenu: true, run: (row) => float.side(row, 184, moveMenu(feed)) },
+    { title: "Mark all read", run: () => model.markAllRead({ feed: feed.id }) },
+    ...(site ? [{ title: "Open site", run: () => model.openLink(site) }] : []),
+    "rule",
+    { title: "Remove feed…", run: () => model.set("confirmation", { kind: "removeFeed", feed }) },
+  ];
+}
+
+function moveMenu(feed: Feed): MenuItem[] {
+  const model = app();
+  const here = feed.folder_id ?? null;
+  return [
+    { title: "Top level", checked: here === null, run: () => void model.moveFeed(feed.id, null) },
+    ...model.folderOutline().map(
+      (row): MenuItem => ({ title: row.folder.name, checked: here === row.folder.id, indent: row.depth * 16, run: () => void model.moveFeed(feed.id, row.folder.id) }),
+    ),
+    "rule",
+    { title: "New folder", run: () => void model.newFolder(null, feed.id) },
+  ];
+}
+
 function ViewRow(props: { view: SavedView }) {
   const model = app();
   return (
-    <SidebarRow
-      title={props.view.name}
-      icon="line.3.horizontal.decrease"
-      selected={model.isShowing({ kind: "view", id: props.view.id })}
-      onClick={() => model.go({ kind: "view", id: props.view.id })}
+    <Show
+      when={!isRenaming("view", props.view.id)}
+      fallback={
+        <div class="sidebar-rename" style={{ "padding-left": `${SidebarIndent.leading(0)}px` }}>
+          <Icon name="line.3.horizontal.decrease" size={14} class="row-icon" />
+          <RenameField name={props.view.name} commit={(name) => model.renameView(props.view.id, name)} />
+          <span class="rename-note">↵ to keep</span>
+        </div>
+      }
     >
-      <Count value={props.view.unread} quiet={props.view.unread === 0} />
-    </SidebarRow>
+      <SidebarRow
+        title={props.view.name}
+        icon="line.3.horizontal.decrease"
+        selected={model.isShowing({ kind: "view", id: props.view.id })}
+        onClick={() => model.go({ kind: "view", id: props.view.id })}
+        onMenu={(event) => float.menu(event, 220, viewMenu(props.view))}
+      >
+        <Count value={props.view.unread} quiet={props.view.unread === 0} />
+      </SidebarRow>
+    </Show>
   );
 }
 
@@ -145,31 +267,44 @@ function FolderRow(props: { folder: Folder; depth: number }) {
   const closed = () => prefs().ui.collapsed_folders.includes(props.folder.id);
   const unread = () => model.feedsInside(props.folder.id).reduce((sum, f) => sum + f.unread, 0);
   const selected = () => model.isShowing({ kind: "folder", id: props.folder.id });
+  const chevron = () => (
+    <button
+      type="button"
+      class="chevron"
+      style={{ left: `${SidebarIndent.leading(props.depth)}px` }}
+      title={closed() ? "Open folder" : "Close folder"}
+      aria-label={closed() ? `Open ${props.folder.name}` : `Close ${props.folder.name}`}
+      onClick={() => model.toggleFolder(props.folder.id)}
+    >
+      <Icon name={closed() ? "right" : "down"} size={10} stroke={2} />
+    </button>
+  );
   return (
-    <div class="folder-row">
-      <SidebarRow
-        title={props.folder.name}
-        depth={props.depth}
-        selected={selected()}
-        medium={!selected()}
-        label={`${props.folder.name}, folder`}
-        lead={<span class="row-icon" />}
-        onClick={() => model.go({ kind: "folder", id: props.folder.id })}
+    <div class="folder-row" onContextMenu={(event) => float.menu(event, 204, folderMenu(props.folder))}>
+      <Show
+        when={!isRenaming("folder", props.folder.id)}
+        fallback={
+          <div class="sidebar-rename" style={{ "padding-left": `${SidebarIndent.leading(props.depth)}px` }}>
+            <span class="row-icon" />
+            <RenameField name={props.folder.name} commit={(name) => model.renameFolder(props.folder.id, name)} />
+          </div>
+        }
       >
-        <Show when={unread() > 0}>
-          <Count value={unread()} />
-        </Show>
-      </SidebarRow>
-      <button
-        type="button"
-        class="chevron"
-        style={{ left: `${SidebarIndent.leading(props.depth)}px` }}
-        title={closed() ? "Open folder" : "Close folder"}
-        aria-label={closed() ? `Open ${props.folder.name}` : `Close ${props.folder.name}`}
-        onClick={() => model.toggleFolder(props.folder.id)}
-      >
-        <Icon name={closed() ? "right" : "down"} size={10} stroke={2} />
-      </button>
+        <SidebarRow
+          title={props.folder.name}
+          depth={props.depth}
+          selected={selected()}
+          medium={!selected()}
+          label={`${props.folder.name}, folder`}
+          lead={<span class="row-icon" />}
+          onClick={() => model.go({ kind: "folder", id: props.folder.id })}
+        >
+          <Show when={unread() > 0}>
+            <Count value={unread()} />
+          </Show>
+        </SidebarRow>
+      </Show>
+      {chevron()}
     </div>
   );
 }
@@ -178,24 +313,34 @@ function FeedRow(props: { feed: Feed; depth: number }) {
   const model = app();
   const failing = () => model.isFailing(props.feed);
   return (
-    <SidebarRow
-      title={feedName(props.feed)}
-      depth={props.depth}
-      selected={model.isShowing({ kind: "feed", id: props.feed.id })}
-      muted={props.feed.unread === 0 && !failing()}
-      onClick={() => model.go({ kind: "feed", id: props.feed.id })}
+    <Show
+      when={!isRenaming("feed", props.feed.id)}
+      fallback={
+        <div class="sidebar-rename" style={{ "padding-left": `${SidebarIndent.leading(props.depth) - 4}px` }}>
+          <RenameField name={feedName(props.feed)} commit={(name) => model.renameFeed(props.feed.id, name)} />
+        </div>
+      }
     >
-      <Switch>
-        <Match when={failing()}>
-          <span class="row-warning" title={`${feedName(props.feed)} is not loading`}>
-            <Icon name="warning" size={13} />
-          </span>
-        </Match>
-        <Match when={props.feed.unread > 0}>
-          <Count value={props.feed.unread} />
-        </Match>
-      </Switch>
-    </SidebarRow>
+      <SidebarRow
+        title={feedName(props.feed)}
+        depth={props.depth}
+        selected={model.isShowing({ kind: "feed", id: props.feed.id })}
+        muted={props.feed.unread === 0 && !failing()}
+        onClick={() => model.go({ kind: "feed", id: props.feed.id })}
+        onMenu={(event) => float.menu(event, 204, feedMenu(props.feed))}
+      >
+        <Switch>
+          <Match when={failing()}>
+            <span class="row-warning" title={`${feedName(props.feed)} is not loading`}>
+              <Icon name="warning" size={13} />
+            </span>
+          </Match>
+          <Match when={props.feed.unread > 0}>
+            <Count value={props.feed.unread} />
+          </Match>
+        </Switch>
+      </SidebarRow>
+    </Show>
   );
 }
 

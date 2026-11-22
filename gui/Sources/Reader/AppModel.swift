@@ -637,16 +637,19 @@ final class AppModel {
     private struct MarkAllParams: Encodable, Sendable { var feedId: Int64?; var folderId: Int64? }
 
     /// Runs a change to subscriptions, then shows the result. The daemon names its
-    /// refusals, and only the one a person can cause needs words.
+    /// refusals, and only the one a person can cause needs words. The refusal shows
+    /// after the reload, which would otherwise clear it.
     private func change(_ work: @escaping () async throws -> Void) {
         Task {
+            var refusal: String?
             do {
                 try await work()
             } catch {
                 let text = error.localizedDescription
-                problem = text.contains("FolderExists") ? "A folder with that name is already there" : text
+                refusal = text.contains("FolderExists") ? "A folder with that name is already there" : text
             }
             await reload()
+            if let refusal { problem = refusal }
         }
     }
 

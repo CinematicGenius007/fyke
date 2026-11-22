@@ -55,6 +55,8 @@ interface State {
   updatedAt: Date | null;
   fullTextStatus: string | null;
   showingAddFeed: boolean;
+  /** The folder Add feed puts a new feed in, from a folder's menu. */
+  addFeedFolder: number | null;
   showingType: boolean;
   showingShortcuts: boolean;
   showingSettings: boolean;
@@ -98,6 +100,7 @@ function createApp() {
     updatedAt: null,
     fullTextStatus: null,
     showingAddFeed: false,
+    addFeedFolder: null,
     showingType: false,
     showingShortcuts: false,
     showingSettings: false,
@@ -368,6 +371,111 @@ function createApp() {
     }
   }
 
+  function renameView(id: number, name: string) {
+    set("renaming", null);
+    const view = library.state.views.find((v) => v.id === id);
+    if (!view || !name.trim() || name === view.name) return;
+    library.saveView({ id, name, rule: view.rule, revision: view.revision }).catch(fail);
+  }
+
+  function moveView(id: number, by: number) {
+    const views = library.state.views;
+    const index = views.findIndex((v) => v.id === id);
+    if (index < 0) return;
+    const target = Math.min(Math.max(index + by, 0), views.length - 1);
+    if (target === index) return;
+    library.moveView(id, target).catch(fail);
+  }
+
+  /** Removes at once, and Undo makes the view again where it was. Routines that look
+   * in it are detached; pointing them back joins with routines (phase 5). */
+  async function removeView(id: number) {
+    const view = library.state.views.find((v) => v.id === id);
+    if (!view) return;
+    const kept = { name: view.name, rule: view.rule, position: view.position };
+    if (samePlace(state.place, { kind: "view", id })) go({ kind: "all" });
+    try {
+      await library.removeView(id, true);
+      undo.push(`Removed “${kept.name}”`, async () => {
+        const made = await library.saveView({ name: kept.name, rule: kept.rule }).catch(() => null);
+        if (made) await library.moveView(made.id, kept.position).catch(() => undefined);
+      });
+    } catch (error) {
+      fail(error);
+    }
+  }
+
+  // MARK: Folders and feeds (AppModel.swift "Folders and feeds")
+
+  /** Runs a change to subscriptions, then shows the result. The daemon names its
+   * refusals, and only the one a person can cause needs words. The refusal shows after
+   * the reload, which would otherwise clear it. */
+  async function change(work: () => Promise<unknown>): Promise<void> {
+    let refusal: string | null = null;
+    try {
+      await work();
+    } catch (error) {
+      refusal = RPCFailure.from(error).is("FolderExists") ? "A folder with that name is already there" : words(error);
+    }
+    await reload();
+    if (refusal) set("problem", refusal);
+  }
+
+  /** Makes a folder and starts renaming it, so that naming is one step. */
+  async function newFolder(parent: number | null, holding?: number) {
+    const taken = new Set(childFolders(parent).map((f) => f.name));
+    const names = ["New folder", ...Array.from({ length: 98 }, (_, i) => `New folder ${i + 2}`)];
+    const name = names.find((n) => !taken.has(n)) ?? "New folder";
+    try {
+      const made = await transport().call<{ id: number }>("folders.add", { name, parent_id: parent });
+      if (parent !== null) prefs().update((ui) => void (ui.collapsed_folders = ui.collapsed_folders.filter((f) => f !== parent)));
+      if (holding !== undefined) await transport().call("feeds.update", { id: holding, folder_id: made.id });
+      await reload();
+      set("renaming", { kind: "folder", id: made.id });
+    } catch (error) {
+      fail(error);
+    }
+  }
+
+  function renameFolder(id: number, name: string) {
+    set("renaming", null);
+    return change(() => transport().call("folders.rename", { id, name }));
+  }
+
+  function moveFolder(id: number, parent: number | null) {
+    return change(() => transport().call("folders.move", { id, parent_id: parent }));
+  }
+
+  function leavesPlace(folder: number): boolean {
+    const place = state.place;
+    if (place.kind === "feed") return feedsInside(folder).some((f) => f.id === place.id);
+    if (place.kind === "folder") return foldersInside(folder).some((f) => f.id === place.id);
+    return false;
+  }
+
+  function removeFolder(id: number, deleteContents: boolean) {
+    if (samePlace(state.place, { kind: "folder", id }) || (deleteContents && leavesPlace(id))) go({ kind: "all" });
+    return change(() => transport().call("folders.remove", { id, delete_contents: deleteContents }));
+  }
+
+  function renameFeed(id: number, name: string) {
+    set("renaming", null);
+    return change(() => transport().call("feeds.update", { id, title: name }));
+  }
+
+  function moveFeed(id: number, folder: number | null) {
+    return change(() => transport().call("feeds.update", folder === null ? { id, top_level: true } : { id, folder_id: folder }));
+  }
+
+  function refreshFeed(id: number) {
+    return change(() => transport().call("feeds.refresh", { id }, { slow: true }));
+  }
+
+  function removeFeed(id: number) {
+    if (samePlace(state.place, { kind: "feed", id })) go({ kind: "all" });
+    return change(() => transport().call("feeds.remove", { id }));
+  }
+
   function toggleUnreadOnly() {
     set("unreadOnly", (v) => !v);
     void reloadEntries().catch(fail);
@@ -479,9 +587,8 @@ function createApp() {
   function refresh() {
     void (async () => {
       const place = state.place;
-      await (place.kind === "feed"
-        ? transport().call("feeds.refresh", { id: place.id }, { slow: true })
-        : transport().call("feeds.refresh_all", {}, { slow: true })
+      await (
+        place.kind === "feed" ? transport().call("feeds.refresh", { id: place.id }, { slow: true }) : transport().call("feeds.refresh_all", {}, { slow: true })
       ).catch(() => undefined);
       await reload();
     })();
@@ -637,6 +744,15 @@ function createApp() {
       case "shortcuts":
         set("showingShortcuts", true);
         break;
+      case "delete-folder":
+        if (state.folders[0]) set("confirmation", { kind: "deleteFolder", folder: state.folders[0] });
+        break;
+      case "rename-folder":
+        if (state.folders[0]) set("renaming", { kind: "folder", id: state.folders[0].id });
+        break;
+      case "rename-feed":
+        if (state.feeds[0]) set("renaming", { kind: "feed", id: state.feeds[0].id });
+        break;
       case "palette":
         // One batch, so the field mounts with the words in it and selects them.
         batch(() => {
@@ -670,6 +786,17 @@ function createApp() {
     openResult,
     saveSearchAsView,
     saveAsView,
+    renameView,
+    moveView,
+    removeView,
+    refreshFeed,
+    newFolder,
+    renameFolder,
+    moveFolder,
+    removeFolder,
+    renameFeed,
+    moveFeed,
+    removeFeed,
     start,
     reload,
     reloadEntries,

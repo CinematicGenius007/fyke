@@ -31,6 +31,8 @@ SETTINGS_TABS = ["General", "Reading", "Tokens", "Agents", "Data"]
 # open, as a click on its number leaves it. `view` and `all` have their first article
 # selected, which shows the list's top inset against the header.
 SCREENS = ["today", "view", "all", "recipe", "routines", "catchup", "palette", "ask", "activity", "health", "toast", "search", "shortcuts"]
+# Pictures of the feed tree with a folder in it.
+TREE_SCREENS = ["rename-folder", "rename-feed", "delete-folder"]
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument("--only", help="comma-separated names from --list; what they depend on runs first")
@@ -377,6 +379,22 @@ for screen in SCREENS + ["citation"]:
     extra = {"FYKE_SCREEN": "today", "FYKE_PIN_CITATION": "1"} if screen == "citation" else {"FYKE_SCREEN": screen}
     check(f"shot:{screen}", needs=SCREEN_NEEDS.get(screen, []), tags=[screen, "snapshots"])(
         lambda screen=screen, extra=extra: snapshot(screen, extra))
+
+
+def tree_snapshot(name):
+    """A picture with Local inside a folder named Reading. The folder goes again after,
+    with Local back at the top level, so later pictures see the usual tree."""
+    folder = call("folders.add", {"name": "Reading"})["id"]
+    local = call("feeds.list")["items"][0]["id"]
+    call("feeds.update", {"id": local, "folder_id": folder})
+    try:
+        snapshot(name, {"FYKE_SCREEN": name})
+    finally:
+        call("folders.remove", {"id": folder})
+
+
+for screen in TREE_SCREENS:
+    check(f"shot:{screen}", tags=[screen, "snapshots"])(lambda screen=screen: tree_snapshot(screen))
 for tab in SETTINGS_TABS:
     name = f"settings-{tab.lower()}"
     check(f"shot:{name}", tags=[name, "settings", "snapshots"])(

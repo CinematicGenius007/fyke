@@ -77,6 +77,7 @@ const shapes = {
   "arrow.clockwise": () => <path d="M13.2 8.6A5.2 5.2 0 1 1 11.6 4.3M12 1.6V4.7H8.9" />,
   "checkmark.circle": () => <><circle cx="8" cy="8" r="6" /><path d="M5.4 8.2L7.2 10L10.7 6.2" /></>,
   "arrow.uturn.backward": () => <path d="M5.5 3.5L2.5 6.5L5.5 9.5M2.5 6.5H10A3.5 3.5 0 0 1 10 13.5H7" />,
+  "folder.badge.plus": () => <path d="M2.5 12V4.5L3.5 3.5H6.5L8 5H12.5L13.5 6V8M8.5 13H3.5L2.5 12M12 9.5V14.5M9.5 12H14.5" />,
   keyboard: () => <><rect x="1.5" y="4" width="13" height="8.5" rx="1.5" /><path d="M4 6.6H4.01M6.67 6.6H6.68M9.33 6.6H9.34M12 6.6H12.01M4 9H4.01M12 9H12.01M6 10.2H10" /></>,
   return: () => <path d="M13 3.5V8.5A1.5 1.5 0 0 1 11.5 10H3.5M6.5 7L3.5 10L6.5 13" />,
   ellipsis: () => <g class="dots"><circle cx="3.4" cy="8" r="1.15" /><circle cx="8" cy="8" r="1.15" /><circle cx="12.6" cy="8" r="1.15" /></g>,

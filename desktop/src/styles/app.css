@@ -267,6 +267,38 @@ svg.icon .dots circle {
 .folder-row {
   position: relative;
 }
+/* A row being renamed (Sidebar.swift RenameField): a 24 high field with a centred
+   1 point stroke in the unread color. */
+.sidebar-rename {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding-right: 8px;
+}
+.rename-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 24px;
+  padding: 0 4px;
+  border: 0;
+  outline: 0;
+  border-radius: var(--radius-control);
+  background: var(--ground);
+  box-shadow:
+    0 0 0 0.5px var(--unread),
+    inset 0 0 0 0.5px var(--unread);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+}
+.rename-note {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .chevron {
   position: absolute;
   top: 4px;
@@ -1329,25 +1361,28 @@ svg.icon .dots circle {
   justify-content: center;
   padding-top: 28px;
 }
-.shortcuts {
-  width: 640px;
-  padding: 28px 32px 20px;
+/* A sheet over the scrim (the shortcuts popup, the confirmations): the ground, radius
+   sheet, a centred 1 point stroke, and SwiftUI's shadow radius of 25 as a CSS blur of 50.
+   The Mac draws that shadow's y of 18 upward (the shadow sits in a background inside a
+   ZStack), so it falls above the sheet here too (D23). 14 % in place of 15 % gives the
+   Mac's measured depth at the edge, 20 levels. */
+.sheet {
   background: var(--ground);
   border-radius: var(--radius-sheet);
-  /* A centred 1 point stroke, and SwiftUI's shadow radius of 25 as a CSS blur of 50.
-     The Mac's popup draws its y of 18 upward (the shadow sits in a background inside
-     a ZStack), so the shadow falls above the sheet here too (D23). 14 % in place of
-     15 % gives the Mac's measured depth at the edge, 20 levels. */
   box-shadow:
     0 0 0 0.5px var(--hairline),
     inset 0 0 0 0.5px var(--hairline),
     0 -18px 50px rgb(0 0 0 / 14%);
 }
-:root[data-dark="1"] .shortcuts {
+:root[data-dark="1"] .sheet {
   box-shadow:
     0 0 0 0.5px var(--hairline),
     inset 0 0 0 0.5px var(--hairline),
     0 -18px 50px rgb(0 0 0 / 50%);
+}
+.shortcuts {
+  width: 640px;
+  padding: 28px 32px 20px;
 }
 .shortcuts-head {
   display: flex;
@@ -1400,4 +1435,168 @@ svg.icon .dots circle {
 }
 .shortcuts-foot {
   padding-top: 14px;
+}
+
+/* Floating panels (Controls.swift FloatLayer, FloatPanelStyle, MenuRow): the popover
+   look from the design rules, radius 10, a hairline and two shadows. */
+.float-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+}
+.float-panel {
+  --panel-ground: var(--ground);
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  padding: 6px;
+  background: var(--panel-ground);
+  border-radius: var(--radius-panel);
+  box-shadow:
+    inset 0 0 0 1px var(--hairline),
+    0 12px 32px rgb(0 0 0 / 12.2%),
+    0 2px 6px rgb(0 0 0 / 7.8%);
+}
+:root[data-dark="1"] .float-panel {
+  --panel-ground: var(--surface);
+  box-shadow:
+    inset 0 0 0 1px var(--hairline),
+    0 12px 32px rgb(0 0 0 / 45%),
+    0 2px 6px rgb(0 0 0 / 30%);
+}
+.float-rows {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.float-rule {
+  margin: 3px 0;
+}
+.menu-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  text-align: left;
+}
+.menu-row:hover {
+  background: var(--selected);
+}
+.menu-row:active {
+  background: var(--selected-strong);
+}
+.menu-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-right: 8px;
+}
+.menu-title {
+  font-size: 14px;
+}
+.menu-detail {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Confirmations (Sidebar.swift ConfirmationDialog), 460 wide with 24 around. */
+.confirm {
+  width: 460px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+}
+.confirm-title {
+  margin: 0 0 6px;
+  font-family: var(--font-title), serif;
+  font-size: 24px;
+  font-weight: var(--title-600);
+  letter-spacing: -0.24px;
+  color: var(--ink);
+}
+.confirm-text {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.confirm-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 0;
+}
+.confirm-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.confirm-option-title {
+  font-size: 14px;
+}
+.confirm-option-note {
+  font-size: 13px;
+  color: var(--muted);
+}
+.confirm-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 18px;
+}
+/* Kit buttons: Plain (RootView.swift), an outline in the control color, and Solid
+   (Sidebar.swift), ink filled, for the one action a dialog is about. */
+.outline-button {
+  padding: 5px 10px;
+  border-radius: var(--radius-control);
+  box-shadow:
+    0 0 0 0.5px var(--control),
+    inset 0 0 0 0.5px var(--control);
+  font-size: 14px;
+  color: var(--ink);
+}
+.outline-button:active {
+  opacity: 0.7;
+}
+.solid-button {
+  padding: 6px 12px;
+  border-radius: var(--radius-control);
+  background: var(--ink);
+  font-size: 14px;
+  font-weight: var(--ui-500);
+  color: var(--ground);
+}
+.solid-button:active {
+  opacity: 0.8;
+}
+/* Controls.swift Checkbox: 18 square, radius 4, the unread color when on. */
+.checkbox {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  background: var(--ground);
+  box-shadow:
+    0 0 0 0.5px var(--control),
+    inset 0 0 0 0.5px var(--control);
+  transition: box-shadow 0.12s;
+}
+.checkbox:hover {
+  box-shadow:
+    0 0 0 0.5px var(--muted),
+    inset 0 0 0 0.5px var(--muted);
+}
+.checkbox.on {
+  background: var(--unread);
+  box-shadow:
+    0 0 0 0.5px var(--unread),
+    inset 0 0 0 0.5px var(--unread);
 }

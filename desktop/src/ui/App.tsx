@@ -4,11 +4,13 @@ import { Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { app } from "../model/app";
 import { prefs } from "../model/prefs";
 import { EntryList } from "./EntryList";
+import { FloatLayer } from "./Float";
 import { handleKey } from "./keys";
 import { Icon } from "./kit/Icon";
 import { Rule } from "./kit/Controls";
 import { Panes } from "./Panes";
 import { CommandPalette } from "./CommandPalette";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { ReaderPane } from "./Reader";
 import { SearchPanel } from "./SearchPanel";
 import { ShortcutsSheet } from "./ShortcutsSheet";
@@ -20,7 +22,18 @@ export function App() {
   onMount(() => {
     const listener = (event: KeyboardEvent) => handleKey(event);
     window.addEventListener("keydown", listener);
-    onCleanup(() => window.removeEventListener("keydown", listener));
+    // The webview's own menu (Reload, Inspect) is not the app's. Text keeps it, for
+    // copy and paste, as AppKit's text views do.
+    const menu = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      const text = target?.closest("input, textarea, [contenteditable]") || (window.getSelection()?.toString() ?? "") !== "";
+      if (!text) event.preventDefault();
+    };
+    window.addEventListener("contextmenu", menu);
+    onCleanup(() => {
+      window.removeEventListener("keydown", listener);
+      window.removeEventListener("contextmenu", menu);
+    });
   });
 
   const problem = () => {
@@ -57,6 +70,10 @@ export function App() {
       <Show when={model.state.showingShortcuts}>
         <ShortcutsSheet />
       </Show>
+      <Show when={model.state.confirmation}>
+        <ConfirmDialog />
+      </Show>
+      <FloatLayer />
       <div class="bottom-layer" aria-live="polite">
         <Show when={problem()}>
           {(text) => (

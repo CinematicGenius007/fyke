@@ -38,7 +38,7 @@ export function ShortcutsSheet() {
   const close = () => model.set("showingShortcuts", false);
   return (
     <div class="scrim centered" onClick={(event) => event.target === event.currentTarget && close()}>
-      <div class="shortcuts" role="dialog" aria-label="Shortcuts">
+      <div class="sheet shortcuts" role="dialog" aria-label="Shortcuts">
         <div class="shortcuts-head">
           <h2 class="shortcuts-title">Shortcuts</h2>
           <span class="shortcuts-note">Esc to close</span>

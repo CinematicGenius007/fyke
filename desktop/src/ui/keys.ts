@@ -1,6 +1,7 @@
 // The reader's keys, the same as the Mac's and the terminal app's where they have them
 // (gui/Sources/Reader/RootView.swift `handle`). Ctrl stands in for the Mac's Command.
 import { app } from "../model/app";
+import { float } from "./Float";
 
 /** Typing into a field keeps its letters. */
 function typing(target: EventTarget | null): boolean {
@@ -52,6 +53,12 @@ function command(event: KeyboardEvent): boolean {
 export function handleKey(event: KeyboardEvent): void {
   const model = app();
   if (event.defaultPrevented || event.isComposing) return;
+  // An open menu takes the keys: Esc closes it, and nothing behind it acts.
+  if (float.isOpen()) {
+    if (event.key === "Escape") float.close();
+    if (!typing(event.target)) event.preventDefault();
+    return;
+  }
   if (event.ctrlKey || event.metaKey) {
     if (!event.altKey) command(event);
     return;
@@ -60,7 +67,13 @@ export function handleKey(event: KeyboardEvent): void {
   // These hold their own focus and keys.
   if (model.search.state.isShowing || model.commands.state.isShowing) return;
   if (typing(event.target)) return;
-  if (model.state.confirmation) return void event.preventDefault();
+  // A confirmation keeps the data on Esc; nothing behind it acts.
+  if (model.state.confirmation) {
+    if (event.key === "Escape") model.set("confirmation", null);
+    // A focused button takes Return, Space and Tab itself.
+    if (!["Enter", " ", "Tab"].includes(event.key)) event.preventDefault();
+    return;
+  }
   if (model.state.renaming) return;
   if (model.state.showingShortcuts) {
     if (event.key === "Escape" || event.key === "?") model.set("showingShortcuts", false);
