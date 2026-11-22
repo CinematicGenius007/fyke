@@ -83,8 +83,9 @@ if installed_version() is not None and not os.environ.get("CI"):
 fields = run("dpkg-deb", "-f", DEB, "Package", "Version", "Depends").stdout
 check("the package is called fyke", "Package: fyke" in fields, fields)
 contents = run("dpkg-deb", "-c", DEB).stdout
-for path in ("./usr/bin/fyke-app", "./usr/bin/fyke", "./usr/share/applications/Fyke.desktop"):
-    check(f"it holds {path}", f" {path}\n" in contents + "\n" or f" {path} " in contents, contents)
+held = {line.split()[-1].removeprefix("./") for line in contents.splitlines() if line.strip()}
+for path in ("usr/bin/fyke-app", "usr/bin/fyke", "usr/share/applications/Fyke.desktop"):
+    check(f"it holds /{path}", path in held, contents)
 
 # An older copy, the same files relabelled 0.0.1.
 older = root / "older"

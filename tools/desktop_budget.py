@@ -64,13 +64,21 @@ def tree_memory(process):
     return total / MB
 
 
+SLOW_MS = 5000
+
+
 def launch(app, env):
     """Launches the app once. Returns (ms to the first list, idle memory in MB)."""
+    log = tempfile.TemporaryFile(mode="w+")
     started = time.perf_counter()
-    child = subprocess.Popen([str(app)], env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    child = subprocess.Popen([str(app)], env=env, stdout=subprocess.PIPE, stderr=log, text=True)
     try:
         line = child.stdout.readline()
         elapsed = (time.perf_counter() - started) * 1000
+        if line.strip() != "ready" or elapsed > SLOW_MS:
+            # What the app and its web view said explains a slow or failed start.
+            log.seek(0)
+            print(f"the app took {elapsed:.0f} ms and said:\n{log.read()[-4000:]}", file=sys.stderr)
         if line.strip() != "ready":
             sys.exit(f"the app did not report ready (exit {child.poll()}, said {line!r})")
         time.sleep(HOLD / 2)
