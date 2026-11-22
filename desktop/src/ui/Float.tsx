@@ -2,7 +2,7 @@
 // `FloatLayer`): right-click menus, and a submenu beside one. It sits above everything,
 // so a panel is never clipped by the view that opened it, and a click anywhere else
 // closes it.
-import { createSignal, For, type JSX, onMount, Show } from "solid-js";
+import { createSignal, For, type JSX, onMount, Show, untrack } from "solid-js";
 import { Rule } from "./kit/Controls";
 import { Icon } from "./kit/Icon";
 
@@ -91,7 +91,9 @@ function Placed(props: { panel: Panel }) {
       const current = choices.indexOf(document.activeElement as HTMLElement);
       choices[(current + direction + choices.length) % choices.length]?.focus();
     }}>
-      <Show when={props.panel.items} fallback={props.panel.content?.()}>
+      {/* Built once: an editor reads the store, and a change from elsewhere must not
+          rebuild it under the person's typing. */}
+      <Show when={props.panel.items} fallback={untrack(() => props.panel.content?.())}>
         <div class="float-rows scroll" style={rows() > LIMIT ? { "max-height": `${LIMIT * ROW + 12}px` } : undefined}>
           <For each={props.panel.items}>{(entry) => (entry === "rule" ? <Rule class="float-rule" /> : <MenuRow item={entry} />)}</For>
         </div>

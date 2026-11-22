@@ -138,7 +138,7 @@ export function Tokens() {
             return (
               <div>
                 <div class="color-token-row" classList={{ changed: custom()?.tokens[wireName[token]] != null }}>
-                  <button type="button" class="token-colour" aria-label={`Edit ${label}`} disabled={!custom()} aria-expanded={editingColor() === token} onClick={() => setEditingColor(editingColor() === token ? null : token)}>
+                  <button type="button" class="token-colour" disabled={!custom()} aria-expanded={editingColor() === token} onClick={() => setEditingColor(editingColor() === token ? null : token)}>
                     <span style={{ background: css(palette().colors[token]) }} />{label}<code>{value()}</code>
                   </button>
                   <SymbolButton icon="reload" label={`Reset ${label}`} disabled={custom()?.tokens[wireName[token]] == null} size={18} iconSize={14}

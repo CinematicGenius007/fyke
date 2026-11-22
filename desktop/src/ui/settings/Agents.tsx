@@ -75,7 +75,7 @@ export function Agents() {
                 <Show when={checking() === writer.id} fallback={<Action kind="quiet" disabled={checking() !== null} aria-label={`Check ${writer.name}`} onClick={() => void change(writer, () => transport().call("writers.check", { writer: writer.id }, { slow: true }))}>Check</Action>}>
                   <Spinner size={12} />
                 </Show>
-                <Show when={writer.selected} fallback={<Action disabled={!writer.found || checking() !== null} aria-label={`Make ${writer.name} the default`} onClick={() => void change(writer, () => transport().call("config.set", { ai: { writer: writer.id } }))}>Make default</Action>}>
+                <Show when={writer.selected} fallback={<Action disabled={!writer.found || checking() !== null} aria-label={`Make default: ${writer.name}`} onClick={() => void change(writer, () => transport().call("config.set", { ai: { writer: writer.id } }))}>Make default</Action>}>
                   <span class="writer-default">Default</span>
                 </Show>
               </div>

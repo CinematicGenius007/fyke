@@ -68,6 +68,8 @@ export function SidebarRow(props: {
   muted?: boolean;
   medium?: boolean;
   label?: string;
+  /** What the trailing count or note says, read after the name. */
+  description?: string;
   onClick: () => void;
   children?: JSX.Element;
   lead?: JSX.Element;
@@ -80,8 +82,8 @@ export function SidebarRow(props: {
       class="sidebar-row"
       classList={{ selected: props.selected }}
       style={{ "padding-left": `${SidebarIndent.leading(props.depth ?? 0)}px` }}
-      aria-label={props.label ?? props.title}
       aria-current={props.selected ? "page" : undefined}
+      aria-description={props.description}
       onClick={() => props.onClick()}
       onContextMenu={(event) => props.onMenu?.(event)}
       draggable={props.drag !== undefined}
@@ -92,8 +94,11 @@ export function SidebarRow(props: {
       {props.lead}
       <span class="row-title" classList={{ muted: props.muted, medium: props.medium }}>
         {props.title}
+        {/* The name comes from what the row shows, so speech and voice control match it. */}
+        <Show when={props.label}>{(words) => <span class="sr-inline">{words()}</span>}</Show>
       </span>
-      <span class="row-trailing">{props.children}</span>
+      {/* Counts and notes are read from `description`, so the name stays the title. */}
+      <span class="row-trailing" aria-hidden="true">{props.children}</span>
     </button>
   );
 }
@@ -117,10 +122,10 @@ export function Sidebar() {
 
   return (
     <nav class="sidebar" aria-label="Sources" inert={!!model.catchUp()}>
-      <SidebarRow title="Search" icon="magnifyingglass" selected={false} onClick={() => model.commands.show()}>
+      <SidebarRow title="Search" icon="magnifyingglass" description="Ctrl+K" selected={false} onClick={() => model.commands.show()}>
         <span class="row-note">Ctrl+K</span>
       </SidebarRow>
-      <SidebarRow title="Today" icon="calendar" selected={model.isShowing({ kind: "today" })} onClick={go({ kind: "today" })}>
+      <SidebarRow title="Today" icon="calendar" description={model.briefJob() ? "Writing a brief" : model.hasNewBrief() ? "New brief" : undefined} selected={model.isShowing({ kind: "today" })} onClick={go({ kind: "today" })}>
         <Switch>
           <Match when={model.briefJob()}>
             <Spinner size={10} />
@@ -130,17 +135,17 @@ export function Sidebar() {
           </Match>
         </Switch>
       </SidebarRow>
-      <SidebarRow title="All" icon="tray" selected={model.isShowing({ kind: "all" })} onClick={go({ kind: "all" })}>
+      <SidebarRow title="All" icon="tray" description={model.state.feeds.length > 0 ? `${model.totalUnread()} unread` : undefined} selected={model.isShowing({ kind: "all" })} onClick={go({ kind: "all" })}>
         <Show when={model.state.feeds.length > 0}>
           <Count value={model.totalUnread()} />
         </Show>
       </SidebarRow>
-      <SidebarRow title="Starred" icon="star" selected={model.isShowing({ kind: "starred" })} onClick={go({ kind: "starred" })}>
+      <SidebarRow title="Starred" icon="star" description={model.totalStarred() > 0 ? `${model.totalStarred()} starred` : undefined} selected={model.isShowing({ kind: "starred" })} onClick={go({ kind: "starred" })}>
         <Show when={model.totalStarred() > 0}>
           <Count value={model.totalStarred()} quiet />
         </Show>
       </SidebarRow>
-      <SidebarRow title="Catch up" icon="rectangle.stack" selected={!!model.catchUp()} onClick={() => void model.startCatchUp()}>
+      <SidebarRow title="Catch up" icon="rectangle.stack" description="Ctrl+J" selected={!!model.catchUp()} onClick={() => void model.startCatchUp()}>
         <span class="row-note">Ctrl+J</span>
       </SidebarRow>
 
@@ -317,6 +322,7 @@ function ViewRow(props: { view: SavedView }) {
       <SidebarRow
         title={props.view.name}
         icon="line.3.horizontal.decrease"
+        description={`${props.view.unread} unread`}
         selected={model.isShowing({ kind: "view", id: props.view.id })}
         onClick={() => model.go({ kind: "view", id: props.view.id })}
         onMenu={(event) => float.menu(event, 220, viewMenu(props.view))}
@@ -363,7 +369,8 @@ function FolderRow(props: { folder: Folder; depth: number }) {
           depth={props.depth}
           selected={selected()}
           medium={!selected()}
-          label={`${props.folder.name}, folder`}
+          label=", folder"
+          description={unread() > 0 ? `${unread()} unread` : undefined}
           lead={<span class="row-icon" />}
           onClick={() => model.go({ kind: "folder", id: props.folder.id })}
         >
@@ -406,6 +413,7 @@ function FeedRow(props: { feed: Feed; depth: number }) {
         depth={props.depth}
         selected={model.isShowing({ kind: "feed", id: props.feed.id })}
         muted={props.feed.unread === 0 && !failing()}
+        description={failing() ? "Not loading" : props.feed.unread > 0 ? `${props.feed.unread} unread` : undefined}
         onClick={() => model.go({ kind: "feed", id: props.feed.id })}
         onMenu={(event) => float.menu(event, 204, feedMenu(props.feed))}
       >

@@ -2907,3 +2907,55 @@ svg.icon .dots circle {
     color: HighlightText;
   }
 }
+
+/* Words for assistive technology only. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.palette-group {
+  display: contents;
+}
+/* Words read as part of the text before them, with no break between. */
+.sr-inline {
+  font-size: 0;
+}
+
+/* Windows contrast themes (and forced colours anywhere) drop backgrounds and shadows.
+   A selection drawn only by a tint, a dot, and a panel's edge would vanish, so they
+   take the system's own colours. */
+@media (forced-colors: active) {
+  :is(.sidebar-row, .entry-row, .palette-row, .search-row, .brief-row, .timeline-line, .chip, .symbol-button, .action).selected,
+  .sidebar-row[aria-current="page"],
+  .menu-row:is(:hover, :focus-visible) {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+  :is(:is(.sidebar-row, .entry-row, .palette-row, .search-row, .brief-row, .timeline-line, .chip, .symbol-button, .action).selected, .sidebar-row[aria-current="page"], .menu-row:is(:hover, :focus-visible)) * {
+    color: HighlightText !important;
+  }
+  .dot,
+  .palette-dot {
+    forced-color-adjust: none;
+  }
+  .dot:not([style*="transparent"]),
+  .palette-dot {
+    background: CanvasText !important;
+  }
+  .float-panel,
+  .sheet,
+  .search-panel,
+  .activity-panel,
+  .toast,
+  .catchup-card {
+    border: 1px solid CanvasText;
+  }
+  :focus-visible {
+    outline-color: Highlight !important;
+  }
+}

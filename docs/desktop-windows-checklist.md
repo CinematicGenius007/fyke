@@ -81,6 +81,17 @@ Use the installed app once phase 8 has an installer, since the daemon only start
 
 On Linux (GNOME), repeat steps 1 to 4 with `fyke-app`. In step 2 the process also ends when the notification is dismissed.
 
+## Narrator, contrast themes, IME and scaling
+
+1. Start Narrator (Ctrl+Win+Enter) and open Fyke. Press Tab from the start: Narrator reads the sidebar rows by name, then their count ("All, 3 unread"), the folder rows as "Reading, folder", then the article list, then the reader's buttons. The window's minimize, maximize and close buttons are never reached with Tab.
+2. With Narrator on, press Ctrl+K. Narrator announces the Command palette dialog and the search field, then reads each section ("Go to", "Articles") as a group with its options as you press the arrows. Esc closes it and Narrator returns to the row you were on.
+3. Open Settings with Ctrl+,. Narrator reads each switch with its state, each font button as its role and current font ("Reading font:" followed by the font name), and each colour in Tokens as its name and value.
+4. Turn on each Windows contrast theme (Aquatic, Desert, Dusk, Night sky). In each, check: the selected sidebar row and the selected article are drawn in the highlight colour; unread dots are visible; menus, the palette and sheets have a visible edge; the focus ring is visible; nothing is blank text on blank ground.
+5. Switch the keyboard to Japanese (Microsoft IME). In the search field (Ctrl+F) type `nihongo` and convert it. The candidate window sits under the field, Enter commits the text without running the search early, and Esc cancels the composition without closing search. Repeat in the Add a feed address field and a view's words editor.
+6. At 100 %, 150 % and 200 % display scaling, look at the sidebar, the reader and Settings. Text is sharp, nothing is cut off, and the window's minimum size still shows all three panes.
+
+On Linux, with Orca (Super+Alt+S) on GNOME, repeat steps 1 to 3. Orca reads the same names.
+
 ## Later phases
 
-Narrator, IME and installer upgrades and uninstalls are planned. Their checks belong here when the corresponding features are available.
+Installer upgrades and uninstalls are planned. Their checks belong here when the corresponding features are available.

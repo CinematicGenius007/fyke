@@ -135,8 +135,10 @@ export function CommandPalette() {
         <div ref={list} class="palette-list scroll" role="listbox" aria-label="Commands">
           <For each={sections()}>
             {(section) => (
-              <>
-                <SectionLabel text={section.title} class="palette-section" />
+              // A listbox holds options and groups of them only; the group carries the
+              // section's name, so the visible label is hidden from assistive technology.
+              <div role="group" aria-label={section.title} class="palette-group">
+                <SectionLabel text={section.title} class="palette-section" hidden />
                 <For each={section.rows}>
                   {(row) => {
                     const index = () => flat().findIndex((r) => r.id === row.id);
@@ -156,7 +158,7 @@ export function CommandPalette() {
                     );
                   }}
                 </For>
-              </>
+              </div>
             )}
           </For>
         </div>

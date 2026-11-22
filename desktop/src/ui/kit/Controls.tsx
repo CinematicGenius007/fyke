@@ -6,16 +6,16 @@ import { Icon, type IconName } from "./Icon";
 /** A count at the end of a row: the unread color, or muted when quiet or zero. */
 export function Count(props: { value: number; quiet?: boolean }) {
   return (
-    <span class="count" classList={{ quiet: props.quiet || props.value === 0 }} aria-label={props.quiet ? String(props.value) : `${props.value} unread`}>
+    <span class="count" classList={{ quiet: props.quiet || props.value === 0 }}>
       {props.value}
     </span>
   );
 }
 
 /** The caps label above a group: 11 px, weight 600, +0.06em, muted. */
-export function SectionLabel(props: { text: string; class?: string }) {
+export function SectionLabel(props: { text: string; class?: string; hidden?: boolean }) {
   return (
-    <span class={`section-label${props.class ? ` ${props.class}` : ""}`} role="heading" aria-level="2">
+    <span class={`section-label${props.class ? ` ${props.class}` : ""}`} role={props.hidden ? undefined : "heading"} aria-level={props.hidden ? undefined : 2} aria-hidden={props.hidden || undefined}>
       {props.text.toUpperCase()}
     </span>
   );

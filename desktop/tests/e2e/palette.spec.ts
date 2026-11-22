@@ -67,7 +67,8 @@ test("empty, it lists the places and the first commands; arrows move and Return 
   const page = await app.open();
   await page.keyboard.press("Control+K");
   const dialog = page.getByRole("dialog", { name: "Command palette" });
-  await expect(dialog.getByRole("heading")).toHaveText(["GO TO", "DO"]);
+  await expect(dialog.locator(".palette-section")).toHaveText(["GO TO", "DO"]);
+  await expect(dialog.getByRole("listbox").getByRole("group")).toHaveCount(2);
   await expect(dialog.getByRole("option").first()).toContainText("Today");
   await expect(dialog.getByRole("option").first()).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("ArrowDown");
@@ -81,7 +82,7 @@ test("typed words find articles, and Return on one opens it", async ({ app }) =>
   const page = await app.open();
   await palette(page, "needle two");
   const dialog = page.getByRole("dialog", { name: "Command palette" });
-  await expect(dialog.getByRole("heading", { name: /articles/i })).toBeVisible();
+  await expect(dialog.getByRole("group", { name: /articles/i })).toBeVisible();
   const article = dialog.getByRole("option", { name: /Needle two/ });
   await article.click();
   await expect(page.locator(".article-title")).toHaveText("Needle two");
@@ -104,7 +105,7 @@ for (const theme of ["light", "dark"] as const) {
     const entries = await daemon.call<{ items: Entry[] }>("entries.list", { limit: 100 });
     await daemon.call("entries.mark_many", { ids: entries.items.filter((e) => e.title === "Needle one").map((e) => e.id), read: true });
     const page = await app.open({ FYKE_SCREEN: "palette", FYKE_QUERY: "needle" }, theme);
-    await expect(page.getByRole("heading", { name: /articles/i })).toBeVisible();
+    await expect(page.getByRole("group", { name: /articles/i })).toBeVisible();
     await app.snapshot(`palette-${theme}`);
   });
 }

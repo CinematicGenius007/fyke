@@ -50,13 +50,13 @@ test("Reading saves independent font weights and temporary fonts clear when the 
   const page = await app.open(screen, null);
   await page.getByRole("combobox", { name: "Reading weight" }).selectOption("-1");
   await page.getByRole("combobox", { name: "Titles weight" }).selectOption("1");
-  await page.getByRole("button", { name: "Reading font", exact: true }).click();
+  await page.getByRole("button", { name: /^Reading font:/ }).click();
   await page.getByRole("searchbox", { name: "Find a font" }).fill("JetBrains");
   await page.getByRole("button", { name: "JetBrains Mono", exact: true }).click();
   await expect.poll(() => daemon.call("config.get")).toMatchObject({
     ui: { weights: { reading: -1, title: 1 }, fonts: { reading: "JetBrains Mono" } },
   });
-  await page.getByRole("button", { name: /Unread Read Newsprint/ }).click();
+  await page.getByRole("button", { name: "Newsprint", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "newsprint");
   await expect.poll(() => daemon.call("config.get")).toMatchObject({
     ui: { theme: "newsprint", follow_system: false, fonts: { reading: null } },
@@ -80,18 +80,18 @@ test("the article's text controls change the size and open Reading settings", as
 test("Tokens creates a custom theme, edits a color, and returns to its base when deleted", async ({ app, daemon }) => {
   const page = await app.open({ FYKE_SCREEN: "settings", FYKE_TAB: "Reading" }, null);
   await page.getByRole("button", { name: "Edit Tokens…" }).click();
-  await expect(page.getByRole("button", { name: "Edit Ground", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /^Ground #/ })).toBeDisabled();
   await page.getByRole("button", { name: "Duplicate to edit" }).click();
   await page.getByRole("textbox", { name: "Name", exact: true }).fill("Paper");
   await page.getByRole("button", { name: "Create theme" }).click();
-  await page.getByRole("button", { name: "Edit Ground", exact: true }).click();
+  await page.getByRole("button", { name: /^Ground #/ }).click();
   await page.getByRole("textbox", { name: "Hex" }).fill("#F2EEE6");
   await page.getByRole("button", { name: "Apply", exact: true }).click();
   await expect.poll(() => daemon.call("config.get")).toMatchObject({
     ui: { themes: [{ id: "paper", base: "light", tokens: { ground: "#F2EEE6" } }] },
   });
   await page.getByRole("button", { name: "‹ Reading" }).click();
-  await page.getByRole("button", { name: /Unread Read Paper/ }).click();
+  await page.getByRole("button", { name: "Paper", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "paper");
   await page.getByRole("button", { name: "Edit Tokens…" }).click();
   await page.getByRole("button", { name: "Delete…", exact: true }).click();

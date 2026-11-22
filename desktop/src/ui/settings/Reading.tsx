@@ -51,7 +51,7 @@ export function FontPicker(props: { label: string; value: string; change: (font:
       event.currentTarget.querySelector("button")?.focus();
       setOpen(false);
     }}>
-      <Action aria-label={`${props.label} font`} aria-expanded={open()} onClick={() => { setQuery(""); setOpen(!open()); }}>
+      <Action aria-label={`${props.label} font: ${props.value}`} aria-expanded={open()} onClick={() => { setQuery(""); setOpen(!open()); }}>
         {props.value}<Icon name="down" size={12} />
       </Action>
       <Show when={open()}>
@@ -77,7 +77,7 @@ export function ThemeGallery(props: { selected: string; onSelect: (id: string) =
         const palette = () => paletteOf(ui, id);
         return (
           <button type="button" class="theme-tile" aria-pressed={props.selected === id} onClick={() => props.onSelect(id)}>
-            <span class="theme-sample" style={{ background: css(palette().colors.ground), "font-family": fontsOf(ui, id).reading ?? undefined, "font-size": id === "terminal" ? "13px" : "15px" }}>
+            <span class="theme-sample" aria-hidden="true" style={{ background: css(palette().colors.ground), "font-family": fontsOf(ui, id).reading ?? undefined, "font-size": id === "terminal" ? "13px" : "15px" }}>
               <span style={{ color: css(palette().colors.unread) }}>Unread</span>
               <span style={{ color: css(palette().colors.read) }}>Read</span>
             </span>
