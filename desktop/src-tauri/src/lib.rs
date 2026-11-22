@@ -3,6 +3,7 @@
 //! window, and the system.
 
 pub mod events;
+pub mod external;
 pub mod paths;
 pub mod rpc;
 pub mod socket;
@@ -80,6 +81,12 @@ fn ready(handle: AppHandle) {
     }
 }
 
+/// Opens a web address in the system browser (http and https only).
+#[tauri::command]
+fn open_external(url: String) -> Result<(), String> {
+    external::open(&url)
+}
+
 #[tauri::command]
 fn quit(handle: AppHandle, code: Option<i32>) {
     handle.exit(code.unwrap_or(0));
@@ -109,7 +116,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(state)
-        .invoke_handler(tauri::generate_handler![call, subscribe, pause, data_home, test_mode, ready, quit])
+        .invoke_handler(tauri::generate_handler![call, subscribe, pause, data_home, test_mode, ready, quit, open_external])
         .run(tauri::generate_context!())
         .expect("the window could not open");
 }

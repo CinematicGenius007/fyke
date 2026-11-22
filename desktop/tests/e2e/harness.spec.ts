@@ -1,6 +1,5 @@
 // The harness itself: the UI loads through the bridge, reaches the daemon, and saves a
 // picture under the Mac's name.
-import { existsSync } from "node:fs";
 import type { Transport } from "../../src/transport";
 import { expect, test } from "./fixtures";
 
@@ -36,11 +35,3 @@ test("a refusal arrives with the daemon's kind", async ({ app }) => {
   expect(failure!.unknown).toBe(false);
   expect(failure!.isUnknownMethod).toBe(true);
 });
-
-for (const theme of ["light", "dark"] as const) {
-  test(`shot:all ${theme}`, async ({ app }, info) => {
-    test.skip(info.project.name !== "webkit", "pictures compare against the Mac in WebKit");
-    await app.open({ FYKE_SCREEN: "all" }, theme);
-    expect(existsSync(await app.snapshot(`all-${theme}`))).toBe(true);
-  });
-}

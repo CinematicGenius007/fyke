@@ -79,5 +79,7 @@ export function bridgeTransport(page: URL): Transport {
     ready: () => send({ op: "ready" }),
     quit: (code) => send({ op: "quit", code }),
     dataHome: () => send({ op: "data_home" }),
+    // A page in a browser opens a tab; nothing here reaches the system.
+    openExternal: async (url) => void window.open(url, "_blank", "noopener,noreferrer"),
   };
 }

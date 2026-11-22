@@ -16,12 +16,14 @@ export default defineConfig({
     // The Mac window's size and a Retina screen, so pictures line up pixel for pixel.
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 2,
+    // The Mac's region is India in English: "5 November", "7:30 AM".
+    locale: "en-IN",
     // Headless always: checks never take focus from the person at the computer.
     headless: true,
   },
   projects: [
-    { name: "webkit", use: { ...devices["Desktop Safari"], viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 } },
-    { name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 } },
+    { name: "webkit", use: { ...devices["Desktop Safari"], locale: "en-IN", viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 } },
+    { name: "chromium", use: { ...devices["Desktop Chrome"], locale: "en-IN", viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 } },
   ],
   webServer: {
     command: "bunx vite --strictPort",

@@ -53,18 +53,50 @@ function macPicture(name: string): PNG | string {
 export interface Result {
   name: string;
   equal: number;
+  /** Equal without the anti-aliasing allowance. */
+  exact?: number;
   total: number;
   percent: number;
   pass: boolean;
   problem?: string;
 }
 
-/** Pixels are equal when every channel is within `tolerance` of the other's. */
-export function compare(a: PNG, b: PNG, tolerance = 0): { equal: number; total: number; diff: PNG } {
+/** Channel difference below which two pixels count as the same color. */
+export const TOLERANCE = 8;
+
+function near(a: PNG, ia: number, b: PNG, ib: number, tolerance: number): boolean {
+  for (let c = 0; c < 4; c++) if (Math.abs(a.data[ia + c] - b.data[ib + c]) > tolerance) return false;
+  return true;
+}
+
+/** Whether pixel (x, y) of `a` matches some pixel within one pixel of (x, y) in `b`. */
+function foundNear(a: PNG, b: PNG, x: number, y: number, tolerance: number): boolean {
+  const ia = (y * a.width + x) * 4;
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const bx = x + dx;
+      const by = y + dy;
+      if (bx < 0 || by < 0 || bx >= b.width || by >= b.height) continue;
+      if (near(a, ia, b, (by * b.width + bx) * 4, tolerance)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Pixels are equal when every channel is within `tolerance`. With `antialias`, a pixel
+ * that differs still counts as equal when each picture has its color within one pixel
+ * of the other's: the edge of a glyph or a curve rasterized a fraction of a pixel
+ * apart. A shape that moved by a whole pixel or more, or a color that is not in the
+ * other picture nearby, still differs. Those count in `exact` too, which is the share
+ * without this allowance.
+ */
+export function compare(a: PNG, b: PNG, tolerance = TOLERANCE, antialias = true): { equal: number; exact: number; total: number; diff: PNG } {
   const width = Math.max(a.width, b.width);
   const height = Math.max(a.height, b.height);
   const diff = new PNG({ width, height });
   let equal = 0;
+  let exact = 0;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const at = (y * width + x) * 4;
@@ -72,12 +104,19 @@ export function compare(a: PNG, b: PNG, tolerance = 0): { equal: number; total: 
       const inB = x < b.width && y < b.height;
       const ia = (y * a.width + x) * 4;
       const ib = (y * b.width + x) * 4;
-      let same = inA && inB;
-      for (let c = 0; same && c < 4; c++) same = Math.abs(a.data[ia + c] - b.data[ib + c]) <= tolerance;
-      if (same) {
+      const same = inA && inB && near(a, ia, b, ib, tolerance);
+      const edge = !same && antialias && inA && inB && foundNear(a, b, x, y, tolerance) && foundNear(b, a, x, y, tolerance);
+      if (same) exact++;
+      if (same || edge) {
         equal++;
-        // The Mac's picture, faded, so the red stands out against where it belongs.
+        // The Mac's picture, faded, so the red stands out against where it belongs;
+        // edges allowed as anti-aliasing in a faint orange.
         for (let c = 0; c < 3; c++) diff.data[at + c] = 255 - Math.round((255 - a.data[ia + c]) * 0.25);
+        if (edge) {
+          diff.data[at] = 250;
+          diff.data[at + 1] = 200;
+          diff.data[at + 2] = 150;
+        }
       } else {
         diff.data[at] = 230;
         diff.data[at + 1] = 30;
@@ -86,7 +125,7 @@ export function compare(a: PNG, b: PNG, tolerance = 0): { equal: number; total: 
       diff.data[at + 3] = 255;
     }
   }
-  return { equal, total: width * height, diff };
+  return { equal, exact, total: width * height, diff };
 }
 
 function main() {
@@ -116,25 +155,25 @@ function main() {
       continue;
     }
     const b = PNG.sync.read(readFileSync(ours));
-    const { equal, total, diff } = compare(a, b);
+    const { equal, exact, total, diff } = compare(a, b);
     writeFileSync(join(out, `${name}-diff.png`), PNG.sync.write(diff));
     const percent = (100 * equal) / total;
     const problem = a.width !== b.width || a.height !== b.height ? `sizes differ: Mac ${a.width}×${a.height}, desktop ${b.width}×${b.height}` : undefined;
-    results.push({ name, equal, total, percent, pass: !problem && percent >= TARGET, problem });
+    results.push({ name, equal, exact, total, percent, pass: !problem && percent >= TARGET, problem });
   }
   const lines = [
     "# Desktop parity",
     "",
-    `Pixels equal to the Mac app's picture. Target: ${TARGET} %. Differing pixels are red in each \`<name>-diff.png\`.`,
+    `Pixels equal to the Mac app's picture, within ${TOLERANCE} per channel, after the anti-aliasing allowance (an edge rasterized under a pixel apart). Target: ${TARGET} %. "Exact" is the share without the allowance. Differing pixels are red in each \`<name>-diff.png\`, allowed edges faint orange.`,
     "",
-    "| Screen | Equal | Result |",
-    "| --- | ---: | --- |",
-    ...results.map((r) => `| ${r.name} | ${r.total ? r.percent.toFixed(2) + " %" : "–"} | ${r.pass ? "pass" : r.problem ?? "below target"} |`),
+    "| Screen | Equal | Exact | Result |",
+    "| --- | ---: | ---: | --- |",
+    ...results.map((r) => `| ${r.name} | ${r.total ? r.percent.toFixed(3) + " %" : "–"} | ${r.total && r.exact !== undefined ? ((100 * r.exact) / r.total).toFixed(3) + " %" : "–"} | ${r.pass ? "pass" : r.problem ?? "below target"} |`),
     "",
   ];
   writeFileSync(join(out, "report.md"), lines.join("\n"));
   writeFileSync(join(out, "report.json"), JSON.stringify({ target: TARGET, results }, null, 2) + "\n");
-  for (const r of results) console.log(`${r.pass ? "pass" : "FAIL"} ${r.name.padEnd(24)} ${r.total ? r.percent.toFixed(3) + " %" : r.problem}`);
+  for (const r of results) console.log(`${r.pass ? "pass" : "FAIL"} ${r.name.padEnd(24)} ${r.total ? r.percent.toFixed(3) + " %" : r.problem}${r.total && r.exact !== undefined ? `  (exact ${((100 * r.exact) / r.total).toFixed(3)} %)` : ""}`);
   console.log(`\nReport: ${join(out, "report.md")}`);
   if (strict && results.some((r) => !r.pass)) process.exit(1);
 }

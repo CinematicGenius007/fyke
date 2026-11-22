@@ -19,7 +19,8 @@ body {
   color: var(--ink);
   font-family: var(--font-ui), sans-serif;
   font-size: 14px;
-  -webkit-font-smoothing: antialiased;
+  font-weight: var(--ui-400);
+  -webkit-font-smoothing: auto; /* macOS darkens stems as AppKit does; no effect elsewhere */
   text-rendering: optimizeLegibility;
   user-select: none;
   -webkit-user-select: none;
@@ -29,16 +30,36 @@ body {
 .shell {
   display: flex;
   height: 100%;
+  position: relative;
 }
 
-.sidebar {
-  flex: 0 0 232px;
-  background: var(--surface);
-  border-right: 1px solid var(--hairline);
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  cursor: default;
+  text-align: inherit;
 }
 
-.reader {
-  flex: 1 1 auto;
-  min-width: 0;
-  background: var(--ground);
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--unread);
+  outline-offset: -2px;
+}
+
+h1,
+h2,
+p,
+blockquote,
+pre {
+  margin: 0;
+}
+
+.selectable {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }

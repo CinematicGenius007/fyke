@@ -70,6 +70,8 @@ export interface Transport {
   /** The UI has drawn: show the window, unless the run is headless. */
   ready(): Promise<void>;
   quit(code?: number): Promise<void>;
+  /** Opens an http or https address in the system browser. */
+  openExternal(url: string): Promise<void>;
   dataHome(): Promise<string>;
 }
 

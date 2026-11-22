@@ -20,7 +20,7 @@ These are choices the brief left open, and the places where the Mac app and the 
 
 | Id | Topic | Choice | Why |
 |---|---|---|---|
-| D1 | List pane width | The default is **368** (design rules). The Mac's default is 375 (`RootView.swift`, `ListDefaults.width`). The Mac is the bug: phase 3 changes its default to 368 too, so both apps photograph alike. The minimum (280), the maximum (min(640, window − 400)), double-click to reset, and `ui.list_width` stay as they are. | The rules set 232 / 368 / flexible. |
+| D1 | List pane width | The default is **368** (design rules). The Mac's default was 375. The Mac was the bug: phase 3 changed its default to 368 too (`Prefs.swift`, `RootView.swift`), so both apps photograph alike. The minimum (280), the maximum (min(640, window − 400)), double-click to reset, and `ui.list_width` stay as they are. | The rules set 232 / 368 / flexible. |
 | D2 | All and Starred | Both use the Mac's single-column timeline (760 wide), not three panes. | The rule "the three panes, always" is about never leaving the reader to *manage* something (its stated reason). The timeline keeps the sidebar and is a reading place. The brief lists All and Starred as screens of their own. If the owner reads the rule more strictly, both apps change together. |
 | D3 | Window chrome on Windows | Tauri's `decorations: false`. Fyke draws its own minimize, maximize and close buttons at the top right of the content pane (46 × 32 each, as Windows draws them), plus a drag region over the top 48 px where the Mac has its title-bar area. Snap layouts work because the window answers `WM_NCHITTEST` with `HTMAXBUTTON` over the maximize button, through a small subclass in Rust (`windows-sys`), not a plugin. Resizing from the borders is handled the same way. | The brief asks for system caption buttons and working snap layouts. A plain undecorated window loses both. Doing it in Rust adds no dependency. |
 | D4 | Window chrome on Linux | Client-side decorations: the same three buttons as Windows, in the Adwaita order and look (close on the right), the same 48 px drag region through `startDragging`, and edge resizing through `startResizeDragging`. | The brief asks for client-side decorations that follow the same layout. |
@@ -39,6 +39,8 @@ These are choices the brief left open, and the places where the Mac app and the 
 | D17 | Color profile of the Mac's pictures | The Mac saves each picture in the color space of the display it ran on, as an embedded ICC profile, so its raw values differ from the tokens (`#111111` is stored as `#121212` on an LG UltraFine). `desktop/tools/parity.ts` converts each Mac picture to sRGB with `sips` before comparing; after that the tokens match exactly. The desktop pictures are sRGB already. | Comparing raw values would measure the monitor, not the app. |
 | D18 | Theme in test mode | The desktop app takes `FYKE_THEME` (`light` or `dark`) where the Mac takes the launch arguments `-theme light -followSystem NO`. In a browser the page's address can carry any `FYKE_` variable (`?FYKE_SCREEN=all&FYKE_THEME=dark`), and it wins over the bridge's environment. | A Tauri app has no `UserDefaults` argument domain. One variable per setting keeps test mode in one place. |
 | D19 | Where the Playwright suite runs | On macOS (WebKit, compared with the Mac's pictures) and on Linux CI (WebKit and Chromium). Windows CI runs the unit tests, the Rust tests and a build. | The bridge reaches the daemon's AF_UNIX socket through Node's `net` module, which on Windows connects to named pipes only. The app itself uses Rust on Windows, so this limits the test bridge, not the app. |
+| D20 | Icons | The Mac's own glyphs (`Controls.swift` `Glyph`) are ported point for point. The SF Symbols it uses (magnifyingglass, calendar, tray, rectangle.stack, line.3.horizontal.decrease, clock.arrow.circlepath, gearshape, ellipsis) are drawn equivalents in `src/ui/kit/Icon.tsx`, so their pixels differ a little from the Mac's. | Apple licenses SF Symbols for its own platforms only; the app may not ship them. |
+| D21 | Text pixels | Text is set in the same fonts, sizes, weights and boxes, and macOS stem darkening stays on (`-webkit-font-smoothing: auto`, as AppKit draws). Glyphs still differ at their edges, and some lines sit one device pixel (0.5 pt) apart: CoreText in AppKit and WebKit snap a baseline to the pixel grid differently inside the same box, and the offset changes with font size (13 px text sits 0.5 pt higher, 11 px matches, 20 px sits 0.5 pt lower). So the 99.99 % pixel target cannot be reached on a screen with text; the reading screens reach 99.69–99.83 % after the anti-aliasing allowance. Pane dividers, rules and rows land on the same device pixel as the Mac's; chips end within a device pixel, from the width of the text inside them. Enlarged, Mac above and desktop below: [sidebar](desktop-parity/text-mac-over-desktop.png), [its difference](desktop-parity/text-diff.png), [reader](desktop-parity/reader-mac-over-desktop.png). | Rounding each line box to the pixel grid, as SwiftUI does, was tried and changed nothing: the boxes were on the grid already. Moving text by hand per size would fit one Mac and one font, and break on Windows and Linux, which rasterize differently again. |
 
 ## F: Swift files and the TS or Rust module that takes each job
 
@@ -59,18 +61,18 @@ UI modules live in `desktop/src`, Rust in `desktop/src-tauri/src`. Logic ported 
 | F11 | Theme.swift | Palettes (Newsprint and Terminal derived by mixing), hex, contrast, font resolving, weight ladder | `src/theme/color.ts`, `src/theme/palette.ts`, `src/theme/fonts.ts` | built | palettes and mixing: `theme.test.ts` (OKLab mix equals SwiftUI's printed values). Font resolving and the weight ladder are planned. |
 | F12 | Prefs.swift | `ui` settings in config.json, themes, temporary fonts, a debounced save of 300 ms, reload on change | `src/model/prefs.ts`; Rust `config_watch.rs` (file watch that emits an event) | planned | |
 | F13 | Daemon.swift | Socket client, starting the daemon, timeouts, the event thread | Rust `rpc.rs`, `socket.rs`, `events.rs`, `paths.rs`; UI `src/transport/{index,tauri,bridge}.ts` | done | `cargo test` (rpc, events, paths); Playwright `harness.spec.ts` |
-| F14 | Models.swift | Wire types and their tolerant decoding | `src/model/types.ts`, `src/model/decode.ts` | planned | |
-| F15 | AppModel.swift | Places, selection, entries, marks, reload, events, data move | `src/model/app.ts` | planned | |
-| F16 | Library.swift | Views, recipes, briefs, routines, jobs, writers | `src/model/library.ts` | planned | |
+| F14 | Models.swift | Wire types and their tolerant decoding | `src/model/types.ts`, `src/model/decode.ts` | built | `tsc`; decoded by every Playwright scenario in `reading.spec.ts` |
+| F15 | AppModel.swift | Places, selection, entries, marks, reload, events, data move | `src/model/app.ts` | built | Playwright `reading.spec.ts`: places, open and mark read, Esc and Return, j and k, star and unread, divider. Search, data move and the palette are planned (phase 4) |
+| F16 | Library.swift | Views, recipes, briefs, routines, jobs, writers | `src/model/library.ts` | built | Views load and their counts follow marks (`reading.spec.ts`). Recipes, briefs, routines, jobs and writers are planned (phases 4–5) |
 | F17 | Features.swift | View save and undo, briefs, catch-up start, test screens, notifier | `src/model/features.ts`, `src/testmode/screens.ts` | planned | |
-| F18 | Undo.swift | Undo center and toast | `src/model/undo.ts`, `src/ui/Toast.tsx` | planned | |
+| F18 | Undo.swift | Undo center and toast | `src/model/undo.ts`, `src/ui/Toast.tsx` | built | `src/model/undo.ts` and the toast; Ctrl+Z after "mark all read". Its scenario is planned (phase 4) |
 | F19 | TestMode.swift | FYKE_SCREEN / KEYS / SNAPSHOT / HEADLESS | `src/testmode/index.ts`; Rust `testmode.rs` (env, snapshot, headless window) | built | `testmode.rs` passes every `FYKE_` variable to the UI and keeps a headless window hidden. Screens, keys and snapshots are planned. |
 | F20 | ReaderApp.swift | Window, menu commands, undo routing | Rust `main.rs` (window 1440 × 900, minimum 960 × 600); `src/commands.ts` | planned | |
-| F21 | RootView.swift | Layout, keys, problem banner, panes and divider, list, timeline, first run | `src/ui/Root.tsx`, `Panes.tsx`, `EntryList.tsx`, `Timeline.tsx`, `FirstRun.tsx`, `src/keys.ts` | planned | |
-| F22 | Kit.swift | Metrics, motion, buttons, chips, tabs, inline state, spinner, key hints, fields | `src/ui/kit/*.tsx`, `src/styles/kit.css` | planned | |
-| F23 | Controls.swift | Glyphs, icon buttons, float layer, menus, select, checkbox, themed scrollbar, right-click menus, window buttons | `src/ui/controls/*.tsx`; window buttons in `src/ui/Chrome.tsx` (D3, D4) | planned | |
-| F24 | Sidebar.swift | Sidebar rows, tree, drag and drop, rename, menus, status line, confirmations, shortcuts sheet, move dialog | `src/ui/Sidebar.tsx`, `SidebarTree.tsx`, `ConfirmDialog.tsx`, `Shortcuts.tsx`, `MoveDialog.tsx` | planned | |
-| F25 | ReaderPane.swift | Article column, actions, blocks, images, text-and-theme menu | `src/ui/Reader.tsx`, `Blocks.tsx` (DOM nodes with `textContent` only), `TypeMenu.tsx` | planned | |
+| F21 | RootView.swift | Layout, keys, problem banner, panes and divider, list, timeline, first run | `src/ui/Root.tsx`, `Panes.tsx`, `EntryList.tsx`, `Timeline.tsx`, `FirstRun.tsx`, `src/keys.ts` | built | Panes, divider (`reading.spec.ts`), list with paging, timeline, keys (`src/ui/keys.ts`). First run is planned |
+| F22 | Kit.swift | Metrics, motion, buttons, chips, tabs, inline state, spinner, key hints, fields | `src/ui/kit/*.tsx`, `src/styles/kit.css` | built | Count, section label, rule, spinner, symbol and icon buttons, chips, dot (`src/ui/kit/Controls.tsx`). Tabs, fields and key hints are planned |
+| F23 | Controls.swift | Glyphs, icon buttons, float layer, menus, select, checkbox, themed scrollbar, right-click menus, window buttons | `src/ui/controls/*.tsx`; window buttons in `src/ui/Chrome.tsx` (D3, D4) | built | Glyphs and drawn SF equivalents (`src/ui/kit/Icon.tsx`, D20). Menus, select, checkbox, right-click menus and window buttons are planned |
+| F24 | Sidebar.swift | Sidebar rows, tree, drag and drop, rename, menus, status line, confirmations, shortcuts sheet, move dialog | `src/ui/Sidebar.tsx`, `SidebarTree.tsx`, `ConfirmDialog.tsx`, `Shortcuts.tsx`, `MoveDialog.tsx` | built | Rows, tree, status line, Routines row (`src/ui/Sidebar.tsx`). Drag and drop, rename, menus, confirmations, shortcuts sheet and move dialog are planned |
+| F25 | ReaderPane.swift | Article column, actions, blocks, images, text-and-theme menu | `src/ui/Reader.tsx`, `Blocks.tsx` (DOM nodes with `textContent` only), `TypeMenu.tsx` | built | Article column, actions, blocks as text nodes ("feed content is text, never markup" in `reading.spec.ts`), images on request. The text-and-theme menu is planned |
 | F26 | WebPane.swift | Web viewer and its address guard | Rust `web.rs` (a second webview with no IPC, an incognito profile, and the guard after DNS); `src/ui/WebPane.tsx` (the bar) | planned | |
 | F27 | Discussion.swift | Hacker News thread under the article | `src/ui/Discussion.tsx` | planned | |
 | F28 | Ask.swift | Ask your feeds | `src/model/ask.ts`, `src/ui/Ask.tsx` | planned | |
@@ -98,11 +100,11 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 | S1 | Today with a brief and citations | `today` | planned | |
 | S2 | Today with source 1 pinned open | `citation` | planned | |
 | S3 | Today: no brief yet / writing / not written / needs a newer service | `today-empty`, `today-writing`, `today-failed` (new) | planned | |
-| S4 | All (timeline, first article selected) | `all` | planned | |
+| S4 | All (timeline, first article selected) | `all` | built | `all-light` 99.811 %, `all-dark` 99.833 % equal after the allowance; layout on the same pixels; the rest is text (D21) and icons (D20) |
 | S5 | Starred, with items and empty | `starred`, `starred-empty` (new) | planned | |
 | S6 | A folder | `folder` (new) | planned | |
 | S7 | A feed with an article open | `feed` (new) | planned | |
-| S8 | A saved view: sentence rule, chips, editing in place | `view` | planned | |
+| S8 | A saved view: sentence rule, chips, editing in place | `view` | built | `view-light` 99.688 %, `view-dark` 99.740 % equal after the allowance; the sentence rule shows; editing in place is planned |
 | S9 | A view with nothing matching ("Nothing matches yet", "Include read articles") | `view-empty` (new) | planned | |
 | S10 | Search with results, and with none | `search`, `search-none` (new) | planned | |
 | S11 | Command palette | `palette` | planned | |
@@ -121,7 +123,7 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 | S24 | Move a feed (the Move to › submenu, drag and drop) | (scenario) | planned | |
 | S25 | Delete folder and remove feed confirmations | `delete-folder` (new) | planned | |
 | S26 | OPML import and export | (scenario) | planned | |
-| S27 | Pane divider: drag, double-click reset, saved | (scenario `divider`) | planned | |
+| S27 | Pane divider: drag, double-click reset, saved | (scenario `divider`) | done | `reading.spec.ts` "a feed shows its list beside the reader, and the divider resizes it" |
 | S28 | Folder disclosure that survives relaunch | (scenario) | planned | |
 | S29 | First run (no feeds) | `first-run` (new) | planned | |
 | S30 | Daemon unavailable ("The background service did not start"), outdated daemon replaced, config.json mistake banner | `unavailable` (new) | planned | |
@@ -156,9 +158,9 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 | K13 | ⇧⌘K | Ctrl+Shift+K | Mark all read (only where `canMarkAllHere`) | | planned | |
 | K14 | ⌘Q | Ctrl+Q on Linux; Alt+F4 on Windows (system) | Quit | Neither system has ⌘Q. Ctrl+Q is the GNOME convention. | planned | |
 | K15 | ⌘-click | Ctrl+click | Open link in browser | D14 | planned | |
-| K16 | Return, Esc | same | Open; close the float layer or go back | | planned | |
-| K17 | ↑ ↓ j k | same | Move selection | | planned | |
-| K18 | n s m u | same | Next unread, star, read or unread, unread only | | planned | |
+| K16 | Return, Esc | same | Open; close the float layer or go back | | done | `reading.spec.ts` "Escape goes back to the timeline, and Return opens the selected row again" |
+| K17 | ↑ ↓ j k | same | Move selection | | done | `reading.spec.ts` "j and k move through a view's list and open each article" |
+| K18 | n s m u | same | Next unread, star, read or unread, unread only | | built | s and m: `reading.spec.ts` "s stars the open article …"; n and u are bound, their scenario is planned |
 | K19 | o, ⇧O | o, Shift+O | Open page here, open in browser | | planned | |
 | K20 | c f r a t | same | Comments, fetch full, refresh, add feed, text and theme | | planned | |
 | K21 | / ? | same | Search, shortcuts sheet | | planned | |
@@ -212,7 +214,7 @@ All of these come from one module, `src/platform.ts`, which reads the system fro
 | X8 | `bun test`: the ReaderLogic ports and the models | built | ReaderLogic ports and palettes: `bun test` (29 tests); models are planned |
 | X9 | Shared fixtures moved out of `tools/e2e_gui.py`, which keeps passing | done | `tools/gui_fixtures.py`; `e2e_gui.py --only discussion,shot:all,themes` passes, and Playwright uses the same module |
 | X10 | Playwright scenarios: keys, themes, divider, move, settings-route, mark-all, rename, font-weight, view-save, catchup-keys, palette-keys, brief, answer, routine-save, discussion, every `shot:` | planned | |
-| X11 | Comparison tool writing to `zig-out/parity/`; 99.99 % of pixels and every box within 1 px | built | `desktop/tools/parity.ts` writes `zig-out/parity/report.md` and a red diff picture per screen. Pixel share only; the 1 px box check is planned and needs the Mac to export its layout |
+| X11 | Comparison tool writing to `zig-out/parity/`; 99.99 % of pixels and every box within 1 px | built | `desktop/tools/parity.ts` writes `zig-out/parity/report.md` and a diff picture per screen. A pixel counts as equal within 8 per channel, or, as anti-aliasing, when each picture has its color within one pixel of the other's; the report also gives the exact share. The 1 px box check is planned and needs the Mac to export its layout |
 | X12 | `tauri-driver` smoke test on Windows and Linux CI | planned | |
 | X13 | New suites in `tools/check.py` with rules | done | `desktop-unit`, `desktop-rust`, `desktop-e2e` and the parity report in `tools/check.py`, with rules for `desktop/**` and `tools/gui_fixtures.py` |
 | X14 | Windows NSIS installer, per user, keeping the WinUI installer's behaviour; its end-to-end test | planned | |
