@@ -89,6 +89,8 @@ export function bridgeTransport(page: URL): Transport {
     chooseDataFolder: async () => null,
     moveData: async () => { throw new Error("Open the desktop app to move the data folder."); },
     fontFamilies: async () => [],
+    // A tab cannot ask the system; the checks name one in the page's address.
+    defaultBrowser: async () => page.searchParams.get("FYKE_BROWSER") || null,
     backgroundService: async (action) => {
       if (action === "status") return false;
       throw new Error("Open the desktop app to change background updating.");

@@ -81,3 +81,35 @@ test("Starred lists only starred articles, and says so when there are none", asy
   await page.keyboard.press("Control+3");
   await expect(page.locator(".timeline-row")).toHaveCount(1);
 });
+
+/** The folders the daemon keeps closed; `ui` is null until something saves it. */
+async function collapsed(daemon: Daemon): Promise<number[]> {
+  return (await daemon.call<{ ui: { collapsed_folders?: number[] } | null }>("config.get")).ui?.collapsed_folders ?? [];
+}
+
+// S28: a closed folder stays closed after a relaunch, as the Mac keeps it in
+// `ui.collapsed_folders`.
+test("a closed folder stays closed after the app opens again", async ({ app, daemon }) => {
+  const folder = (await daemon.call<{ id: number }>("folders.add", { name: "Reading" })).id;
+  const local = (await daemon.call<{ items: { id: number }[] }>("feeds.list")).items[0].id;
+  await daemon.call("feeds.update", { id: local, folder_id: folder });
+  try {
+    const page = await app.open({ FYKE_SCREEN: "all" }, null);
+    const sidebar = page.locator(".sidebar");
+    const feedRows = () => sidebar.locator(".sidebar-row").filter({ hasNotText: /^(Today|All|Starred|Routines|Search|Reading|Needle)\b/ });
+    const before = await feedRows().count();
+    await page.getByRole("button", { name: "Close Reading" }).click();
+    await expect(page.getByRole("button", { name: "Open Reading" })).toBeVisible();
+    await expect.poll(async () => collapsed(daemon)).toContain(folder);
+    await expect(feedRows()).toHaveCount(before - 1);
+    await app.open({ FYKE_SCREEN: "all" }, null);
+    await expect(page.getByRole("button", { name: "Open Reading" })).toBeVisible();
+    await expect(feedRows()).toHaveCount(before - 1);
+    await page.getByRole("button", { name: "Open Reading" }).click();
+    await expect(feedRows()).toHaveCount(before);
+    await expect.poll(async () => collapsed(daemon)).not.toContain(folder);
+  } finally {
+    await daemon.call("config.set", { ui: {} });
+    await daemon.call("folders.remove", { id: folder });
+  }
+});

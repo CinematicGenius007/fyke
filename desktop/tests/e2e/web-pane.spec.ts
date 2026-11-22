@@ -37,3 +37,13 @@ test("Ctrl-click asks the default browser to open the link without replacing the
   await expect(page.getByRole("region", { name: "Web page" })).toHaveCount(0);
   await expect(page.locator(".article-title")).toHaveText("Unkernel in WASM");
 });
+
+test("the web bar names the default browser, as the Mac's does (C8)", async ({ app }) => {
+  const page = await app.open({ FYKE_BROWSER: "Firefox" });
+  await page.getByRole("button", { name: /Unkernel in WASM/ }).click();
+  await page.getByRole("button", { name: "Open page", exact: true }).click();
+  const web = page.getByRole("region", { name: "Web page" });
+  await expect(web.locator(".web-bar").getByRole("button", { name: "Open in Firefox" })).toBeVisible();
+  // The failure's own button stays general, as on the Mac.
+  await expect(web.locator(".web-failure").getByRole("button", { name: "Open in browser" })).toBeVisible();
+});

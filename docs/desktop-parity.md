@@ -127,7 +127,7 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 | S25 | Delete folder and remove feed confirmations | `delete-folder` (new) | built | `delete-folder-light` 99.829 %, `delete-folder-dark` 99.846 % equal after the allowance: the rest is Cancel's focus ring (D22), the scrim (D23), Ctrl for ⌘ (K24) and text edges (D21); Esc, Cancel, the checkbox and Remove feed: `manage.spec.ts` |
 | S26 | OPML import and export | (scenario) | built | `add-feed.spec.ts` checks that the folder and feed round-trip through the real daemon. Native file dialogs, overwrite and cancellation are in the [Windows checklist](desktop-windows-checklist.md). |
 | S27 | Pane divider: drag, double-click reset, saved | (scenario `divider`) | done | `reading.spec.ts` "a feed shows its list beside the reader, and the divider resizes it" |
-| S28 | Folder disclosure that survives relaunch | (scenario) | planned | |
+| S28 | Folder disclosure that survives relaunch | (scenario) | done | Saved in `ui.collapsed_folders`, as the Mac's `Prefs.ui.collapsedFolders` is (`Sidebar.tsx` `FolderRow`, `app.ts` `toggleFolder`). `places.spec.ts` "a closed folder stays closed after the app opens again" closes a folder, reopens the app and finds it still closed, in WebKit and Chromium. |
 | S29 | First run (no feeds) | `first-run` (new) | planned | |
 | S30 | Daemon unavailable ("The background service did not start"), outdated daemon replaced, config.json mistake banner | `unavailable` (new) | planned | |
 | S31 | Empty, failed and in-progress states for every list (feed, folder, view, All, Starred, Today, routines, search) | (per list, above) | planned | |
@@ -198,8 +198,8 @@ Folder delete and feed removal are confirmations (D13), as on the Mac.
 | C5 | "Starts when you log in, even with this window closed" | "Starts when you sign in, …" | "Starts when you log in, …" | built | The General pane uses sign in on Windows and log in on Linux. |
 | C6 | "⌘-click always uses your browser" | "Ctrl+click always uses your browser" | same as Windows | built | The General pane shows the Ctrl-click hint. |
 | C7 | Paths shown with `~` (data folder, settings file) | Full path with `%LOCALAPPDATA%` written out | `~` | built | Data shows the Windows path in full and shortens paths under the home directory on Linux. |
-| C8 | The default browser's own name (`DefaultBrowser`) | Read from the registry's `http` association | Read from `xdg-settings get default-web-browser` | planned | |
-| C9 | Writer and daemon copy ("on this Mac") that comes from the daemon | Already says "this PC" or "this computer" | same | planned | |
+| C8 | The default browser's own name (`DefaultBrowser`) | Read from the registry's `https` association (`UserChoice` ProgId, then its `ApplicationName`) | Read from `xdg-settings get default-web-browser`, then that desktop entry's `Name=` | built | `src-tauri/src/browser.rs` (unit tests for the desktop entry and for names that are not fit to show) and `WebPane.tsx`; `web-pane.spec.ts` "the web bar names the default browser" checks the label with a test name in `FYKE_BROWSER`. As on the Mac, the failure state's button stays "Open in browser". The desktop shows the globe, not the browser's own icon. The real names are on the [Windows checklist](desktop-windows-checklist.md) (Native web reader, step 4; Linux desktop, step 4). |
+| C9 | Writer and daemon copy ("on this Mac") that comes from the daemon | Already says "this PC" or "this computer" | same | done | The daemon's only such copy is a missing writer's problem, `src/runner.zig` `not_found`, chosen by the system it is built for; its test "a missing writer is described in this platform's words" runs in the Windows and Linux CI jobs. The app's own fallback is `platform.ts` `computerName`, tested in `tests/unit/platform.test.ts`. |
 
 All of these come from one module, `src/platform.ts`, which uses the webview’s platform at startup.
 

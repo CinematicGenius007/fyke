@@ -156,6 +156,16 @@ const not_found = switch (builtin.os.tag) {
     else => "Not found on this computer",
 };
 
+test "a missing writer is described in this platform's words" {
+    const expected = switch (builtin.os.tag) {
+        .macos => "this Mac",
+        .windows => "this PC",
+        else => "this computer",
+    };
+    try std.testing.expect(std.mem.endsWith(u8, not_found, expected));
+    if (builtin.os.tag != .macos) try std.testing.expect(std.mem.indexOf(u8, not_found, "Mac") == null);
+}
+
 /// Finds a writer, reads its version, then asks it whether it is signed in, so that
 /// "available" means a brief can actually be written. `problem` says in words what
 /// stands in the way.

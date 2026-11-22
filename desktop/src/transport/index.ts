@@ -98,6 +98,8 @@ export interface Transport {
   /** The UI has drawn: show the window, unless the run is headless. */
   ready(): Promise<void>;
   quit(code?: number): Promise<void>;
+  /** The default browser's own name, or null when it is not known. */
+  defaultBrowser(): Promise<string | null>;
   /** Opens an http or https address in the system browser. */
   openExternal(url: string): Promise<void>;
   /** The window's own buttons and title-bar drag, for the window chrome Fyke draws. */

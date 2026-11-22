@@ -9,11 +9,17 @@ import { Icon } from "./kit/Icon";
 import { isSafeLink } from "./links";
 
 let nextToken = 0;
+/** The default browser's name, asked once per run as the Mac reads it each time. */
+let browserName: Promise<string | null> | undefined;
 
 export function WebPane(props: { address: string }) {
   const model = app();
   const client = transport();
   const [page, setPage] = createSignal<ViewerUpdate>({ token: 0, url: props.address, loading: true, error: null, canGoBack: false, canGoForward: false });
+  const [browser, setBrowser] = createSignal<string | null>(null);
+  browserName ??= client.defaultBrowser().catch(() => null);
+  void browserName.then(setBrowser);
+  const openIn = () => `Open in ${browser() ?? "browser"}`;
   let token = 0;
   let slot!: HTMLDivElement;
   let mounted = false;
@@ -127,7 +133,7 @@ export function WebPane(props: { address: string }) {
           <strong>{address().host}</strong><span>{address().pathname + address().search + address().hash}</span>
         </div>
         <IconButton icon="reload" label="Reload" onClick={() => navigate("reload")} />
-        <Action compact onClick={model.openInBrowser}><Icon name="globe" size={14} />Open in browser</Action>
+        <Action compact onClick={model.openInBrowser}><Icon name="globe" size={14} />{openIn()}</Action>
       </div>
       <Rule />
       <div class="web-slot" ref={slot}>

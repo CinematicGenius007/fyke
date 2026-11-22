@@ -41,6 +41,7 @@ export function tauriTransport(): Transport {
     chooseDataFolder: () => invoke("choose_data_folder"),
     moveData: (target, stage) => invoke("move_data", { target, stages: new Channel<string>(stage) }),
     fontFamilies: () => invoke("font_families"),
+    defaultBrowser: () => invoke("default_browser"),
     backgroundService: (action) => invoke("background_service", { action }),
     openViewer: (token, url, bounds) => navigator.userAgent.includes("Macintosh")
       ? Promise.reject(new Error("Open the Windows or Linux app to read pages here."))

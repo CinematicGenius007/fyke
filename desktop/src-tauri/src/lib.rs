@@ -2,6 +2,7 @@
 //! this side holds what a web page cannot: the daemon's socket, the data folder, the
 //! window, and the system.
 
+mod browser;
 pub mod events;
 pub mod external;
 pub mod notify;
@@ -187,6 +188,7 @@ pub fn run() {
             ready,
             quit,
             open_external,
+            browser::default_browser,
             settings::desktop_paths,
             settings::open_data,
             settings::background_service,
