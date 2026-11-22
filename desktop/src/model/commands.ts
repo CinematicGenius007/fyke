@@ -99,7 +99,10 @@ export function allCommands(model: App): Command[] {
   }
   out.push(
     { id: "do.search", group: "act", title: "Search articles", icon: "magnifyingglass", shortcut: "Ctrl+F", run: () => model.search.show() },
+    { id: "do.brief", group: "act", title: model.state.place.kind === "view" ? "Write a brief of this view" : "Write a brief",
+      shortcut: "Ctrl+R", icon: "briefing", run: () => void model.runBrief() },
     { id: "do.catchup", group: "act", title: `Catch up on ${model.placeTitle()}`, icon: "rectangle.stack", shortcut: "Ctrl+J", run: () => void model.startCatchUp() },
+    { id: "do.ask", group: "act", title: "Ask your feeds", icon: "sparkle", shortcut: "Ctrl+Shift+A", run: () => model.ask() },
     { id: "do.refresh", group: "act", title: "Refresh feeds", icon: "arrow.clockwise", shortcut: "R", run: () => model.refresh() },
     { id: "do.add", group: "act", title: "Add feed", icon: "plus", shortcut: "Ctrl+N", run: () => model.set("showingAddFeed", true) },
     { id: "do.folder", group: "act", title: "New folder", icon: "folder.badge.plus", run: () => void model.newFolder(null) },
@@ -111,9 +114,19 @@ export function allCommands(model: App): Command[] {
       shortcut: "U",
       run: () => model.toggleUnreadOnly(),
     },
+    { id: "do.activity", group: "act", title: "Show activity", icon: "circle", shortcut: "Ctrl+0", run: () => model.set("showingActivity", true) },
     { id: "do.shortcuts", group: "act", title: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => model.set("showingShortcuts", true) },
     { id: "do.settings", group: "act", title: "Settings", icon: "gearshape", shortcut: "Ctrl+,", run: () => model.openSettings() },
   );
+  if (model.library.state.views.length) {
+    out.push({ id: "do.routine", group: "act", title: "New routine", icon: "plus", run: () => model.draftRoutine() });
+  }
+  for (const routine of model.library.state.routines) {
+    if (routine.id !== null && routine.viewId !== null) {
+      const id = routine.id;
+      out.push({ id: `do.routine${id}`, group: "act", title: `Run ${routine.name} now`, icon: "clock.arrow.circlepath", run: () => void model.runRoutine(id) });
+    }
+  }
   if (model.canMarkAllHere()) {
     out.push({ id: "do.markall", group: "act", title: `Mark all read in ${model.placeTitle()}`, icon: "checkmark.circle", run: () => model.markAllHere() });
   }

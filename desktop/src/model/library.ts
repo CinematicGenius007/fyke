@@ -15,7 +15,11 @@ import {
   jobIsActive,
   type Recipe,
   recipe,
+  type RecipeRevision,
+  recipeRevision,
   type Routine,
+  type DryRun,
+  dryRun,
   routine,
   type SavedView,
   savedView,
@@ -124,6 +128,56 @@ export function createLibrary() {
     recipe: (id: number | null | undefined) => state.recipes.find((r) => r.id === id),
     routine: (id: number | null | undefined) => state.routines.find((r) => r.id === id),
 
+    async readArtifact(method: "briefs.get" | "answers.get", id: number): Promise<Artifact> {
+      const result = artifact(new J(await transport().call(method, { id })));
+      if (!result) throw new RPCFailure({ message: "Fyke did not return the written article." });
+      return result;
+    },
+
+    async queueWriting(method: "briefs.run" | "briefs.try" | "ask.run", params: {
+      view_id?: number | null;
+      rule?: Rule | null;
+      recipe_id?: number;
+      text?: string;
+      question?: string;
+    }): Promise<Job> {
+      const selection = params.view_id == null ? { rule: params.rule ?? {} } : { view_id: params.view_id, rule: undefined };
+      const reply = new J(await transport().call(method, { ...params, ...selection }));
+      await loadJobs();
+      const id = reply.get("jobId")?.int;
+      const queued = job(reply.get("job") ?? reply) ?? state.jobs.find((item) => item.id === id);
+      if (!queued) throw new RPCFailure({ message: "Fyke did not return a writing job." });
+      return queued;
+    },
+
+    async cancelJob(id: number) {
+      await transport().call("jobs.cancel", { id });
+      await loadJobs();
+    },
+
+    async readRecipe(id: number, revision?: number): Promise<Recipe> {
+      const result = recipe(new J(await transport().call("recipes.get", { id, revision })));
+      if (!result) throw new RPCFailure({ message: "This recipe is no longer there." });
+      return result;
+    },
+
+    async writeRecipe(current: Recipe, text: string, note = ""): Promise<Recipe> {
+      await transport().call("recipes.put", { id: current.id, name: current.name, text, expected_revision: current.revision, note });
+      await loadRecipes();
+      return this.readRecipe(current.id);
+    },
+
+    async resetRecipe(current: Recipe): Promise<Recipe> {
+      await transport().call("recipes.reset", { id: current.id, expected_revision: current.revision });
+      await loadRecipes();
+      return this.readRecipe(current.id);
+    },
+
+    async recipeHistory(id: number): Promise<RecipeRevision[]> {
+      const reply = new J(await transport().call("recipes.history", { id }));
+      return (reply.get("items")?.array ?? []).map(recipeRevision).filter((item) => item !== null);
+    },
+
     activeJobs: () => state.jobs.filter(jobIsActive),
 
     /** Failed jobs from the last day that nothing has replaced since. */
@@ -153,6 +207,40 @@ export function createLibrary() {
       return made;
     },
 
+    async saveRoutine(change: Routine): Promise<Routine> {
+      const schedule = {
+        ...change.schedule,
+        days: change.schedule.days?.map((day) => day % 7),
+        time: change.schedule.time ?? undefined,
+      };
+      const result = routine(new J(await transport().call("routines.put", {
+        id: change.id,
+        name: change.name,
+        view_id: change.viewId,
+        schedule,
+        actions: change.actions,
+        enabled: change.enabled,
+        expected_revision: change.revision,
+      })));
+      await loadRoutines();
+      if (!result) throw new RPCFailure({ message: "Fyke did not return the saved routine." });
+      return result;
+    },
+
+    async removeRoutine(id: number) {
+      await transport().call("routines.remove", { id });
+      await loadRoutines();
+    },
+
+    async runRoutine(id: number) {
+      await transport().call("routines.run", { id });
+      await Promise.all([loadJobs(), loadRoutines()]);
+    },
+
+    async previewRoutine(id: number): Promise<DryRun> {
+      return dryRun(new J(await transport().call("routines.dry_run", { id })));
+    },
+
     async moveView(id: number, position: number): Promise<void> {
       await transport().call("views.move", { id, position });
       await loadViews();
@@ -161,7 +249,7 @@ export function createLibrary() {
     /** Fails with `in_use` while routines look in the view, unless they are detached. */
     async removeView(id: number, detach: boolean): Promise<void> {
       await transport().call("views.remove", { id, detach });
-      await loadViews();
+      await Promise.all([loadViews(), loadRoutines()]);
     },
 
     /** Marks many articles, a thousand at a time, and returns what each was, for Undo. */

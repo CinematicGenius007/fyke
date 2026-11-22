@@ -30,6 +30,13 @@ If `CARGO_TARGET_DIR` is set, use its `release` directory for the executable.
 
 After closing Fyke, stop the test daemon with `& $env:FYKE_BIN daemon stop`. Repeat for the second home if you used one.
 
+## Native web reader
+
+1. From the same scratch home, quit Fyke and set `$env:FYKE_SCREEN = "web"` and `$env:FYKE_ADDRESS = "https://example.com/"`. Start Fyke again. The web bar shows the host and the page loads below it. Resize and maximize the window, and verify the page stays below its toolbar and inside the reader.
+2. Open the command palette with the web pane showing. The palette is visible and clickable over the page. Close it and verify the page reappears. Click Back and verify the reader is visible again.
+3. Repeat the launch with `$env:FYKE_ADDRESS = "http://127.0.0.1:1420/"`. The reader shows a private-address refusal and never loads content from that address. Repeat with `http://[::1]/`.
+4. Remove the two variables with `Remove-Item Env:FYKE_SCREEN,Env:FYKE_ADDRESS`. Open a web-linked article and use Open page. Confirm that Article returns to the same article and Open in browser opens the address in your default browser. Ctrl-click an article link and confirm it opens in your browser while the article stays visible.
+
 ## Later phases
 
 Narrator, IME, multiple monitors, display scaling, notification activation, and installer upgrades and uninstalls are planned. Their checks belong here when the corresponding features are available.

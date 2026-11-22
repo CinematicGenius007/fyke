@@ -22,6 +22,7 @@ function command(event: KeyboardEvent): boolean {
     ",": () => model.openSettings(),
     n: () => model.set("showingAddFeed", true),
     j: () => void model.startCatchUp(),
+    r: () => void model.runBrief(),
     f: () => {
       model.commands.close();
       model.search.show();
@@ -38,9 +39,10 @@ function command(event: KeyboardEvent): boolean {
     // Text being edited keeps its own undo.
     z: () => (typing(event.target) ? undefined : model.undo.undoLast()),
     // Ctrl+S saves what is in front; the search panel takes it while it shows.
-    s: () => undefined,
+    s: () => model.set("saveRequests", (requests) => requests + 1),
   };
   const shifted: Record<string, () => void> = {
+    a: () => model.ask(),
     k: () => model.canMarkAllHere() && model.markAllHere(),
   };
   const run = (shift ? shifted : plain)[key];
@@ -75,6 +77,11 @@ export function handleKey(event: KeyboardEvent): void {
   }
   // An open menu takes the keys: Esc closes it, and nothing behind it acts.
   if (float.isOpen()) {
+    if (model.state.showingActivity && (event.ctrlKey || event.metaKey) && event.key === "0") {
+      event.preventDefault();
+      float.close(true);
+      return;
+    }
     if (event.key === "Escape") float.close(true);
     if (!typing(event.target) && !["Enter", " ", "Tab"].includes(event.key)) event.preventDefault();
     return;
@@ -92,6 +99,21 @@ export function handleKey(event: KeyboardEvent): void {
     if (event.key === "Escape") model.set("confirmation", null);
     // A focused button takes Return, Space and Tab itself.
     if (!["Enter", " ", "Tab"].includes(event.key)) event.preventDefault();
+    return;
+  }
+  if (model.state.webAddress) {
+    if (event.key === "Escape" || event.key === "O") {
+      event.preventDefault();
+      if (event.key === "Escape") model.closeWeb();
+      else model.openInBrowser();
+    }
+    return;
+  }
+  if (model.state.ask) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      model.back();
+    }
     return;
   }
   if (model.state.renaming) return;
@@ -118,7 +140,7 @@ export function handleKey(event: KeyboardEvent): void {
     m: () => model.toggleRead(),
     u: () => model.toggleUnreadOnly(),
     o: () => model.openPage(),
-    O: () => model.openPage(),
+    O: () => model.openInBrowser(),
     f: () => model.fetchFull(),
     c: () => model.set("discussionRequest", (request) => request + 1),
     r: () => model.refresh(),

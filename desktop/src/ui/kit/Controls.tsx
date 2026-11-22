@@ -36,18 +36,19 @@ export function Spinner(props: { size?: number }) {
 }
 
 /** A square button holding one symbol, with hover, pressed and selected fills. */
-export function SymbolButton(props: { icon: IconName; label: string; size?: number; iconSize?: number; selected?: boolean; onClick: () => void; ref?: (el: HTMLButtonElement) => void }) {
+export function SymbolButton(props: { icon: IconName; label: string; size?: number; iconSize?: number; selected?: boolean; disabled?: boolean; type?: "submit" | "button"; onClick?: () => void; ref?: (el: HTMLButtonElement) => void }) {
   return (
     <button
       ref={props.ref}
-      type="button"
+      type={props.type ?? "button"}
       class="symbol-button"
       classList={{ selected: props.selected }}
       style={{ width: `${props.size ?? 28}px`, height: `${props.size ?? 28}px` }}
       title={props.label}
       aria-label={props.label}
       aria-pressed={props.selected === undefined ? undefined : props.selected}
-      onClick={() => props.onClick()}
+      disabled={props.disabled}
+      onClick={() => props.onClick?.()}
     >
       <Icon name={props.icon} size={props.iconSize ?? 16} />
     </button>

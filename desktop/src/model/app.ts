@@ -7,9 +7,10 @@ import { type DaemonEvent, RPCFailure, transport } from "../transport";
 import { type CatchUpModel, createCatchUp } from "./catchUp";
 import { createLibrary } from "./library";
 import { prefs } from "./prefs";
-import type { Block, Entry, EntryPage, EntrySummary, Feed, Folder, Items, Stats } from "./types";
-import { feedName, jobIsWriting } from "./types";
+import type { Block, Entry, EntryPage, EntrySummary, Feed, Folder, Items, Routine, RoutineAction, Stats } from "./types";
+import { feedName, jobIsWriting, newRoutine } from "./types";
 import { Dates } from "../ui/format";
+import { isSafeLink } from "../ui/links";
 import { createUndoCenter } from "./undo";
 import { createCommands } from "./commands";
 import { createSearch } from "./search";
@@ -56,6 +57,8 @@ interface State {
   updatedAt: Date | null;
   fullTextStatus: string | null;
   discussionRequest: number;
+  webAddress: string | null;
+  webBrowserAddress: string | null;
   showingAddFeed: boolean;
   addFeedAddress: string;
   /** The folder Add feed puts a new feed in, from a folder's menu. */
@@ -67,6 +70,11 @@ interface State {
   confirmation: Confirmation;
   renaming: Renaming;
   selectedBrief: number | null;
+  pinCitation?: number;
+  openRecipe: number | null;
+  routineDraft: Routine | null;
+  ask: { question: string; viewId: number | null } | null;
+  saveRequests: number;
   healthFeed: number | null;
 }
 
@@ -103,6 +111,8 @@ function createApp() {
     updatedAt: null,
     fullTextStatus: null,
     discussionRequest: 0,
+    webAddress: null,
+    webBrowserAddress: null,
     showingAddFeed: false,
     addFeedAddress: "",
     addFeedFolder: null,
@@ -113,9 +123,14 @@ function createApp() {
     confirmation: null,
     renaming: null,
     selectedBrief: null,
+    openRecipe: null,
+    routineDraft: null,
+    ask: null,
+    saveRequests: 0,
     healthFeed: null,
   });
 
+  const [briefPending, setBriefPending] = createSignal(false);
   const [catchUp, setCatchUp] = createSignal<CatchUpModel | null>(null);
   const library = createLibrary();
   const undo = createUndoCenter();
@@ -335,6 +350,10 @@ function createApp() {
     }
     batch(() => {
       set("place", place);
+      closeWeb();
+      set("openRecipe", null);
+      set("routineDraft", null);
+      set("ask", null);
       set("article", null);
       set("selectedId", null);
       set("entries", []);
@@ -369,6 +388,69 @@ function createApp() {
   function closeCatchUp() {
     setCatchUp(null);
     void reload();
+  }
+
+  // MARK: Briefs
+
+  const selectedBrief = () => library.state.briefs.find((brief) => brief.id === state.selectedBrief) ?? library.state.briefs[0];
+
+  function selectBrief(id: number) {
+    batch(() => {
+      set("selectedBrief", id);
+      set("article", null);
+      set("selectedId", null);
+      set("openRecipe", null);
+      set("pinCitation", undefined);
+    });
+  }
+
+  async function runBrief(viewId?: number | null, recipeId?: number) {
+    if (briefPending() || briefJob()) return;
+    setBriefPending(true);
+    const previous = state.place.kind === "today" ? selectedBrief() : undefined;
+    const view = viewId ?? (state.place.kind === "view" ? state.place.id : previous?.viewId);
+    try {
+      await library.queueWriting("briefs.run", {
+        view_id: view,
+        rule: view == null ? previous?.rule ?? { state: "unread" } : undefined,
+        recipe_id: recipeId ?? previous?.recipeId ?? library.state.recipes[0]?.id,
+      });
+      if (state.place.kind !== "today") go({ kind: "today" });
+      batch(() => {
+        set("selectedBrief", null);
+        set("article", null);
+      });
+      await library.loadBriefs();
+    } catch (error) {
+      fail(error);
+    } finally {
+      setBriefPending(false);
+    }
+  }
+
+  function openRecipe(id?: number | null) {
+    const target = id ?? library.state.recipes[0]?.id;
+    if (target === undefined) return;
+    go({ kind: "today" });
+    set("openRecipe", target);
+  }
+
+  async function cancelJob(id: number) {
+    try {
+      await library.cancelJob(id);
+    } catch (error) {
+      fail(error);
+    }
+  }
+
+  async function restartService() {
+    try {
+      stopEvents?.();
+      await transport().call("daemon.stop");
+      await start();
+    } catch (error) {
+      fail(error);
+    }
   }
 
   // MARK: Views
@@ -449,18 +531,86 @@ function createApp() {
     library.moveView(id, target).catch(fail);
   }
 
-  /** Removes at once, and Undo makes the view again where it was. Routines that look
-   * in it are detached; pointing them back joins with routines (phase 5). */
+  /** Removes at once. Undo restores its position and reconnects detached routines. */
   async function removeView(id: number) {
     const view = library.state.views.find((v) => v.id === id);
     if (!view) return;
-    const kept = { name: view.name, rule: view.rule, position: view.position };
+    const kept = { name: view.name, rule: structuredClone(unwrap(view.rule)), position: view.position };
+    const routines = library.state.routines.filter((routine) => routine.viewId === id).map((routine) => structuredClone(unwrap(routine)));
     if (samePlace(state.place, { kind: "view", id })) go({ kind: "all" });
     try {
       await library.removeView(id, true);
       undo.push(`Removed “${kept.name}”`, async () => {
-        const made = await library.saveView({ name: kept.name, rule: kept.rule }).catch(() => null);
-        if (made) await library.moveView(made.id, kept.position).catch(() => undefined);
+        try {
+          const made = await library.saveView({ name: kept.name, rule: kept.rule });
+          await library.moveView(made.id, kept.position);
+          for (const prior of routines) {
+            const detached = library.routine(prior.id);
+            if (detached && detached.viewId === null && detached.revision === prior.revision) {
+              await library.saveRoutine({ ...detached, enabled: prior.enabled, viewId: made.id });
+            }
+          }
+        } catch (error) {
+          fail(error);
+        }
+      });
+    } catch (error) {
+      fail(error);
+    }
+  }
+
+  function ask(question = "") {
+    batch(() => {
+      set("showingSettings", false);
+      closeWeb();
+      set("ask", { question, viewId: state.place.kind === "view" ? state.place.id : null });
+    });
+  }
+
+  // MARK: Routines
+
+  function draftRoutine(viewId?: number | null, name?: string, actions?: RoutineAction[]) {
+    const view = library.view(viewId ?? (state.place.kind === "view" ? state.place.id : null)) ?? library.state.views[0];
+    if (!view) return;
+    const draft = newRoutine(name ?? `Morning ${view.name.toLowerCase()}`, view.id);
+    draft.actions = (actions ?? draft.actions).map((action) =>
+      action.kind === "brief" ? { ...action, recipe_id: library.state.recipes[0]?.id } : action,
+    );
+    go({ kind: "routines" });
+    set("routineDraft", draft);
+  }
+
+  async function toggleRoutine(routine: Routine, enabled: boolean) {
+    try {
+      const updated = await library.saveRoutine({ ...routine, enabled });
+      if (state.routineDraft?.id === updated.id) set("routineDraft", updated);
+    } catch (error) {
+      fail(error);
+      await library.loadRoutines();
+    }
+  }
+
+  async function runRoutine(id: number) {
+    try {
+      await library.runRoutine(id);
+      set("showingActivity", true);
+    } catch (error) {
+      fail(error);
+    }
+  }
+
+  async function removeRoutine(routine: Routine) {
+    if (routine.id === null) return;
+    const kept = structuredClone(unwrap(routine));
+    try {
+      await library.removeRoutine(routine.id);
+      if (state.routineDraft?.id === routine.id) set("routineDraft", library.state.routines[0] ?? null);
+      undo.push(`Removed “${kept.name}”`, async () => {
+        try {
+          await library.saveRoutine({ ...kept, id: null, revision: null });
+        } catch (error) {
+          fail(error);
+        }
       });
     } catch (error) {
       fail(error);
@@ -563,6 +713,7 @@ function createApp() {
     batch(() => {
       set("selectedId", id);
       set("fullTextStatus", null);
+      closeWeb();
     });
     try {
       const entry = await transport().call<Entry>("entries.get", { id, format: "blocks" });
@@ -646,7 +797,13 @@ function createApp() {
   }
 
   function back() {
-    if (state.place.kind === "today" && state.article) {
+    if (state.webAddress !== null) {
+      closeWeb();
+    } else if (state.ask !== null) {
+      set("ask", null);
+    } else if (state.openRecipe !== null) {
+      set("openRecipe", null);
+    } else if (state.place.kind === "today" && state.article) {
       batch(() => {
         set("article", null);
         set("selectedId", null);
@@ -688,16 +845,37 @@ function createApp() {
     })();
   }
 
-  /** Opens the article's page. The web pane is planned (F26); until then the system
-   * browser opens it. */
+  function pageAddress() {
+    return state.article?.entry.url ?? state.entries.find((entry) => entry.id === state.selectedId)?.url;
+  }
+
   function openPage() {
-    const url = state.article?.entry.url;
+    const url = pageAddress();
     if (url) openLink(url);
   }
 
-  function openLink(url: string) {
-    if (!/^https?:/i.test(url)) return;
-    void transport().openExternal(url).catch(fail);
+  function openInBrowser() {
+    const url = state.webBrowserAddress ?? pageAddress();
+    if (isSafeLink(url)) void transport().openExternal(url).catch(fail);
+  }
+
+  function closeWeb() {
+    batch(() => {
+      set("webAddress", null);
+      set("webBrowserAddress", null);
+    });
+  }
+
+  function openLink(url: string, inBrowser = false) {
+    if (!isSafeLink(url)) return;
+    if (inBrowser || prefs().ui.open_links === "browser") {
+      void transport().openExternal(url).catch(fail);
+    } else {
+      batch(() => {
+        set("webAddress", url);
+        set("webBrowserAddress", url);
+      });
+    }
   }
 
   function openSettings() {
@@ -769,6 +947,19 @@ function createApp() {
     const newest = library.state.briefs[0]?.id;
     return newest !== undefined && state.place.kind !== "today" && newest !== state.selectedBrief;
   };
+  function showFeedHealth(id: number) {
+    const parentIds = new Set<number>();
+    let parent = state.feeds.find((feed) => feed.id === id)?.folder_id;
+    while (parent != null && !parentIds.has(parent)) {
+      parentIds.add(parent);
+      parent = state.folders.find((folder) => folder.id === parent)?.parent_id;
+    }
+    if (prefs().ui.collapsed_folders.some((folder) => parentIds.has(folder))) {
+      prefs().update((ui) => void (ui.collapsed_folders = ui.collapsed_folders.filter((folder) => !parentIds.has(folder))));
+    }
+    set("healthFeed", id);
+  }
+
   const statusIsBusy = () => library.activeJobs().length > 0;
   const statusNeedsYou = () => library.needsYou().length > 0 || failingFeeds().length > 0;
   function statusWords(now: Date = new Date()): string {
@@ -817,7 +1008,31 @@ function createApp() {
       }
       case "today":
       case "briefing":
+      case "recipe":
         go({ kind: "today" });
+        if (mode.FYKE_PIN_CITATION) set("pinCitation", Number(mode.FYKE_PIN_CITATION));
+        if (mode.FYKE_SCREEN === "recipe") openRecipe();
+        break;
+      case "web":
+        if (mode.FYKE_ADDRESS) openLink(mode.FYKE_ADDRESS);
+        break;
+      case "ask":
+        if (library.state.views[0]) go({ kind: "view", id: library.state.views[0].id });
+        ask(mode.FYKE_QUERY ?? "What arrived this week?");
+        break;
+      case "routines":
+        go({ kind: "routines" });
+        if (library.state.routines[0]) set("routineDraft", library.state.routines[0]);
+        else draftRoutine();
+        break;
+      case "toast":
+        undo.push("Marked 12 articles in Databases as read", () => undefined);
+        break;
+      case "activity":
+        set("showingActivity", true);
+        break;
+      case "health":
+        if (state.feeds[0]) showFeedHealth(failingFeeds()[0]?.id ?? state.feeds[0].id);
         break;
       case "catchup":
         await startCatchUp();
@@ -859,8 +1074,17 @@ function createApp() {
     state,
     set,
     failingFeeds,
+    showFeedHealth,
     isFailing,
     briefJob,
+    briefPending,
+    selectedBrief,
+    selectBrief,
+    ask,
+    runBrief,
+    openRecipe,
+    cancelJob,
+    restartService,
     hasNewBrief,
     statusIsBusy,
     statusNeedsYou,
@@ -880,6 +1104,10 @@ function createApp() {
     setViewRule,
     moveView,
     removeView,
+    draftRoutine,
+    toggleRoutine,
+    runRoutine,
+    removeRoutine,
     importOpml,
     exportOpml,
     refreshFeed,
@@ -906,6 +1134,8 @@ function createApp() {
     refresh,
     fetchFull,
     openPage,
+    openInBrowser,
+    closeWeb,
     openLink,
     openSettings,
     canMarkAllHere,

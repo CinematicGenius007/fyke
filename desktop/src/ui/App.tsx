@@ -1,8 +1,9 @@
 // The main window (gui/Sources/Reader/RootView.swift): sidebar, then the place's
 // content, with the problem banner and the undo toast above it.
-import { Match, onCleanup, onMount, Show, Switch } from "solid-js";
+import { type JSX, Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { app } from "../model/app";
 import { prefs } from "../model/prefs";
+import { Ask } from "./Ask";
 import { AddFeed, FirstRun } from "./AddFeed";
 import { EntryList } from "./EntryList";
 import { FloatLayer } from "./Float";
@@ -13,11 +14,14 @@ import { Panes } from "./Panes";
 import { CatchUp } from "./CatchUp";
 import { CommandPalette } from "./CommandPalette";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { RoutineList, RoutineReader } from "./Routines";
 import { ReaderPane } from "./Reader";
 import { SearchPanel } from "./SearchPanel";
 import { ShortcutsSheet } from "./ShortcutsSheet";
 import { Sidebar } from "./Sidebar";
 import { Timeline } from "./Timeline";
+import { WebPane } from "./WebPane";
+import { BriefList, TodayReader } from "./Today";
 
 export function App(props: { localFeeds: boolean }) {
   const model = app();
@@ -62,11 +66,17 @@ export function App(props: { localFeeds: boolean }) {
           <Match when={model.isEmpty()}>
             <FirstRun />
           </Match>
-          <Match when={model.usesPanes()}>
-            <Panes list={<EntryList />} reader={<ReaderPane />} />
+          <Match when={model.state.place.kind === "today"}>
+            <Panes list={<BriefList />} reader={<ReaderDetails><TodayReader /></ReaderDetails>} />
           </Match>
-          <Match when={model.state.article}>
-            <ReaderPane />
+          <Match when={model.state.place.kind === "routines"}>
+            <Panes list={<RoutineList />} reader={<ReaderDetails><RoutineReader /></ReaderDetails>} />
+          </Match>
+          <Match when={model.usesPanes()}>
+            <Panes list={<EntryList />} reader={<ReaderDetails><ReaderPane /></ReaderDetails>} />
+          </Match>
+          <Match when={model.state.article || model.state.ask || model.state.webAddress}>
+            <ReaderDetails><ReaderPane /></ReaderDetails>
           </Match>
         </Switch>
       </main>
@@ -111,4 +121,13 @@ export function App(props: { localFeeds: boolean }) {
       </div>
     </div>
   );
+}
+
+function ReaderDetails(props: { children: JSX.Element }) {
+  const model = app();
+  return <Show when={model.state.webAddress} keyed fallback={<Show when={model.state.ask} fallback={props.children} keyed>
+    {(ask) => <Ask question={ask.question} viewId={ask.viewId} />}
+  </Show>}>
+    {(address) => <WebPane address={address} />}
+  </Show>;
 }

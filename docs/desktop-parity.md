@@ -66,7 +66,7 @@ UI modules live in `desktop/src`, Rust in `desktop/src-tauri/src`. Logic ported 
 | F13 | Daemon.swift | Socket client, starting the daemon, timeouts, the event thread | Rust `rpc.rs`, `socket.rs`, `events.rs`, `paths.rs`; UI `src/transport/{index,tauri,bridge}.ts` | done | `cargo test` (rpc, events, paths); Playwright `harness.spec.ts` |
 | F14 | Models.swift | Wire types and their tolerant decoding | `src/model/types.ts`, `src/model/decode.ts` | built | `tsc`; decoded by every Playwright scenario in `reading.spec.ts` |
 | F15 | AppModel.swift | Places, selection, entries, marks, reload, events, data move | `src/model/app.ts` | built | Playwright `reading.spec.ts`: places, open and mark read, Esc and Return, j and k, star and unread, divider. Search, data move and the palette are planned (phase 4) |
-| F16 | Library.swift | Views, recipes, briefs, routines, jobs, writers | `src/model/library.ts` | built | Views load and their counts follow marks (`reading.spec.ts`). Recipes, briefs, routines, jobs and writers are planned (phases 4–5) |
+| F16 | Library.swift | Views, recipes, briefs, routines, jobs, writers | `src/model/library.ts` | built | Playwright covers saved views, recipes, routines, artifacts and jobs. Writer selection is planned. |
 | F17 | Features.swift | View save and undo, briefs, catch-up start, test screens, notifier | `src/model/features.ts`, `src/testmode/screens.ts` | planned | |
 | F18 | Undo.swift | Undo center and toast | `src/model/undo.ts`, `src/ui/Toast.tsx` | built | `src/model/undo.ts` and the toast; Ctrl+Z after "mark all read". Its scenario is planned (phase 4) |
 | F19 | TestMode.swift | FYKE_SCREEN / KEYS / SNAPSHOT / HEADLESS | `src/testmode/index.ts`; Rust `testmode.rs` (env, snapshot, headless window) | built | `testmode.rs` passes every `FYKE_` variable to the UI and keeps a headless window hidden. Screens, keys and snapshots are planned. |
@@ -76,20 +76,20 @@ UI modules live in `desktop/src`, Rust in `desktop/src-tauri/src`. Logic ported 
 | F23 | Controls.swift | Glyphs, icon buttons, float layer, menus, select, checkbox, themed scrollbar, right-click menus, window buttons | `src/ui/controls/*.tsx`; window buttons in `src/ui/Chrome.tsx` (D3, D4) | built | Glyphs and drawn SF equivalents (`src/ui/kit/Icon.tsx`, D20). Float layer, menus with submenus and checks, the checkbox and right-click menus (`src/ui/Float.tsx`; the webview's own menu shows only over text fields and selected text). Select and window buttons are planned |
 | F24 | Sidebar.swift | Sidebar rows, tree, drag and drop, rename, menus, status line, confirmations, shortcuts sheet, move dialog | `src/ui/Sidebar.tsx`, `SidebarTree.tsx`, `ConfirmDialog.tsx`, `ShortcutsSheet.tsx`, `MoveDialog.tsx` | built | Rows, tree, status line, Routines row (`src/ui/Sidebar.tsx`), shortcuts sheet (`src/ui/ShortcutsSheet.tsx`), rename in place, the view, folder and feed menus with Move to, and the delete-folder and remove-feed confirmations (`src/ui/ConfirmDialog.tsx`), checked in `manage.spec.ts`. The menus' brief, catch-up and routine items join with those features in phase 5; restoring a removed view also points its routines back at it then. Feed and folder drag-and-drop is checked in `manage.spec.ts`. The data move dialog is planned |
 | F25 | ReaderPane.swift | Article column, actions, blocks, images, text-and-theme menu | `src/ui/Reader.tsx`, `Blocks.tsx` (DOM nodes with `textContent` only), `TypeMenu.tsx` | built | Article column, actions, blocks as text nodes ("feed content is text, never markup" in `reading.spec.ts`), images on request. The text-and-theme menu is planned |
-| F26 | WebPane.swift | Web viewer and its address guard | Rust `web.rs` (a second webview with no IPC, an incognito profile, and the guard after DNS); `src/ui/WebPane.tsx` (the bar) | planned | |
+| F26 | WebPane.swift | Web viewer and its address guard | Rust `web.rs` (a second webview with no IPC, an incognito profile, and the guard after DNS); `src/ui/WebPane.tsx` (the bar) | built | `web-pane.spec.ts` checks open and back. Rust builds the WebView2 implementation and unit-tests the network guard. Native navigation and isolation are in the [Windows checklist](desktop-windows-checklist.md). |
 | F27 | Discussion.swift | Hacker News thread under the article | `src/ui/Discussion.tsx` | built | `discussion.spec.ts` verifies lazy loading, text and links from blocks, and folded replies. |
-| F28 | Ask.swift | Ask your feeds | `src/model/ask.ts`, `src/ui/Ask.tsx` | planned | |
-| F29 | Activity.swift | Status line, Activity popover, feed health | `src/model/activity.ts`, `src/ui/Activity.tsx`, `FeedHealth.tsx` | planned | |
+| F28 | Ask.swift | Ask your feeds | `src/ui/Ask.tsx`, `src/model/library.ts` | built | `ask.spec.ts` checks cited answers, follow-ups and starting a routine from a question. |
+| F29 | Activity.swift | Status line, Activity popover, feed health | `src/ui/Activity.tsx`, `src/model/library.ts` | built | `activity.spec.ts` checks the popover, a failing feed, its cause and retry. |
 | F30 | StoragePane.swift | Settings · Data | `src/ui/settings/Data.tsx` | planned | |
 | F31 | CatchUp.swift | Catch-up card | `src/model/catchUp.ts`, `src/ui/CatchUp.tsx` | built | `catch-up.spec.ts` checks keyboard triage, daemon marks, undo and the completed state. |
-| F32 | Today.swift | Brief list, Today reader, back bar | `src/ui/Today.tsx` | planned | |
+| F32 | Today.swift | Brief list, Today reader, back bar | `src/ui/Today.tsx` | built | `briefs.spec.ts` checks writing on request, selecting a brief and opening a cited article. |
 | F33 | Views.swift | View sentence, editors, view menu | `src/ui/ViewSentence.tsx`, `Sidebar.tsx` | built | `views.spec.ts` checks editing, undo, scope, an empty unread view, and revision conflicts. |
 | F34 | Search.swift | Search popup | `src/model/search.ts`, `src/ui/Search.tsx` | planned | |
-| F35 | CommandPalette.swift | ⌘K palette | `src/model/commands.ts`, `src/ui/CommandPalette.tsx` | built | `palette.spec.ts`. New folder is built. Add feed and Catch up are built. The brief, ask, new routine, activity, Settings · Agents, run-routine and edit-recipe commands, and the Ask row with Tab, are planned: each joins with its feature |
+| F35 | CommandPalette.swift | ⌘K palette | `src/model/commands.ts`, `src/ui/CommandPalette.tsx` | built | `palette.spec.ts` checks navigation and actions. `ask.spec.ts` checks asking with Tab. Settings routing to Agents is planned. |
 | F36 | AddFeed.swift | Add feed sheet, OPML | `src/ui/AddFeed.tsx`, `src/model/subscriptions.ts`, `src-tauri/src/opml.rs` | built | `add-feed.spec.ts` covers discovery, subscription and OPML over the bridge. The native file dialogs are in the [Windows checklist](desktop-windows-checklist.md). |
-| F37 | Brief.swift | Citations, source list, "made with", artifact column | `src/ui/Brief.tsx` | planned | |
-| F38 | RecipeView.swift | Recipe edit, try, history, reset | `src/ui/Recipe.tsx` | planned | |
-| F39 | Routines.swift | Routine list, editor, dry run | `src/ui/Routines.tsx` | planned | |
+| F37 | Brief.swift | Citations, source list, "made with", artifact column | `src/ui/Artifact.tsx` | built | `briefs.spec.ts` and `ask.spec.ts` check the shared citation renderer in `src/ui/Artifact.tsx`. |
+| F38 | RecipeView.swift | Recipe edit, try, history, reset | `src/ui/Recipe.tsx` | built | `briefs.spec.ts` checks saving, history, reset with undo, and trying unsaved text. |
+| F39 | Routines.swift | Routine list, editor, dry run | `src/ui/Routines.tsx` | built | `routines.spec.ts` checks editing, preview, running, pause and resume, and undo. |
 | F40 | SettingsView.swift | Settings shell; General, Reading, Agents | `src/ui/settings/{Settings,General,Reading,Agents}.tsx` | planned | |
 | F41 | TokensPane.swift | Theme gallery, new theme, token editor, color and font pickers | `src/ui/settings/Tokens.tsx`, `ColorPanel.tsx`, `FontPicker.tsx` | planned | |
 | F42 | (none) | Notification on `--notify`, single instance, service toggle | Rust `notify.rs`, `instance.rs`, `service.rs` | planned | |
@@ -100,9 +100,9 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 
 | Id | Screen or state | Picture name | Status | Evidence |
 |---|---|---|---|---|
-| S1 | Today with a brief and citations | `today` | planned | |
-| S2 | Today with source 1 pinned open | `citation` | planned | |
-| S3 | Today: no brief yet / writing / not written / needs a newer service | `today-empty`, `today-writing`, `today-failed` (new) | planned | |
+| S1 | Today with a brief and citations | `today` | built | `today-light` and `today-dark` match 98.627% and 98.586%. Brief heading metadata, list rows and source text spacing differ. |
+| S2 | Today with source 1 pinned open | `citation` | built | `citation-light` and `citation-dark` match 97.038% and 97.513%. The popover position, text spacing and shadow differ. |
+| S3 | Today: no brief yet / writing / not written / needs a newer service | `today-empty`, `today-writing`, `today-failed` (new) | built | `briefs.spec.ts` checks the empty state and writing a brief. Failure and compatibility pictures are planned. |
 | S4 | All (timeline, first article selected) | `all` | built | `all-light` 99.811 %, `all-dark` 99.833 % equal after the allowance; layout on the same pixels; the rest is text (D21) and icons (D20) |
 | S5 | Starred, with items and empty | `starred`, `starred-empty` (new) | planned | |
 | S6 | A folder | `folder` (new) | planned | |
@@ -113,14 +113,14 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 | S11 | Command palette | `palette` | built | `palette-light` 93.558 %, `palette-dark` 93.939 %: the field, Go to and Articles sections line up; the Mac's "Run Morning needle now" row and its Ask row are missing until routines and Ask exist (F35) |
 | S12 | Shortcuts sheet | `shortcuts` (new) | built | `shortcuts-light` 99.408 %, `shortcuts-dark` 99.345 % equal after the allowance: the rest is the keys spelled Ctrl and Shift for ⌘ and ⇧ (K24), text edges (D21) and the scrim (D23) |
 | S13 | Catch-up: a card / finished / could not start | `catchup`, `catchup-done` (planned) | built | `catch-up.spec.ts`; the card pictures match 99.588% (light) and 99.628% (dark). The finished and failed pictures are planned. |
-| S14 | Ask with a cited answer; answering; not answered | `ask` | planned | |
-| S15 | Recipe open in place, edit, try (working, failed), reset with undo, history | `recipe` | planned | |
-| S16 | Routines: list, editor, dry run, run now; "Routines start from a view" | `routines` | planned | |
-| S17 | Activity popover and the status line (working, needs you, quiet) | `activity` | planned | |
-| S18 | Feed health panel | `health` | planned | |
-| S19 | Toast with Undo | `toast` | planned | |
+| S14 | Ask with a cited answer; answering; not answered | `ask` | built | `ask.spec.ts` checks the answer, follow-up and routine. The pictures match 98.776% (light) and 98.741% (dark). Heading, citations and source spacing differ. |
+| S15 | Recipe open in place, edit, try (working, failed), reset with undo, history | `recipe` | built | `briefs.spec.ts`; the pictures match 98.439% (light) and 98.389% (dark). The editor, tab controls and text edges differ. |
+| S16 | Routines: list, editor, dry run, run now; "Routines start from a view" | `routines` | built | `routines.spec.ts`; the pictures match 96.411% (light) and 96.303% (dark). Sentence rows, preview spacing and the footer controls differ. |
+| S17 | Activity popover and the status line (working, needs you, quiet) | `activity` | built | `activity.spec.ts`; the pictures match 97.802% (light) and 98.910% (dark). The popover spacing, focus ring and job data differ. |
+| S18 | Feed health panel | `health` | built | `activity.spec.ts`; the pictures match 98.615% (light) and 99.787% (dark). The light popover shadow and row positions differ. |
+| S19 | Toast with Undo | `toast` | built | Undo scenarios exercise the toast. The pictures match 98.057% (light) and 99.261% (dark). The toast width, shadow and text edges differ. |
 | S20 | Discussion (comments) under an article | `comments` | built | `discussion.spec.ts`; the pictures match 98.557% (light) and 98.516% (dark). Comment spacing, article and sidebar text edges, and timestamps differ. |
-| S21 | Web viewer: page, failure, blocked private address | `web` (new) | planned | |
+| S21 | Web viewer: page, failure, blocked private address | `web` (new) | built | `web-pane.spec.ts` checks the toolbar and fallback. Native page and blocked navigation checks are in the [Windows checklist](desktop-windows-checklist.md). |
 | S22 | Add feed: discovery, preview, choosing a folder, failure | `add`, `add-found`, `add-multiple`, `add-none` | built | `add-feed.spec.ts` exercises the dialog and writes eight picture pairs. Light and dark are 93.127–94.766% equal after the allowance. The differences include text edges and selection (D21–D22), sheet corners and button height (D24), and the fixture server ports. |
 | S23 | Folder rename, feed rename | `rename-folder`, `rename-feed` (new) | built | `rename-folder-light` 99.669 %, `rename-folder-dark` 99.705 %, `rename-feed-light` 99.684 %, `rename-feed-dark` 99.715 % equal after the allowance: the rest is the selection color (D22), Ctrl for ⌘ (K24) and text edges (D21) |
 | S24 | Move a feed or folder | (scenario) | done | `manage.spec.ts` covers Move to, Move to › New folder, and dragging a feed or folder into a folder and back to the Feeds heading. |
@@ -148,23 +148,23 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 |---|---|---|---|---|---|---|
 | K1 | ⌘, | Ctrl+, | Settings | | planned | |
 | K2 | ⌘N | Ctrl+N | Add feed | WebView2 opens a new window. Fyke prevents the default. | done | `add-feed.spec.ts` opens, previews and subscribes via Ctrl+N. |
-| K3 | ⌘S | Ctrl+S | Save search as view (and Save in the routine editor) | WebView2 offers to save the page. Fyke prevents the default. | built | search: `search.spec.ts` "Ctrl+S keeps a search as a view, named for its words"; the routine editor is planned |
+| K3 | ⌘S | Ctrl+S | Save search as view (and Save in the routine editor) | WebView2 offers to save the page. Fyke prevents the default. | done | `search.spec.ts` saves the search as a view and `routines.spec.ts` saves an edited routine. |
 | K4 | ⌘Z | Ctrl+Z | Undo (text field first, then catch-up, then the undo stack) | | built | `catch-up.spec.ts`, `views.spec.ts`, `search.spec.ts`, `palette.spec.ts`. |
 | K5 | ⇧⌘Z | Ctrl+Shift+Z, and Ctrl+Y on Windows | Redo | Windows apps use Ctrl+Y, so it is added. | planned | |
 | K6 | ⌘K | Ctrl+K | Everything (palette) | WebView2 and Chromium focus the address or search bar. There is none, and Fyke prevents the default. | done | `palette.spec.ts` "the palette finds a command by its letters"; the sidebar's Search row: "the sidebar's Search row opens the palette, and Esc closes it" |
 | K7 | ⌘F | Ctrl+F | Search | WebView2 and WebKitGTK open find-in-page. Fyke prevents the default. | done | `search.spec.ts` "Ctrl+F, type and Return opens the first result" and the arrow, Esc and nothing-found scenarios |
 | K8 | ⌘1 ⌘2 ⌘3 ⌘4 | Ctrl+1 … Ctrl+4 | Today, All, Starred, Routines | | planned | |
 | K9 | ⌘J | Ctrl+J | Catch up | WebView2 opens downloads. Fyke prevents the default. | done | `catch-up.spec.ts` opens the card with Ctrl+J. |
-| K10 | ⌘0 | Ctrl+0 | Activity | WebView2 resets the zoom. Fyke prevents the default and turns off zoom hotkeys. | planned | |
-| K11 | ⌘R | Ctrl+R | Write a brief | The webview reloads (and F5 does too). Fyke prevents both in release builds. | planned | |
-| K12 | ⇧⌘A | Ctrl+Shift+A | Ask your feeds | Chromium's tab search; not bound in WebView2. Fyke prevents the default. | planned | |
+| K10 | ⌘0 | Ctrl+0 | Activity | WebView2 resets the zoom. Fyke prevents the default and turns off zoom hotkeys. | built | `activity.spec.ts` checks Ctrl+0 and Esc. |
+| K11 | ⌘R | Ctrl+R | Write a brief | The webview reloads (and F5 does too). Fyke prevents both in release builds. | built | `briefs.spec.ts` writes from Today. Native reload suppression is planned. |
+| K12 | ⇧⌘A | Ctrl+Shift+A | Ask your feeds | Chromium's tab search; not bound in WebView2. Fyke prevents the default. | built | `ask.spec.ts` uses the palette and Tab. Ctrl+Shift+A is bound. |
 | K13 | ⇧⌘K | Ctrl+Shift+K | Mark all read (only where `canMarkAllHere`) | | built | bound; through the palette: `palette.spec.ts` "Mark all read in All marks every article" and "… is not offered in Starred" |
 | K14 | ⌘Q | Ctrl+Q on Linux; Alt+F4 on Windows (system) | Quit | Neither system has ⌘Q. Ctrl+Q is the GNOME convention. | planned | |
-| K15 | ⌘-click | Ctrl+click | Open link in browser | D14 | planned | |
+| K15 | ⌘-click | Ctrl+click | Open link in browser | D14 | built | `web-pane.spec.ts` checks that a click with Ctrl asks the bridge to open the system browser. Native Ctrl-click is in the Windows checklist. |
 | K16 | Return, Esc | same | Open; close the float layer or go back | | done | `reading.spec.ts` "Escape goes back to the timeline, and Return opens the selected row again" |
 | K17 | ↑ ↓ j k | same | Move selection | | done | `reading.spec.ts` "j and k move through a view's list and open each article" |
 | K18 | n s m u | same | Next unread, star, read or unread, unread only | | built | s and m: `reading.spec.ts` "s stars the open article …"; n and u are bound, their scenario is planned |
-| K19 | o, ⇧O | o, Shift+O | Open page here, open in browser | | planned | |
+| K19 | o, ⇧O | o, Shift+O | Open page here, open in browser | | built | `web-pane.spec.ts` covers the Open page button. Lowercase and uppercase O are bound. |
 | K20 | c f r a t | same | Comments, fetch full, refresh, add feed, text and theme | | planned | |
 | K21 | / ? | same | Search, shortcuts sheet | | built | /: `search.spec.ts` "/ opens search too"; ?: `search.spec.ts` "? shows shortcuts and swallows keys until closed", "Esc closes shortcuts" |
 | K22 | ← ↓ → (catch-up) | same | Skip, later, read now | | done | `catch-up.spec.ts` verifies all three against the daemon. |
@@ -179,9 +179,9 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 | U1 | Mark all read in a place | "Marked N article(s) in <name> as read" | done | `palette.spec.ts` "Ctrl+Z takes back mark all read" |
 | U2 | Save a search as a view | "Saved “X” as a view" | done | `search.spec.ts` "Ctrl+Z takes the new view back" |
 | U3 | Change a view's rule | “Changed ‘X’” | done | `views.spec.ts` checks that Ctrl+Z restores the previous rule and results. |
-| U4 | Remove a view (routines detach, then re-point on undo) | "Removed “X”" | planned | |
-| U5 | Reset a recipe to the built-in text | "Reset “X” to the built-in text" | planned | |
-| U6 | Remove a routine | "Removed “X”" | planned | |
+| U4 | Remove a view (routines detach, then re-point on undo) | "Removed “X”" | done | `routines.spec.ts` checks that the restored view is linked to its routine. |
+| U5 | Reset a recipe to the built-in text | "Reset “X” to the built-in text" | done | `briefs.spec.ts` checks that undo restores the edited text. |
+| U6 | Remove a routine | "Removed “X”" | done | `routines.spec.ts` checks that undo restores the routine and its view. |
 | U7 | Catch-up decisions (skip, later, read now), with Ctrl+Z while catch-up is open | The previous card returns | done | `catch-up.spec.ts` verifies restoration of both read and Later marks. |
 | U8 | Redo of all of the above | | planned | |
 
@@ -211,9 +211,9 @@ All of these come from one module, `src/platform.ts`, which reads the system fro
 | X2 | Rust: the event channel on a second connection, resuming from `since_seq`, reconnecting after 1 s | done | `cargo test`: `events::tests::events_flow_and_resume_from_the_last_seq_after_a_drop` |
 | X3 | Rust: start the bundled `fyke daemon --log` when the daemon is absent (`FYKE_BIN` overrides it), and retry 300 × 10 ms | built | the refusals are tested (`no_daemon_and_no_program_says_where_it_looked`, `a_paused_client_does_not_start_the_daemon`); starting a real daemon is covered once the app's own e2e runs |
 | X4 | Rust: outdated daemon (`api_version` ≠ 2) stopped and replaced | planned | |
-| X5 | Web viewer: http and https only on every navigation; private and local addresses refused after DNS; incognito; no IPC; new windows open in the pane; downloads, camera and microphone refused | planned | |
-| X6 | Strict CSP; feed content never becomes HTML | built | the CSP is in `tauri.conf.json`; no feed content is drawn yet |
-| X7 | `cargo test`: socket, paths, URL guard, single instance, notify arguments | built | socket and paths tested; URL guard, single instance and notify are planned |
+| X5 | Web viewer: http and https only on every navigation; private and local addresses refused after DNS; incognito; no IPC; new windows open in the pane; downloads, camera and microphone refused | built | `src-tauri/src/web.rs` hosts the second webview. The per-viewer proxy in `web_guard.rs` resolves addresses, refuses non-public results and connects to a checked address. Native runtime isolation remains to be verified. |
+| X6 | Strict CSP; feed content never becomes HTML | built | `tauri.conf.json` declares the CSP. `reading.spec.ts` checks that feed content is rendered as text. |
+| X7 | `cargo test`: socket, paths, URL guard, single instance, notify arguments | built | `cargo test` covers socket, paths and the URL, address and proxy guard. Single instance runtime and notification tests are planned. |
 | X8 | `bun test`: the ReaderLogic ports and the models | built | ReaderLogic ports and palettes: `bun test` (29 tests); models are planned |
 | X9 | Shared fixtures moved out of `tools/e2e_gui.py`, which keeps passing | done | `tools/gui_fixtures.py`; `e2e_gui.py --only discussion,shot:all,themes` passes, and Playwright uses the same module |
 | X10 | Playwright scenarios: keys, themes, divider, move, settings-route, mark-all, rename, font-weight, view-save, catchup-keys, palette-keys, brief, answer, routine-save, discussion, every `shot:` | planned | |

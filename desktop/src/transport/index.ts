@@ -59,6 +59,24 @@ export interface CallOptions {
   slow?: boolean;
 }
 
+export interface ViewerBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ViewerUpdate {
+  token: number;
+  url: string;
+  loading: boolean;
+  error: string | null;
+  canGoBack: boolean;
+  canGoForward: boolean;
+}
+
+export type ViewerAction = "back" | "forward" | "reload";
+
 export interface Transport {
   call<T = unknown>(method: string, params?: object, options?: CallOptions): Promise<T>;
   /** Live events from `since`, resuming after drops. Returns a stop function. */
@@ -72,6 +90,11 @@ export interface Transport {
   quit(code?: number): Promise<void>;
   /** Opens an http or https address in the system browser. */
   openExternal(url: string): Promise<void>;
+  openViewer(token: number, url: string, bounds: ViewerBounds): Promise<void>;
+  closeViewer(token: number): Promise<void>;
+  positionViewer(token: number, bounds: ViewerBounds, visible: boolean): Promise<void>;
+  navigateViewer(token: number, action: ViewerAction): Promise<void>;
+  observeViewer(update: (update: ViewerUpdate) => void): Promise<() => void>;
   dataHome(): Promise<string>;
   importOpml(): Promise<boolean>;
   exportOpml(): Promise<void>;

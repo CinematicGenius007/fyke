@@ -96,13 +96,18 @@ export function CommandPalette() {
     else model.openResult(row.entry.id);
   }
 
+  function ask() {
+    const question = commands.state.query.trim();
+    commands.close();
+    model.ask(question);
+  }
+
   function onKey(event: KeyboardEvent) {
     if (event.key === "Escape") commands.close();
     else if (event.key === "ArrowDown") move(1);
     else if (event.key === "ArrowUp") move(-1);
     else if (event.key === "Enter" && !event.isComposing) run(commands.state.selection);
-    // Tab asks your feeds on the Mac; Ask is planned. Tab stays in the field meanwhile.
-    else if (event.key === "Tab") undefined;
+    else if (event.key === "Tab" && commands.state.query.trim() && !event.shiftKey && event.target === field) ask();
     else return;
     event.preventDefault();
     event.stopPropagation();
@@ -155,6 +160,16 @@ export function CommandPalette() {
             )}
           </For>
         </div>
+        <Show when={commands.state.query.trim()}>{(query) => (
+          <>
+            <Rule />
+            <button type="button" class="palette-ask" onClick={ask}>
+              <Icon name="sparkle" size={15} />
+              <span>Ask your feeds about “{query()}”</span>
+              <KeyHint text="Tab" />
+            </button>
+          </>
+        )}</Show>
       </div>
     </div>
   );

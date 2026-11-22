@@ -601,6 +601,10 @@ export function newRoutine(name: string, viewId: number | null): Routine {
   };
 }
 
+function readSchedule(schedule: Schedule): Schedule {
+  return { ...schedule, days: schedule.days?.map((day) => day === 0 ? 7 : day) };
+}
+
 export function routine(j: J): Routine | null {
   const id = j.get("id")?.int;
   if (id === undefined) return null;
@@ -609,7 +613,7 @@ export function routine(j: J): Routine | null {
     id,
     name: j.get("name")?.string ?? "Routine",
     viewId: j.get("viewId")?.int ?? null,
-    schedule: schedule && typeof schedule === "object" && "kind" in schedule ? (schedule as Schedule) : { kind: "manual" },
+    schedule: schedule && typeof schedule === "object" && "kind" in schedule ? readSchedule(schedule as Schedule) : { kind: "manual" },
     actions: (j.get("actions", "actionsJson")?.parsed?.array ?? []).map(routineAction).filter((a): a is RoutineAction => a !== null),
     enabled: j.get("enabled")?.bool ?? true,
     revision: j.get("revision")?.int ?? null,

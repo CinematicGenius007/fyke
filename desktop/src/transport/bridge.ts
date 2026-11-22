@@ -79,6 +79,11 @@ export function bridgeTransport(page: URL): Transport {
     ready: () => send({ op: "ready" }),
     quit: (code) => send({ op: "quit", code }),
     dataHome: () => send({ op: "data_home" }),
+    openViewer: async () => { throw new Error("Open the Windows or Linux app to read pages here."); },
+    closeViewer: async () => undefined,
+    positionViewer: async () => undefined,
+    navigateViewer: async () => undefined,
+    observeViewer: async () => () => undefined,
     importOpml: () => send({ op: "import_opml" }),
     async exportOpml() {
       const { opml } = await send<{ opml: string }>({ op: "call", method: "opml.export" });

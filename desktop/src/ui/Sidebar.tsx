@@ -1,12 +1,13 @@
 // The sidebar (gui/Sources/Reader/Sidebar.swift): places, views, the feed tree, then
 // Routines and the status line. Rows are 32 high; indent comes from SidebarIndent.
-import { createSignal, For, type JSX, Match, onMount, Show, Switch } from "solid-js";
+import { createEffect, createSignal, For, type JSX, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { SidebarIndent } from "../logic/SidebarIndent";
 import { app, type Place } from "../model/app";
 import { prefs } from "../model/prefs";
 import type { Feed, Folder, SavedView } from "../model/types";
 import { feedName } from "../model/types";
 import { Dates } from "./format";
+import { Activity, FeedHealth } from "./Activity";
 import { Count, Dot, Rule, SectionLabel, Spinner, SymbolButton } from "./kit/Controls";
 import { float, type MenuItem } from "./Float";
 import { Icon, type IconName } from "./kit/Icon";
@@ -238,10 +239,12 @@ export function viewMenu(view: SavedView): MenuItem[] {
   const model = app();
   return [
     { title: "Rename", run: () => model.set("renaming", { kind: "view", id: view.id }) },
+    { title: "Write a brief of this view", run: () => void model.runBrief(view.id) },
     { title: "Catch up", run: () => {
       model.go({ kind: "view", id: view.id });
       void model.startCatchUp();
     } },
+    { title: "Make a routine…", run: () => model.draftRoutine(view.id) },
     { title: "Mark all read", run: () => model.markAllRead({ view: view.id }) },
     "rule",
     { title: "Move up", run: () => model.moveView(view.id, -1) },
@@ -377,6 +380,16 @@ function FolderRow(props: { folder: Folder; depth: number }) {
 function FeedRow(props: { feed: Feed; depth: number }) {
   const model = app();
   const failing = () => model.isFailing(props.feed);
+  let anchor!: HTMLDivElement;
+  createEffect(on(() => model.state.healthFeed, (id) => {
+    if (id !== props.feed.id || !anchor) return;
+    float.custom(anchor, 380, () => {
+      onCleanup(() => {
+        if (model.state.healthFeed === props.feed.id) model.set("healthFeed", null);
+      });
+      return <FeedHealth feed={props.feed} />;
+    }, true);
+  }));
   return (
     <Show
       when={!isRenaming("feed", props.feed.id)}
@@ -386,6 +399,7 @@ function FeedRow(props: { feed: Feed; depth: number }) {
         </div>
       }
     >
+      <div class="feed-row-wrap" ref={anchor}>
       <SidebarRow
         drag={{ kind: "feed", id: props.feed.id }}
         title={feedName(props.feed)}
@@ -396,16 +410,20 @@ function FeedRow(props: { feed: Feed; depth: number }) {
         onMenu={(event) => float.menu(event, 204, feedMenu(props.feed))}
       >
         <Switch>
-          <Match when={failing()}>
-            <span class="row-warning" title={`${feedName(props.feed)} is not loading`}>
-              <Icon name="warning" size={13} />
-            </span>
-          </Match>
+          <Match when={failing()}><span class="row-warning" aria-hidden="true" /></Match>
           <Match when={props.feed.unread > 0}>
             <Count value={props.feed.unread} />
           </Match>
         </Switch>
       </SidebarRow>
+      <Show when={failing()}>
+        <div class="feed-health-trigger">
+          <SymbolButton icon="warning" size={20} iconSize={13} label={`${feedName(props.feed)} is not loading. Show why`}
+            selected={model.state.healthFeed === props.feed.id}
+            onClick={() => model.showFeedHealth(props.feed.id)} />
+        </div>
+      </Show>
+      </div>
     </Show>
   );
 }
@@ -413,12 +431,21 @@ function FeedRow(props: { feed: Feed; depth: number }) {
 /** The one line of background work. It opens Activity. */
 function StatusLine() {
   const model = app();
+  let anchor!: HTMLButtonElement;
+  createEffect(on(() => model.state.showingActivity, (showing) => {
+    if (showing) float.custom(anchor, 360, () => {
+      onCleanup(() => model.set("showingActivity", false));
+      return <Activity />;
+    });
+    else if (float.isAnchoredAt(anchor)) float.close();
+  }));
   return (
     <div class="status-line">
       <Rule class="status-rule" />
       <button
         type="button"
         class="sidebar-row status"
+        ref={anchor}
         classList={{ selected: model.state.showingActivity }}
         aria-label={`Activity: ${model.statusWords()}`}
         onClick={() => model.set("showingActivity", (v) => !v)}

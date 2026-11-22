@@ -9,6 +9,10 @@ pub mod paths;
 pub mod rpc;
 pub mod socket;
 pub mod testmode;
+#[cfg(any(windows, target_os = "linux"))]
+mod web;
+#[cfg(any(windows, target_os = "linux", test))]
+mod web_guard;
 
 use rpc::{Client, RpcError};
 use serde_json::Value;
@@ -105,7 +109,10 @@ pub fn run() {
     let program = paths::daemon_binary(|name| std::env::var(name).ok(), &exe);
     let state = App { client: Arc::new(Client::new(home, program)), events: Mutex::new(None) };
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(any(windows, target_os = "linux"))]
+    let builder = builder.manage(web::Viewer::default());
+    builder
         // A second launch brings the running app forward instead of opening another.
         .plugin(tauri_plugin_single_instance::init(|handle, _args, _cwd| {
             if let Some(window) = handle.get_webview_window("main") {
@@ -127,7 +134,15 @@ pub fn run() {
             quit,
             open_external,
             opml::import_opml,
-            opml::export_opml
+            opml::export_opml,
+            #[cfg(any(windows, target_os = "linux"))]
+            web::open_viewer,
+            #[cfg(any(windows, target_os = "linux"))]
+            web::close_viewer,
+            #[cfg(any(windows, target_os = "linux"))]
+            web::position_viewer,
+            #[cfg(any(windows, target_os = "linux"))]
+            web::navigate_viewer
         ])
         .run(tauri::generate_context!())
         .expect("the window could not open");

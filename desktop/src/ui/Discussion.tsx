@@ -138,7 +138,7 @@ export function Discussion(props: { id: number; address: string }) {
                       </button>
                       <Show when={!folded() && comment.blocks.length}>
                         <div class="blocks selectable">
-                          <Blocks blocks={comment.blocks} context={{ open: (address) => model.openLink(address) }} />
+                          <Blocks blocks={comment.blocks} context={{ open: (address, event) => model.openLink(address, event.ctrlKey || event.metaKey) }} />
                         </div>
                       </Show>
                     </div>

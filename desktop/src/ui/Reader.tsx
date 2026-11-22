@@ -49,7 +49,7 @@ function Column(props: { article: Article }) {
         </div>
       </Show>
       <div class="blocks selectable">
-        <Blocks blocks={props.article.blocks} context={{ open: (url) => model.openLink(url) }} />
+        <Blocks blocks={props.article.blocks} context={{ open: (url, event) => model.openLink(url, event.ctrlKey || event.metaKey) }} />
       </div>
       <Show when={isSafeLink(entry().discussion_url) && entry().discussion_url} keyed>
         {(address) => <Discussion id={entry().id} address={address} />}

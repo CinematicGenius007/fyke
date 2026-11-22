@@ -44,10 +44,10 @@ export const float = {
     setSide(null);
     setItem({ id: next++, x: box.left, y: box.bottom, above: box.top, width, items, anchor });
   },
-  custom(anchor: HTMLElement, width: number, content: () => JSX.Element) {
+  custom(anchor: HTMLElement, width: number, content: () => JSX.Element, beside = false) {
     const box = anchor.getBoundingClientRect();
     setSide(null);
-    setItem({ id: next++, x: box.left, y: box.bottom, above: box.top, width, content, anchor });
+    setItem({ id: next++, x: beside ? box.right + 8 : box.left, y: beside ? box.top - 8 : box.bottom, above: box.top, width, content, anchor });
   },
   /** A submenu beside the row that opens it. */
   side(row: HTMLElement, width: number, items: MenuItem[]) {
@@ -77,7 +77,9 @@ function Placed(props: { panel: Panel }) {
     const x = Math.min(Math.max(8, props.panel.x), Math.max(8, window.innerWidth - width - 8));
     box.style.transform = `translate(${x}px, ${y}px)`;
     box.style.visibility = "visible";
-    box.querySelector<HTMLElement>("[role=menuitem]")?.focus({ preventScroll: true });
+    if (!box.contains(document.activeElement)) {
+      box.querySelector<HTMLElement>("button:not([disabled]), input:not([disabled])")?.focus({ preventScroll: true });
+    }
   });
   const rows = () => props.panel.items?.filter((i) => i !== "rule").length ?? 0;
   return (
