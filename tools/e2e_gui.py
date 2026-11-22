@@ -445,14 +445,14 @@ def empty_view_snapshot():
         call("views.remove", {"id": view, "detach": True})
 
 
-def theme_snapshot(theme):
-    """All, in one of the built-in themes that are neither light nor dark."""
-    name = f"all-{theme}"
+def theme_snapshot(theme, screen="all"):
+    """All or a feed, in one of the built-in themes that are neither light nor dark."""
+    name = f"{screen}-{theme}"
     target = snapshots / f"{name}.png"
     target.unlink(missing_ok=True)
     entries = call("entries.list", {"limit": 500})["items"]
     call("entries.mark_many", {"ids": [entry["id"] for entry in entries], "read": False})
-    launch(dict(FYKE_SCREEN="all", FYKE_SNAPSHOT=str(target), FYKE_SNAPSHOT_DELAY="2"), "-theme", theme, "-followSystem", "NO")
+    launch(dict(FYKE_SCREEN=screen, FYKE_SNAPSHOT=str(target), FYKE_SNAPSHOT_DELAY="2"), "-theme", theme, "-followSystem", "NO")
     if not target.exists() or target.stat().st_size < 10000:
         fail(f"snapshot {name}", "no picture")
     ok(f"snapshot {name} in {snapshots.relative_to(root)}")
@@ -515,7 +515,8 @@ check("shot:first-run", tags=["first-run", "snapshots"])(lambda: own_home_snapsh
 check("shot:unavailable", tags=["unavailable", "snapshots"])(lambda: own_home_snapshot("unavailable", silent_service))
 check("shot:config-mistake", tags=["config-mistake", "snapshots"])(lambda: own_home_snapshot("config-mistake", config_mistake))
 for theme in ["newsprint", "terminal"]:
-    check(f"shot:all-{theme}", tags=[f"all-{theme}", "themes", "snapshots"])(lambda theme=theme: theme_snapshot(theme))
+    for screen in ["all", "feed"]:
+        check(f"shot:{screen}-{theme}", tags=[f"{screen}-{theme}", "themes", "snapshots"])(lambda theme=theme, screen=screen: theme_snapshot(theme, screen))
 
 
 def select(names):

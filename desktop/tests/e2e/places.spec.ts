@@ -70,6 +70,14 @@ for (const theme of ["newsprint", "terminal"] as const) {
     await expect(page.locator(".article-title")).toHaveText("Needle one");
     await app.snapshot(`all-${theme}`);
   });
+
+  test(`shot:feed-${theme}`, async ({ app, daemon }, info) => {
+    test.skip(info.project.name !== "webkit", "pictures compare against the Mac in WebKit");
+    await afterRoutineSave(daemon);
+    const page = await app.open({ FYKE_SCREEN: "feed" }, theme);
+    await expect(page.locator(".article-title")).toBeVisible();
+    await app.snapshot(`feed-${theme}`);
+  });
 }
 
 test("Starred lists only starred articles, and says so when there are none", async ({ app, daemon }) => {

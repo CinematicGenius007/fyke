@@ -125,3 +125,13 @@ for (const theme of ["light", "dark"] as const) {
     });
   }
 }
+
+// The Mac's `font-weight` check draws Reading in light with these weights saved.
+test("shot:settings-reading-weights", async ({ app, daemon }, info) => {
+  test.skip(info.project.name !== "webkit", "pictures compare against the Mac in WebKit");
+  await daemon.call("config.set", { ui: { weights: { reading: -1, title: 1, ui: 0, code: 0 } } });
+  const page = await app.open({ FYKE_SCREEN: "settings", FYKE_TAB: "Reading" }, "light");
+  await expect(page.getByRole("region", { name: "Settings" })).toBeVisible();
+  await app.snapshot("settings-reading-weights");
+  expect((await daemon.call<{ ui: { weights?: unknown } }>("config.get")).ui.weights).toEqual({ reading: -1, title: 1, ui: 0, code: 0 });
+});
