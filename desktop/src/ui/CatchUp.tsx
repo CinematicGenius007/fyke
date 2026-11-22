@@ -2,7 +2,7 @@ import { Match, onMount, Show, Switch } from "solid-js";
 import type { CatchUpModel } from "../model/catchUp";
 import { entryDate, preview, type EntrySummary } from "../model/types";
 import { Dates } from "./format";
-import { Action, KeyHint, Spinner } from "./kit/Controls";
+import { Action, InlineLabel, KeyHint, Spinner } from "./kit/Controls";
 import { Icon, type IconName } from "./kit/Icon";
 
 export function CatchUp(props: { session: CatchUpModel; close: () => void }) {
@@ -24,10 +24,10 @@ export function CatchUp(props: { session: CatchUpModel; close: () => void }) {
         <Switch>
           <Match when={session.problem()}>{(problem) => (
             <div class="inline-empty" role="status">
-              <div class="inline-label">Could not load</div>
+              <InlineLabel tone="failed">Could not load</InlineLabel>
               <h2 class="inline-title">{session.loaded() && session.length() ? "Catch up was interrupted" : "Catch up could not start"}</h2>
-              <p class="inline-detail">{problem()}</p>
-              <Action kind="primary" compact onClick={props.close}>Close</Action>
+              <p class="inline-detail">{problem()}{session.loaded() && session.length() ? "" : " Nothing was marked."}</p>
+              <div class="inline-actions"><Action kind="primary" onClick={props.close}>Close</Action></div>
             </div>
           )}</Match>
           <Match when={!session.loaded()}>
@@ -45,13 +45,15 @@ export function CatchUp(props: { session: CatchUpModel; close: () => void }) {
           )}</Match>
           <Match when={session.loaded()}>
             <div class="inline-empty" role="status">
-              <div class="inline-label">{session.title}</div>
+              <InlineLabel>{session.title}</InlineLabel>
               <h2 class="inline-title">{session.length() ? "You’re caught up" : "Nothing unread here"}</h2>
               <p class="inline-detail">{session.length() ? summary() + ". Articles saved for Later wait in their feeds." : `Every article in ${session.title} is read.`}</p>
-              <Action kind="primary" compact onClick={props.close}>Done</Action>
-              <Show when={session.index()}>
-                <Action kind="quiet" compact disabled={session.busy()} onClick={() => void session.undo()}>Undo last</Action>
-              </Show>
+              <div class="inline-actions">
+                <Action kind="primary" onClick={props.close}>Done</Action>
+                <Show when={session.index()}>
+                  <Action kind="quiet" disabled={session.busy()} onClick={() => void session.undo()}>Undo last</Action>
+                </Show>
+              </div>
             </div>
           </Match>
         </Switch>

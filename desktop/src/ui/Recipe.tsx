@@ -6,7 +6,7 @@ import { type Artifact, jobIsActive, type Recipe as RecipeRecord } from "../mode
 import { RPCFailure } from "../transport";
 import { ArtifactColumn } from "./Artifact";
 import { Dates } from "./format";
-import { Action, Rule, Spinner } from "./kit/Controls";
+import { Action, InlineLabel, Rule, Spinner } from "./kit/Controls";
 import { Icon } from "./kit/Icon";
 
 const tabs = ["Edit", "Try it", "History"] as const;
@@ -206,17 +206,18 @@ function Trial(props: { recipe: RecipeRecord; text: string; brief?: Artifact }) 
       </div>
       <Show when={job() && jobIsActive(job()!)}>
         <div class="inline-empty" role="status">
-          <div class="inline-label">Trying the recipe</div>
+          <InlineLabel tone="working">Trying the recipe</InlineLabel>
           <h2 class="inline-title">Writing a trial brief</h2>
           <p class="inline-detail">Nothing is saved: the trial is not listed in Today, and the recipe keeps its text until you save it.</p>
-          <Action compact onClick={() => void model.cancelJob(id()!)}>Cancel</Action>
+          <Action kind="secondary" onClick={() => void model.cancelJob(id()!)}>Cancel</Action>
         </div>
       </Show>
       <Show when={problem()}>
         <div class="inline-empty" role="status">
-          <div class="inline-label">Trial failed</div>
+          <InlineLabel tone="failed">Trial failed</InlineLabel>
           <h2 class="inline-title">The trial did not finish</h2>
           <p class="inline-detail">{problem()} The recipe and your briefs are unchanged.</p>
+          <Action kind="primary" onClick={() => void tryRecipe()}>Try again</Action>
         </div>
       </Show>
       <Show when={result()} keyed>{(artifact) => (

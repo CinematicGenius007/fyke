@@ -58,4 +58,14 @@ for (const theme of ["light", "dark"] as const) {
     await expect(page.getByRole("heading", { name: "Needle one" })).toBeVisible();
     await app.snapshot(`catchup-${theme}`);
   });
+
+  test(`shot:catchup-done ${theme}`, async ({ app, daemon }, info) => {
+    test.skip(info.project.name !== "webkit", "pictures compare against the Mac in WebKit");
+    await afterRoutineSave(daemon);
+    const { items } = await daemon.call<{ items: { id: number }[] }>("entries.list", { limit: 500 });
+    await daemon.call("entries.mark_many", { ids: items.map((e) => e.id), read: true });
+    const page = await app.open({ FYKE_SCREEN: "catchup" }, theme);
+    await expect(page.locator(".inline-title")).toBeVisible();
+    await app.snapshot(`catchup-done-${theme}`);
+  });
 }

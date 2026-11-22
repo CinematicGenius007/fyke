@@ -8,7 +8,7 @@ import { app, words } from "../model/app";
 import { type Routine, type RoutineAction, routineActionKinds, type RoutineActionKind } from "../model/types";
 import { float, type MenuItem } from "./Float";
 import { Dates } from "./format";
-import { Action, Chip, Rule, SectionLabel, Spinner, SymbolButton } from "./kit/Controls";
+import { Action, InlineLabel, Chip, Rule, SectionLabel, Spinner, SymbolButton } from "./kit/Controls";
 import { Icon, type IconName } from "./kit/Icon";
 
 const titles: Record<RoutineActionKind, string> = {
@@ -78,7 +78,7 @@ export function RoutineReader() {
     <Show when={model.state.routineDraft} keyed fallback={
       <div class="reader-scroll scroll">
         <div class="brief-state inline-empty">
-          <div class="inline-label">Routines</div>
+          <InlineLabel>Routines</InlineLabel>
           <h2 class="inline-title">{model.library.state.views.length ? "No routine chosen" : "Routines start from a view"}</h2>
           <p class="inline-detail">{model.library.state.views.length ? "Pick one on the left, or make one from a view."
             : "Search for what you follow, keep it with Ctrl+S, and a routine can brief it every morning."}</p>

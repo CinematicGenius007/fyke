@@ -98,6 +98,15 @@ for (const theme of ["light", "dark"] as const) {
     await expect(page.locator(".search-count")).toHaveText("3 results");
     await app.snapshot(`search-${theme}`);
   });
+
+  test(`shot:search-none ${theme}`, async ({ app, daemon }, info) => {
+    test.skip(info.project.name !== "webkit", "pictures compare against the Mac in WebKit");
+    await reset(daemon);
+    await afterRoutineSave(daemon);
+    const page = await app.open({ FYKE_SCREEN: "search", FYKE_QUERY: "qqzzxx" }, theme);
+    await expect(page.locator(".search-none")).toBeVisible();
+    await app.snapshot(`search-none-${theme}`);
+  });
 }
 
 test("the shortcuts sheet lists both columns with Ctrl for Command", async ({ app }) => {

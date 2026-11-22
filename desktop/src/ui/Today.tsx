@@ -4,7 +4,7 @@ import { app, words } from "../model/app";
 import type { Artifact } from "../model/types";
 import { ArtifactColumn, MadeWith, writerName } from "./Artifact";
 import { Dates } from "./format";
-import { Action, Rule, SectionLabel, Spinner, SymbolButton } from "./kit/Controls";
+import { Action, InlineLabel, Rule, SectionLabel, Spinner, SymbolButton } from "./kit/Controls";
 import { Icon } from "./kit/Icon";
 import { ReaderPane } from "./Reader";
 import { Recipe } from "./Recipe";
@@ -88,12 +88,12 @@ export function TodayReader() {
                 detail="The background service running now does not write briefs. Your feeds and articles work as before." action="Restart the service" run={() => void model.restartService()} />
             </Match>
             <Match when={working()}>{(job) => (
-              <BriefState title={`Reading your articles with the ${model.library.state.recipes[0]?.name ?? "recipe"} recipe`} label="Writing your brief"
+              <BriefState title={`Reading your articles with the ${model.library.state.recipes[0]?.name ?? "recipe"} recipe`} label="Writing your brief" tone="working"
                 detail={`${writerName(job().writer)} is working. Nothing changes in your articles while it writes; keep reading.`}
                 action="Cancel" run={() => void model.cancelJob(job().id)} />
             )}</Match>
             <Match when={failed()}>{(job) => (
-              <BriefState title={`${writerName(job().writer)} could not write the brief`} label="Brief not written"
+              <BriefState title={`${writerName(job().writer)} could not write the brief`} label="Brief not written" tone="failed"
                 detail={`${job().error ?? "It stopped before it finished."} Nothing was lost: your articles and earlier briefs are as they were.`}
                 action="Try again" run={() => void model.runBrief()} />
             )}</Match>
@@ -104,7 +104,7 @@ export function TodayReader() {
             </Match>
             <Match when={detail.loading}><div class="reader-empty" role="status" aria-label="Loading brief"><Spinner size={16} /></div></Match>
             <Match when={detail()?.error}>{(error) => (
-              <BriefState title="This brief could not be opened" label="Today" detail={error()}
+              <BriefState title="This brief could not be opened" label="Today" tone="failed" detail={error()}
                 action="Read the articles instead" run={() => model.go({ kind: "all" })} />
             )}</Match>
             <Match when={detail()?.brief} keyed>{(brief) => (
@@ -126,11 +126,11 @@ export function TodayReader() {
   );
 }
 
-function BriefState(props: { title: string; label: string; detail: string; action: string; run: () => void }) {
+function BriefState(props: { title: string; label: string; tone?: "empty" | "working" | "failed"; detail: string; action: string; run: () => void }) {
   return (
     <div class="reader-scroll scroll">
       <div class="brief-state inline-empty">
-        <div class="inline-label">{props.label}</div>
+        <InlineLabel tone={props.tone}>{props.label}</InlineLabel>
         <h2 class="inline-title">{props.title}</h2>
         <p class="inline-detail">{props.detail}</p>
         <Action kind="primary" onClick={props.run}>{props.action}</Action>

@@ -373,7 +373,7 @@ def snapshot(name, extra):
         target = snapshots / f"{name}-{theme}.png"
         target.unlink(missing_ok=True)
         # The delay counts from the moment the app has loaded, so it covers animation only.
-        launch(dict(FYKE_QUERY="needle", FYKE_SNAPSHOT=str(target), FYKE_SNAPSHOT_DELAY="2", **extra), "-theme", theme, "-followSystem", "NO")
+        launch({"FYKE_QUERY": "needle", "FYKE_SNAPSHOT": str(target), "FYKE_SNAPSHOT_DELAY": "2", **extra}, "-theme", theme, "-followSystem", "NO")
         if not target.exists() or target.stat().st_size < 10000:
             fail(f"snapshot {name} {theme}", "no picture")
     ok(f"snapshot {name} in {snapshots.relative_to(root)}")
@@ -470,6 +470,22 @@ def unread_snapshot(name, screen):
 
 check("shot:feed", tags=["feed", "snapshots"])(lambda: unread_snapshot("feed", "feed"))
 check("shot:view-empty", tags=["view-empty", "snapshots"])(empty_view_snapshot)
+
+
+def caught_up_snapshot():
+    """S13: catch-up with nothing unread, finished before it starts."""
+    entries = call("entries.list", {"limit": 500})["items"]
+    ids = [entry["id"] for entry in entries]
+    call("entries.mark_many", {"ids": ids, "read": True})
+    try:
+        snapshot("catchup-done", {"FYKE_SCREEN": "catchup"})
+    finally:
+        call("entries.mark_many", {"ids": ids, "read": False})
+
+
+check("shot:catchup-done", tags=["catchup-done", "snapshots"])(caught_up_snapshot)
+check("shot:search-none", tags=["search-none", "snapshots"])(
+    lambda: snapshot("search-none", {"FYKE_SCREEN": "search", "FYKE_QUERY": "qqzzxx"}))
 def own_home_snapshot(name, prepare=lambda home: {}):
     """A picture with a data folder of its own, which `prepare` may change and whose
     daemon stops again after. With nothing prepared it is the first run: no feeds."""

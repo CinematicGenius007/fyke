@@ -4,7 +4,7 @@ import { Plural } from "../logic/Plural";
 import { app, words } from "../model/app";
 import { type Artifact, jobIsActive } from "../model/types";
 import { ArtifactColumn } from "./Artifact";
-import { Action, SymbolButton } from "./kit/Controls";
+import { Action, InlineLabel, SymbolButton } from "./kit/Controls";
 import { Icon } from "./kit/Icon";
 
 interface Turn {
@@ -119,14 +119,14 @@ export function Ask(props: { question: string; viewId: number | null }) {
                 {heading(turn())}
                 <Show when={turn().problem} fallback={
                   <div class="inline-empty" role="status">
-                    <div class="inline-label">Answering</div>
+                    <InlineLabel tone="working">Answering</InlineLabel>
                     <h2 class="inline-title">Reading your articles {scope()}</h2>
                     <p class="inline-detail">The writer answers only from your articles and cites each one it uses. Nothing is changed while it reads.</p>
-                    <Show when={job() && jobIsActive(job()!)}><Action kind="primary" onClick={() => void model.cancelJob(job()!.id)}>Cancel</Action></Show>
+                    <Show when={job() && jobIsActive(job()!)}><Action kind="secondary" onClick={() => void model.cancelJob(job()!.id)}>Cancel</Action></Show>
                   </div>
                 }>{(problem) => (
                   <div class="inline-empty" role="status">
-                    <div class="inline-label">No answer</div>
+                    <InlineLabel tone="failed">No answer</InlineLabel>
                     <h2 class="inline-title">This question was not answered</h2>
                     <p class="inline-detail">{problem()} Nothing changed in your feeds.</p>
                     <Action kind="primary" onClick={() => {

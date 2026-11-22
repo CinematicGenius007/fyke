@@ -5,7 +5,7 @@ import { app } from "../model/app";
 import type { EntrySummary } from "../model/types";
 import { entryDate, preview } from "../model/types";
 import { Dates } from "./format";
-import { Action, Rule, SymbolButton } from "./kit/Controls";
+import { Action, InlineLabel, Rule, SymbolButton } from "./kit/Controls";
 import { StarToggle } from "./StarToggle";
 import { ViewSentence } from "./ViewSentence";
 import { float } from "./Float";
@@ -44,11 +44,11 @@ export function EntryList() {
         <div class="list-rows">
           <Show when={model.state.entries.length === 0 && view() && model.state.hasLoaded}>
             <div class="inline-empty">
-              <div class="inline-label">View · {view()!.name}</div>
+              <InlineLabel>View · {view()!.name}</InlineLabel>
               <div class="inline-title">Nothing matches yet</div>
               <div class="inline-detail">No article fits this rule right now. New articles that fit appear here as they arrive; tap a word above to widen it.</div>
               <Show when={view()?.rule.state === "unread" && view()}>{(current) =>
-                <Action kind="primary" compact onClick={() => {
+                <Action kind="primary" onClick={() => {
                   const { id, revision, rule } = current();
                   void model.setViewRule(id, revision, SelectionRule.setState(rule, "any"));
                 }}>Include read articles</Action>

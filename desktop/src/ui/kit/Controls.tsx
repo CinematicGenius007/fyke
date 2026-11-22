@@ -35,6 +35,19 @@ export function Spinner(props: { size?: number }) {
   );
 }
 
+/** The small label over an inline state (the Mac's InlineState): a spinner while
+ * working, a dot when it failed, and the accent color for both. */
+export function InlineLabel(props: { tone?: "empty" | "working" | "failed"; children: JSX.Element }) {
+  const tone = () => props.tone ?? "empty";
+  return (
+    <div class="inline-label" classList={{ active: tone() !== "empty" }}>
+      <Show when={tone() === "working"}><Spinner size={12} /></Show>
+      <Show when={tone() === "failed"}><Dot color="var(--unread)" /></Show>
+      {props.children}
+    </div>
+  );
+}
+
 /** A square button holding one symbol, with hover, pressed and selected fills. */
 export function SymbolButton(props: { icon: IconName; label: string; size?: number; iconSize?: number; selected?: boolean; disabled?: boolean; type?: "submit" | "button"; onClick?: () => void; ref?: (el: HTMLButtonElement) => void }) {
   return (

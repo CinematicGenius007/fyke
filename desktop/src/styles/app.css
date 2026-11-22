@@ -567,6 +567,14 @@ svg.icon .dots circle {
   line-height: calc(var(--lh-ui, 1.21) * 11px);
   margin: 0 0 12px;
 }
+.inline-label:has(> svg, > .dot) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.inline-label.active {
+  color: var(--unread);
+}
 .inline-title {
   font-family: var(--font-title), serif;
   font-size: 26px;
@@ -1919,8 +1927,13 @@ svg.icon .dots circle {
 .rule-scope .rule-editor-actions {
   padding: 4px;
 }
-.inline-empty .action {
+.inline-empty > .action,
+.inline-actions {
   margin-top: 24px;
+}
+.inline-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .catchup {
@@ -1977,6 +1990,12 @@ svg.icon .dots circle {
   width: min(680px, calc(100% - 64px));
   margin: auto;
   padding: 24px 0;
+}
+/* As the Mac's InlineState there: 520 wide, centred, with no list padding. */
+.catchup-center > .inline-empty {
+  width: min(520px, 100%);
+  margin: 0 auto;
+  padding: 0;
 }
 .catchup-stack {
   position: relative;
