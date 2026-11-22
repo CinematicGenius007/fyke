@@ -36,12 +36,18 @@ jobs:
           tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
           echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
 
+      # The desktop app's installer and packages, built and tested by the checks above.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: desktop-*
+          path: desktop-packages
+
       - name: Build every target
-        run: python3 tools/release.py
+        run: python3 tools/release.py --desktop desktop-packages
 
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/*.zip dist/SHA256SUMS \
+          gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/*.zip dist/*.exe dist/*.deb dist/*.AppImage dist/SHA256SUMS \
             --title "Fyke ${GITHUB_REF_NAME#v}" --notes-file dist/NOTES.md --verify-tag

@@ -67,9 +67,12 @@
     "category": "News",
     "shortDescription": "A local RSS reader",
     "copyright": "",
+    "publisher": "Fyke",
+    "homepage": "https://github.com/CinematicGenius007/fyke",
     "windows": {
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "installerHooks": "windows/hooks.nsh"
       }
     },
     "linux": {

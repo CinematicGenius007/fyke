@@ -72,6 +72,39 @@ pub fn daemon_binary(env: impl Fn(&str) -> Option<String>, app: &Path) -> PathBu
     app.parent().map(|dir| dir.join(name)).unwrap_or_else(|| PathBuf::from(name))
 }
 
+/// Where an AppImage keeps the daemon it starts. An AppImage runs from a mount that goes
+/// away when the app quits, while the daemon, and the service `fyke service install`
+/// writes, outlive it; so they run a copy in the user's data directory instead. None
+/// outside an AppImage, or when `FYKE_BIN` names the daemon.
+pub fn appimage_daemon(env: impl Fn(&str) -> Option<String>) -> Option<PathBuf> {
+    let set = |name: &str| env(name).filter(|value| !value.is_empty());
+    if set("FYKE_BIN").is_some() || set("APPIMAGE").is_none() {
+        return None;
+    }
+    let data = set("XDG_DATA_HOME").map(PathBuf::from).or_else(|| set("HOME").map(|home| Path::new(&home).join(".local/share")))?;
+    Some(data.join("fyke").join("bin").join("fyke"))
+}
+
+/// Copies `from` to `to` unless `to` already holds the same bytes. The copy is written
+/// beside `to` and renamed over it, so a daemon running the old one keeps running.
+pub fn install_copy(from: &Path, to: &Path) -> std::io::Result<()> {
+    let bytes = std::fs::read(from)?;
+    if std::fs::read(to).is_ok_and(|old| old == bytes) {
+        return Ok(());
+    }
+    let dir = to.parent().ok_or_else(|| std::io::Error::other("no folder"))?;
+    std::fs::create_dir_all(dir)?;
+    let mut temp = tempfile::NamedTempFile::new_in(dir)?;
+    std::io::Write::write_all(&mut temp, &bytes)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        temp.as_file().set_permissions(std::fs::Permissions::from_mode(0o755))?;
+    }
+    temp.persist(to).map_err(|e| e.error)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,5 +164,40 @@ mod tests {
         let name = if cfg!(windows) { "fyke.exe" } else { "fyke" };
         assert_eq!(daemon_binary(env(&[]), app), PathBuf::from("/opt/fyke").join(name));
         assert_eq!(daemon_binary(env(&[("FYKE_BIN", "/x/fyke")]), app), PathBuf::from("/x/fyke"));
+    }
+
+    #[test]
+    fn an_appimage_runs_a_copy_of_the_daemon_that_outlives_it() {
+        assert_eq!(appimage_daemon(env(&[("HOME", "/home/a")])), None);
+        assert_eq!(
+            appimage_daemon(env(&[("HOME", "/home/a"), ("APPIMAGE", "/x/Fyke.AppImage")])),
+            Some(PathBuf::from("/home/a/.local/share/fyke/bin/fyke"))
+        );
+        assert_eq!(
+            appimage_daemon(env(&[("HOME", "/home/a"), ("XDG_DATA_HOME", "/d"), ("APPIMAGE", "/x")])),
+            Some(PathBuf::from("/d/fyke/bin/fyke"))
+        );
+        assert_eq!(appimage_daemon(env(&[("HOME", "/h"), ("APPIMAGE", "/x"), ("FYKE_BIN", "/b/fyke")])), None);
+    }
+
+    #[test]
+    fn the_copy_is_replaced_only_when_it_differs() {
+        let dir = tempfile::tempdir().unwrap();
+        let from = dir.path().join("fyke");
+        let to = dir.path().join("kept/bin/fyke");
+        std::fs::write(&from, b"one").unwrap();
+        install_copy(&from, &to).unwrap();
+        assert_eq!(std::fs::read(&to).unwrap(), b"one");
+        let before = std::fs::metadata(&to).unwrap().modified().unwrap();
+        install_copy(&from, &to).unwrap();
+        assert_eq!(std::fs::metadata(&to).unwrap().modified().unwrap(), before);
+        std::fs::write(&from, b"two").unwrap();
+        install_copy(&from, &to).unwrap();
+        assert_eq!(std::fs::read(&to).unwrap(), b"two");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(std::fs::metadata(&to).unwrap().permissions().mode() & 0o777, 0o755);
+        }
     }
 }

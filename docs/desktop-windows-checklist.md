@@ -92,6 +92,15 @@ On Linux (GNOME), repeat steps 1 to 4 with `fyke-app`. In step 2 the process als
 
 On Linux, with Orca (Super+Alt+S) on GNOME, repeat steps 1 to 3. Orca reads the same names.
 
-## Later phases
+## Installer
 
-Installer upgrades and uninstalls are planned. Their checks belong here when the corresponding features are available.
+CI installs, upgrades and uninstalls the installer silently (`tools/e2e_installer_windows.py`). These checks cover what a silent run cannot see. Download `Fyke-<version>-setup-x64.exe` from the `desktop-Windows` artifact of the latest `desktop-package` CI run on the pull request, or build it with `python tools/desktop_package.py`. Use a Windows account where Fyke is not installed, and keep a throwaway data folder: set `FYKE_HOME` for your user (System Properties > Environment Variables) and sign out and back in before you start.
+
+1. Run the installer. SmartScreen warns because the installer is not signed; choose More info, then Run anyway. Expected: no administrator prompt.
+2. Expected: the Welcome page shows two ticked boxes below its text, "Add the fyke command to PATH" and "Keep feeds up to date in the background, from sign-in". They are legible in light mode and in a contrast theme, and Tab reaches both.
+3. Expected: the folder page suggests `%LOCALAPPDATA%\Programs\Fyke`, not `%LOCALAPPDATA%\Fyke`. Finish with "Run Fyke" ticked. Expected: Fyke opens on your throwaway data. Start menu > Fyke opens the same window, not a second one.
+4. Open a new PowerShell window. Expected: `fyke status` answers, and `Get-ItemProperty HKCU:\Software\Microsoft\Windows\CurrentVersion\Run` shows `Fyke` running `fyke.exe daemon --supervise`.
+5. With Fyke open and an article selected, run the same installer again. Expected: it offers to reinstall, says Fyke is running and offers to close it, and after OK the install finishes. The two boxes are as you left them. Untick both and finish. Expected: a new PowerShell window no longer finds `fyke`, and the `Fyke` value is gone from the `Run` key.
+6. Run it once more and tick both boxes again. Then sign out and back in. Expected: `fyke status` answers before you open Fyke.
+7. Open Fyke, then uninstall it from Settings > Apps > Installed apps. Expected: Fyke closes, the Start menu entry goes, `%LOCALAPPDATA%\Programs\Fyke` is empty or gone, a new PowerShell window no longer finds `fyke`, and `FYKE_HOME` still holds `fyke.db` and your feeds.
+8. Reinstall it. Expected: Fyke opens with the same feeds and articles as before.

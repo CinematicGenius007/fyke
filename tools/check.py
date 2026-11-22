@@ -41,6 +41,9 @@ SUITES = {
     # The Rust side embeds the built UI, so the UI is built first.
     "desktop-rust": ["cd desktop && bun run build && cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test"],
     "desktop-e2e": ["cd desktop && bunx playwright test", "cd desktop && bun tools/parity.ts"],
+    # The packaging tools run on Windows and Linux CI only (desktop-package); here they
+    # are compiled, so a slip shows before CI.
+    "desktop-tools": ["python3 -m py_compile tools/desktop_package.py tools/desktop_budget.py tools/e2e_installer_windows.py tools/e2e_packages_linux.py tools/release.py"],
     "diagrams":    ["python3 tools/render_diagrams.py"],
     "site":        ["cd site && pnpm build"],
 }
@@ -70,6 +73,8 @@ RULES = [
     (["tools/gui_fixtures.py"], ["desktop-e2e"], ["snapshots", "keys", "themes", "discussion"]),
     # The desktop app. The Rust side has cargo tests; the UI has unit tests and Playwright.
     (["desktop/src-tauri/*"], ["desktop-rust"], []),
+    (["tools/desktop_package.py", "tools/desktop_budget.py", "tools/e2e_installer_windows.py", "tools/e2e_packages_linux.py",
+      "tools/release.py", "desktop/budgets.json"], ["desktop-tools"], []),
     (["desktop/src/*", "desktop/tests/*", "desktop/tools/*", "desktop/*.ts", "desktop/package.json", "desktop/bun.lock",
       "desktop/tsconfig.json", "desktop/index.html"], ["desktop-unit", "desktop-e2e"], []),
     # The app. Pure logic has unit tests; each view file names the screens it draws.

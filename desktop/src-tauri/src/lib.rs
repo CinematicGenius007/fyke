@@ -91,6 +91,17 @@ fn test_mode() -> BTreeMap<String, String> {
 /// run keeps it hidden.
 #[tauri::command]
 fn ready(handle: AppHandle) {
+    if let Some(stay) = testmode::measure() {
+        use std::io::Write;
+        let mut out = std::io::stdout();
+        let _ = writeln!(out, "ready");
+        let _ = out.flush();
+        std::thread::spawn(move || {
+            std::thread::sleep(stay);
+            handle.exit(0);
+        });
+        return;
+    }
     if testmode::headless() {
         return;
     }
@@ -125,7 +136,12 @@ pub fn run() {
         }
     };
     let exe = std::env::current_exe().unwrap_or_default();
-    let program = paths::daemon_binary(|name| std::env::var(name).ok(), &exe);
+    let mut program = paths::daemon_binary(|name| std::env::var(name).ok(), &exe);
+    if let Some(copy) = paths::appimage_daemon(|name| std::env::var(name).ok()) {
+        if paths::install_copy(&program, &copy).is_ok() {
+            program = copy;
+        }
+    }
     let state = App {
         client: Arc::new(Mutex::new(Arc::new(Client::new(home, program)))),
         events: Arc::new(Mutex::new(None)),
