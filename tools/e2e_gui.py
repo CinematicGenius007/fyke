@@ -186,8 +186,8 @@ def divider():
     def config():
         return json.loads(config_path.read_text()) if config_path.exists() else {}
 
-    before_width = config().get("ui", {}).get("list_width", 375)
-    launch({"FYKE_SCREEN": "feed", "FYKE_FEED": "0", "FYKE_KEYS": "wait drag:611,500,691,500 wait wait"}, timeout=60)
+    before_width = config().get("ui", {}).get("list_width", 368)
+    launch({"FYKE_SCREEN": "feed", "FYKE_FEED": "0", "FYKE_KEYS": "wait drag:604,500,684,500 wait wait"}, timeout=60)
     width = config().get("ui", {}).get("list_width")
     if width is None or abs(width - (before_width + 80)) > 2:
         fail("the divider drags", f"{before_width} to {width}")

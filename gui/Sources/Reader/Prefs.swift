@@ -76,7 +76,7 @@ struct UISettings: Codable, Equatable, Sendable {
     var lineSpacing = 1.6
     var columnWidth = 640.0
     /// Width of the article list beside the reader. The divider between them drags.
-    var listWidth = 375.0
+    var listWidth = 368.0
     var loadImages = false
     /// `app` or `browser`.
     var openLinks = "app"
