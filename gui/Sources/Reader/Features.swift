@@ -219,6 +219,8 @@ extension AppModel {
             ask.start(question: environment["FYKE_QUERY"] ?? "", view: place.viewId, model: self)
         case "activity":
             showingActivity = true
+        case "shortcuts":
+            showingShortcuts = true
         case "health":
             if let feed = failingFeeds.first ?? feeds.first { healthFeed = feed.id }
         case "toast":

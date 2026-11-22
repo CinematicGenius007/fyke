@@ -10,6 +10,8 @@ async function play(page: Page, keys: string) {
     if (word.startsWith("ctrl+")) await page.keyboard.press(`Control+${word.slice(5).toUpperCase()}`);
     else if (named[word]) await page.keyboard.press(named[word]);
     else if (word === "/") await page.keyboard.press("Slash");
+    else if (word === "?") await page.keyboard.type("?");
+    else if (word === "j") await page.keyboard.press("j");
     else {
       await page.keyboard.type(word);
       // The panel waits for a pause in typing; the Mac's player waits a beat as well.
@@ -30,6 +32,8 @@ const scenarios: [string, string, string[]][] = [
   ["selection stops at both ends", "ctrl+f needle up up down down down down return", ["Needle three"]],
   ["Esc closes without opening", "ctrl+f needle esc return", []],
   ["keys reach the list again after Esc", "ctrl+f needle esc down return", ["Needle one"]],
+  ["? shows shortcuts and swallows keys until closed", "? j return ? ctrl+f needle return", ["Needle one"]],
+  ["Esc closes shortcuts", "? esc ctrl+f needle return", ["Needle one"]],
   ["nothing found opens nothing", "ctrl+f qqzzxx return", []],
 ];
 
@@ -78,6 +82,8 @@ test("Ctrl+Z takes the new view back", async ({ app, daemon }) => {
   const page = await app.open();
   await play(page, "ctrl+f text ctrl+s");
   await expect.poll(() => viewNames(daemon)).toEqual(["Needle", "Text"]);
+  // The toast shows once the undo is kept.
+  await expect(page.locator(".toast")).toContainText("Saved “Text” as a view");
   await page.keyboard.press("Enter");
   await page.keyboard.press("Control+Z");
   await expect.poll(() => viewNames(daemon)).toEqual(["Needle"]);
@@ -94,5 +100,24 @@ for (const theme of ["light", "dark"] as const) {
     const page = await app.open({ FYKE_SCREEN: "search", FYKE_QUERY: "needle" }, theme);
     await expect(page.locator(".search-count")).toHaveText("3 results");
     await app.snapshot(`search-${theme}`);
+  });
+}
+
+test("the shortcuts sheet lists both columns with Ctrl for Command", async ({ app }) => {
+  const page = await app.open();
+  await page.keyboard.type("?");
+  const sheet = page.getByRole("dialog", { name: "Shortcuts" });
+  await expect(sheet.locator(".shortcuts-row")).toHaveCount(22);
+  await expect(sheet.locator(".shortcuts-row", { hasText: "Everything" }).locator("kbd")).toHaveText("Ctrl+K");
+  await page.mouse.click(10, 10);
+  await expect(sheet).toHaveCount(0);
+});
+
+for (const theme of ["light", "dark"] as const) {
+  test(`shot:shortcuts ${theme}`, async ({ app }, info) => {
+    test.skip(info.project.name !== "webkit", "pictures compare against the Mac in WebKit");
+    const page = await app.open({ FYKE_SCREEN: "shortcuts", FYKE_QUERY: "needle" }, theme);
+    await expect(page.getByRole("dialog", { name: "Shortcuts" })).toBeVisible();
+    await app.snapshot(`shortcuts-${theme}`);
   });
 }

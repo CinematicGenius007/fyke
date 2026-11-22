@@ -77,7 +77,7 @@ export function createCommands() {
 export type Commands = ReturnType<typeof createCommands>;
 
 /** Everything the palette can do, built from what exists now. The Mac's brief, catch-up,
- * ask, routine, folder, activity, shortcuts and add-feed commands join as those features
+ * ask, routine, folder, activity and add-feed commands join as those features
  * do (docs/desktop-parity.md). */
 export function allCommands(model: App): Command[] {
   const out: Command[] = [
@@ -108,6 +108,7 @@ export function allCommands(model: App): Command[] {
       shortcut: "U",
       run: () => model.toggleUnreadOnly(),
     },
+    { id: "do.shortcuts", group: "act", title: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => model.set("showingShortcuts", true) },
     { id: "do.settings", group: "act", title: "Settings", icon: "gearshape", shortcut: "Ctrl+,", run: () => model.openSettings() },
   );
   if (model.canMarkAllHere()) {

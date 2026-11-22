@@ -30,7 +30,7 @@ SETTINGS_TABS = ["General", "Reading", "Tokens", "Agents", "Data"]
 # Screens saved as pictures in both themes. `citation` is Today with source 1 pinned
 # open, as a click on its number leaves it. `view` and `all` have their first article
 # selected, which shows the list's top inset against the header.
-SCREENS = ["today", "view", "all", "recipe", "routines", "catchup", "palette", "ask", "activity", "health", "toast", "search"]
+SCREENS = ["today", "view", "all", "recipe", "routines", "catchup", "palette", "ask", "activity", "health", "toast", "search", "shortcuts"]
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument("--only", help="comma-separated names from --list; what they depend on runs first")

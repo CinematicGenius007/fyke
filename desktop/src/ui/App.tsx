@@ -11,6 +11,7 @@ import { Panes } from "./Panes";
 import { CommandPalette } from "./CommandPalette";
 import { ReaderPane } from "./Reader";
 import { SearchPanel } from "./SearchPanel";
+import { ShortcutsSheet } from "./ShortcutsSheet";
 import { Sidebar } from "./Sidebar";
 import { Timeline } from "./Timeline";
 
@@ -52,6 +53,9 @@ export function App() {
       </Show>
       <Show when={model.commands.state.isShowing}>
         <CommandPalette />
+      </Show>
+      <Show when={model.state.showingShortcuts}>
+        <ShortcutsSheet />
       </Show>
       <div class="bottom-layer" aria-live="polite">
         <Show when={problem()}>

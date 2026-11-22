@@ -91,7 +91,7 @@ export function Sidebar() {
 
       <div class="sidebar-scroll scroll">
         <div class="sidebar-stack">
-          <SectionHeader title="Views" help="Save a search as a view (Ctrl+F, then Ctrl+S)" onAdd={() => undefined} />
+          <SectionHeader title="Views" help="Save a search as a view (Ctrl+F, then Ctrl+S)" onAdd={() => model.search.show()} />
           <Show when={model.library.state.views.length === 0}>
             <div class="sidebar-note">{model.library.state.available ? "Search, then Ctrl+S to keep it here" : "Views need a newer Fyke service"}</div>
           </Show>

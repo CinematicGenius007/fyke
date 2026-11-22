@@ -243,11 +243,14 @@ svg.icon .dots circle {
 .sidebar-note {
   flex: none;
   height: 24px;
-  display: flex;
-  align-items: center;
+  line-height: 24px;
   padding-left: 32px;
   font-size: 12px;
   color: var(--muted);
+  /* One line in a 24 point frame: SwiftUI truncates the rest. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sidebar-scroll {
@@ -1319,4 +1322,82 @@ svg.icon .dots circle {
 .palette-article-meta {
   font-size: 12px;
   color: var(--muted);
+}
+
+/* The shortcuts sheet (Sidebar.swift ShortcutsPopup), centred below the title bar strip. */
+.scrim.centered {
+  justify-content: center;
+  padding-top: 28px;
+}
+.shortcuts {
+  width: 640px;
+  padding: 28px 32px 20px;
+  background: var(--ground);
+  border-radius: var(--radius-sheet);
+  /* A centred 1 point stroke, and SwiftUI's shadow radius of 25 as a CSS blur of 50.
+     The Mac's popup draws its y of 18 upward (the shadow sits in a background inside
+     a ZStack), so the shadow falls above the sheet here too (D23). 14 % in place of
+     15 % gives the Mac's measured depth at the edge, 20 levels. */
+  box-shadow:
+    0 0 0 0.5px var(--hairline),
+    inset 0 0 0 0.5px var(--hairline),
+    0 -18px 50px rgb(0 0 0 / 14%);
+}
+:root[data-dark="1"] .shortcuts {
+  box-shadow:
+    0 0 0 0.5px var(--hairline),
+    inset 0 0 0 0.5px var(--hairline),
+    0 -18px 50px rgb(0 0 0 / 50%);
+}
+.shortcuts-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 18px;
+}
+.shortcuts-title {
+  margin: 0;
+  font-family: var(--font-title), serif;
+  font-size: 26px;
+  font-weight: var(--title-600);
+  letter-spacing: -0.26px;
+  color: var(--ink);
+}
+.shortcuts-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.shortcuts-columns {
+  display: flex;
+  align-items: flex-start;
+  gap: 40px;
+}
+.shortcuts-column {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.shortcuts-label {
+  padding-bottom: 8px;
+}
+.shortcuts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 30px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.shortcuts-row kbd {
+  font-family: var(--font-code), monospace;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.shortcuts-rule {
+  margin-top: 8px;
+}
+.shortcuts-foot {
+  padding-top: 14px;
 }
