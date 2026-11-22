@@ -1,11 +1,12 @@
 import { createResource, createSignal, For, Show } from "solid-js";
 import { app } from "../../model/app";
-import { allThemes, customTheme, fontsOf, paletteOf, prefs, themeName, type FontTokens } from "../../model/prefs";
+import { allThemes, fontsOf, paletteOf, prefs, themeName, type FontTokens } from "../../model/prefs";
 import { css } from "../../theme/color";
 import { transport } from "../../transport";
 import { Action } from "../kit/Controls";
 import { Icon } from "../kit/Icon";
 import { PaneScroll, Row, Section, Select, Slider, Toggle } from "./Controls";
+import { FontChangeStrip } from "../FontChange";
 import { ThemeForm } from "./Tokens";
 
 export const fontRows = [
@@ -105,9 +106,7 @@ export function Reading() {
   const model = app();
   const settings = prefs();
   const { ui } = settings;
-  const [createTheme, setCreateTheme] = createSignal<"new" | "save-fonts" | null>(null);
-  const changedFonts = () => fontRows.filter(({ key }) => ui.fonts[key] != null);
-  const activeCustom = () => customTheme(ui, settings.active());
+  const [createTheme, setCreateTheme] = createSignal(false);
 
   function font(key: keyof FontTokens, family: string) {
     settings.update((draft) => {
@@ -122,12 +121,10 @@ export function Reading() {
         <ThemeGallery selected={settings.active()} onSelect={(id) => settings.update((draft) => {
           draft.theme = id;
           draft.follow_system = false;
-        })} onNew={() => setCreateTheme("new")} />
+        })} onNew={() => setCreateTheme(true)} />
         <Show when={createTheme()}>
-          <ThemeForm source={settings.active()} copyFonts={createTheme() === "save-fonts"} close={() => setCreateTheme(null)} done={(id) => {
-            const editTokens = createTheme() === "new";
-            setCreateTheme(null);
-            if (!editTokens) return;
+          <ThemeForm source={settings.active()} close={() => setCreateTheme(false)} done={(id) => {
+            setCreateTheme(false);
             model.set("editingTheme", id);
             model.openSettings("Tokens");
           }} />
@@ -153,20 +150,7 @@ export function Reading() {
         <Row title="Colors, fonts and corners" detail="Every token of every theme" last>
           <Action onClick={() => model.openSettings("Tokens")}>Edit Tokens…</Action>
         </Row>
-        <Show when={changedFonts().length > 0}>
-          <div class="font-change">
-            <p>{changedFonts().map(({ label }) => label).join(", ")} changed for {themeName(ui, settings.active())}</p>
-            <Action kind="quiet" onClick={() => settings.update((draft) => { draft.fonts = {}; })}>Back to {themeName(ui, settings.active())}</Action>
-            <Show when={activeCustom()} fallback={<Action onClick={() => setCreateTheme("save-fonts")}>Save as new theme…</Action>}>
-              <Action onClick={() => settings.update((draft) => {
-                const theme = customTheme(draft, settings.active());
-                if (!theme) return;
-                for (const { key } of changedFonts()) theme.fonts[key] = draft.fonts[key];
-                draft.fonts = {};
-              })}>Save to {themeName(ui, settings.active())}</Action>
-            </Show>
-          </div>
-        </Show>
+        <FontChangeStrip short={false} />
       </Section>
       <Section title="Text">
         <Slider label="Size" value={ui.text_size} min={14} max={28} step={1} change={(value) => settings.update((draft) => { draft.text_size = value; })} />

@@ -1,7 +1,7 @@
 // Phase 4, managing feeds: renaming in place, folders, moving and removing. The Mac's
 // RenameField, newFolder and the sidebar menus (gui/Sources/Reader/Sidebar.swift).
 import type { Page } from "@playwright/test";
-import { afterRoutineSave, type Daemon, expect, reset, test, viewNames } from "./fixtures";
+import { afterRoutineSave, type Daemon, expect, readTitles, reset, test, viewNames } from "./fixtures";
 
 test.describe.configure({ mode: "serial" });
 
@@ -113,14 +113,16 @@ test("a second new folder takes the next free name, and a taken name is refused 
   expect(await folderNames(daemon)).toEqual(["New folder", "New folder 2", "Reading"]);
 });
 
-test("a folder's menu renames it in place", async ({ app, daemon }) => {
+// The Mac's `rename` scenario: the name takes every key, reader shortcuts included.
+test("a folder's menu renames it in place, with shortcut letters in the name", async ({ app, daemon }) => {
   await daemon.call("folders.add", { name: "Reading" });
   const page = await app.open();
   await menu(page, "Reading, folder", "Rename");
   await expect(page.getByRole("textbox", { name: "Rename Reading" })).toBeFocused();
-  await page.keyboard.type("Later");
+  await page.keyboard.type("jumpsnorth");
   await page.keyboard.press("Enter");
-  await expect.poll(() => folderNames(daemon)).toEqual(["Later"]);
+  await expect.poll(() => folderNames(daemon)).toEqual(["jumpsnorth"]);
+  expect(await readTitles(daemon)).toEqual([]);
 });
 
 test("a feed's menu renames it, and an empty name gives back its own title", async ({ app, daemon }) => {

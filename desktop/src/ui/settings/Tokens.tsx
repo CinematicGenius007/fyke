@@ -1,14 +1,23 @@
 import { createSignal, For, Show } from "solid-js";
 import { app } from "../../model/app";
-import { allThemes, customTheme, fontsOf, paletteOf, prefs, radiiOf, themeName, type CustomTheme, type RadiusTokens } from "../../model/prefs";
+import { allThemes, customTheme, fontsOf, paletteOf, prefs, radiiOf, themeName, type CustomTheme, type RadiusTokens, type UISettings } from "../../model/prefs";
 import { contrast, css, parseHex, toHex } from "../../theme/color";
 import { tokenLabels, tokenNames, tokens, wireName, type TokenName } from "../../theme/palette";
 import { Action, SymbolButton } from "../kit/Controls";
 import { Icon } from "../kit/Icon";
 import { PaneScroll, Row, Select, Slider } from "./Controls";
-import { activateTheme, fontRows, FontPicker, themeOptions } from "./Reading";
+import { fontRows, FontPicker, themeOptions } from "./Reading";
 
-export function ThemeForm(props: { source: string; close: () => void; done: (id: string) => void; copyFonts?: boolean }) {
+/** A free id for a theme named `title`. */
+export function newThemeId(ui: UISettings, title: string): string {
+  const slug = title.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "-") || "theme";
+  const existing = new Set(allThemes(ui));
+  let id = slug;
+  for (let suffix = 2; existing.has(id); suffix++) id = `${slug}-${suffix}`;
+  return id;
+}
+
+export function ThemeForm(props: { source: string; close: () => void; done: (id: string) => void }) {
   const settings = prefs();
   const [name, setName] = createSignal("");
   const [source, setSource] = createSignal(props.source);
@@ -16,23 +25,15 @@ export function ThemeForm(props: { source: string; close: () => void; done: (id:
   function create() {
     const title = name().trim();
     if (!title) return;
-    const slug = title.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "-") || "theme";
-    const existing = new Set(allThemes(settings.ui));
-    let id = slug;
-    for (let suffix = 2; existing.has(id); suffix++) id = `${slug}-${suffix}`;
+    const id = newThemeId(settings.ui, title);
     settings.update((draft) => {
       const original = customTheme(draft, source());
       const theme: CustomTheme = {
         id, name: title, base: original?.base ?? source(),
         tokens: { ...original?.tokens }, fonts: { ...original?.fonts }, radii: { ...original?.radii },
       };
-      if (props.copyFonts) {
-        for (const { key } of fontRows) if (draft.fonts[key] != null) theme.fonts[key] = draft.fonts[key];
-        draft.fonts = {};
-      }
       draft.themes.push(theme);
     });
-    if (props.copyFonts) activateTheme(id);
     props.done(id);
   }
 

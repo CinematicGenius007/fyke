@@ -373,3 +373,29 @@
   font-size: 16px;
 }
 .type-themes button[aria-pressed="true"] { outline: 2px solid var(--unread); outline-offset: -2px; }
+/* FontChangeStrip.swift: 10/8 padding on the surface, 13 px soft text, 13 px medium links 14 apart. */
+.font-strip {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--surface);
+  border-radius: var(--radius-control);
+  font-size: 13px;
+}
+.font-strip p { margin: 0; color: var(--ink-soft); }
+.font-strip div { display: flex; gap: 14px; }
+.font-strip button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+/* NamePanel: 252 wide inside 14 px padding, a 14 px semibold title, rows 10 apart. */
+.name-panel { display: grid; gap: 10px; padding: 14px; font-size: 14px; }
+.name-panel h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.name-panel label { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.name-panel label span { color: var(--muted); }
+.name-panel .settings-actions { display: flex; justify-content: end; gap: 8px; padding-top: 4px; }

@@ -25,11 +25,11 @@ There are no releases yet. Everything below is built from source and is unreleas
 
 - **Desktop subscriptions.** Preview feeds before subscribing, choose or create a folder, drag feeds and folders in the sidebar, and import or export subscriptions with OPML.
 
-- **Desktop reading.** Edit saved views from their sentence and undo rule changes. Use Ctrl+J to catch up on unread articles and press C from a Hacker News story to expand its discussion. Empty places, such as a view with nothing matching or an empty Starred, say so in the same type and spacing as on the Mac.
+- **Desktop reading.** Edit saved views from their sentence and undo rule changes. Use Ctrl+J to catch up on unread articles and press C from a Hacker News story to expand its discussion. Empty places, such as a view with nothing matching or an empty Starred, say so in the same type and spacing as on the Mac. A closed folder stays closed the next time the app opens.
 
-- **Desktop briefs and questions.** Write a brief in Today, open its cited articles, edit and try recipes, ask follow-up questions, and schedule a routine from a saved view. Activity shows running jobs and feeds that need attention. Open public pages in the app on Windows and Linux.
+- **Desktop briefs and questions.** Write a brief in Today, open its cited articles, edit and try recipes, ask follow-up questions, and schedule a routine from a saved view. Activity shows running jobs and feeds that need attention. Open public pages in the app on Windows and Linux; the web bar names your default browser, as in "Open in Firefox".
 
-- **Desktop Settings.** Use General for fetching and opening links, Reading and Tokens for appearance, Agents for writer and MCP settings, and Data for storage and the data folder.
+- **Desktop Settings.** Use General for fetching and opening links, Reading and Tokens for appearance (a font changed from the text menu or Reading can be saved to its theme, dropped, or saved as a new theme), Agents for writer and MCP settings, and Data for storage and the data folder.
 
 ### Changed
 

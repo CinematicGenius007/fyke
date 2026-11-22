@@ -10,9 +10,9 @@ import { test as base, expect, type Locator, type Page } from "@playwright/test"
 const desktop = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const repo = resolve(desktop, "..");
 export const snapshots = join(repo, "zig-out/desktop-snapshots");
-const fyke = process.env.FYKE_BIN || join(repo, "zig-out/bin/fyke");
+export const fyke = process.env.FYKE_BIN || join(repo, "zig-out/bin/fyke");
 
-function firstLine(child: ChildProcess, what: string): Promise<string> {
+export function firstLine(child: ChildProcess, what: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const lines = createInterface({ input: child.stdout! });
     let errors = "";

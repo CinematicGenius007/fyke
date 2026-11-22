@@ -92,3 +92,23 @@ test("feed content is text, never markup", async ({ app }) => {
   expect(await page.locator(".blocks script, .blocks iframe, .blocks object, .blocks [onerror]").count()).toBe(0);
   expect(await page.evaluate(() => document.querySelectorAll("[style*='url(']").length)).toBe(0);
 });
+
+// The Mac's `divider` scenario: where the divider is left is saved, and the next launch
+// opens there. Test mode's theme saves nothing, so this opens without one.
+test("the divider's width is saved and kept on the next launch", async ({ app, daemon }) => {
+  try {
+    const page = await app.open({ FYKE_SCREEN: "feed" }, null);
+    const list = page.locator(".pane-list");
+    const divider = page.getByRole("separator", { name: "Resize the article list" });
+    const box = (await divider.boundingBox())!;
+    await page.mouse.move(box.x + 4, box.y + 300);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 84, box.y + 300, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(async () => (await daemon.call<{ ui: { list_width?: number } | null }>("config.get")).ui?.list_width).toBe(448);
+    await app.open({ FYKE_SCREEN: "feed" }, null);
+    await expect.poll(async () => (await list.boundingBox())!.width).toBe(448);
+  } finally {
+    await daemon.call("config.set", { ui: {} });
+  }
+});

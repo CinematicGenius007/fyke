@@ -1,8 +1,9 @@
-import { For, Show } from "solid-js";
+import { For } from "solid-js";
 import { app } from "../model/app";
 import { allThemes, fontsOf, paletteOf, prefs, themeName } from "../model/prefs";
 import { css } from "../theme/color";
 import { float } from "./Float";
+import { FontChangeStrip } from "./FontChange";
 import { Action, Rule } from "./kit/Controls";
 import { FontPicker } from "./settings/Reading";
 
@@ -23,9 +24,7 @@ export function TypeMenu() {
       <div><span>Font</span><FontPicker label="Reading" value={settings.fonts().reading!} change={(family) => settings.update((draft) => {
         draft.fonts.reading = family === reading() ? null : family;
       })} /></div>
-      <Show when={ui.fonts.reading}>
-        <Action kind="quiet" onClick={() => settings.update((draft) => { draft.fonts.reading = null; })}>Back to {themeName(ui, settings.active())}</Action>
-      </Show>
+      <FontChangeStrip short />
       <Rule />
       <div>
         <span>Size</span>
