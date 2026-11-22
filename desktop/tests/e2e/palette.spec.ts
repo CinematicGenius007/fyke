@@ -2,7 +2,7 @@
 // articles, and the commands it runs. The scenarios are the Mac's (tools/e2e_gui.py
 // `palette-keys`, `mark-all` and `settings-route`), with Ctrl for Command.
 import type { Page } from "@playwright/test";
-import { type Entry, expect, readTitles, reset, test } from "./fixtures";
+import { afterRoutineSave, expect, readTitles, reset, test } from "./fixtures";
 
 test.describe.configure({ mode: "serial" });
 
@@ -100,10 +100,8 @@ test("the sidebar's Search row opens the palette, and Esc closes it", async ({ a
 for (const theme of ["light", "dark"] as const) {
   test(`shot:palette ${theme}`, async ({ app, daemon }, info) => {
     test.skip(info.project.name !== "webkit", "pictures compare against the Mac in WebKit");
-    // As for search: the Mac takes this picture after `view-save`.
-    await daemon.call("views.put", { name: "Needle", rule: { words: "needle" } });
-    const entries = await daemon.call<{ items: Entry[] }>("entries.list", { limit: 100 });
-    await daemon.call("entries.mark_many", { ids: entries.items.filter((e) => e.title === "Needle one").map((e) => e.id), read: true });
+    await reset(daemon);
+    await afterRoutineSave(daemon);
     const page = await app.open({ FYKE_SCREEN: "palette", FYKE_QUERY: "needle" }, theme);
     await expect(page.getByRole("group", { name: /articles/i })).toBeVisible();
     await app.snapshot(`palette-${theme}`);

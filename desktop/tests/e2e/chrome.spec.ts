@@ -2,7 +2,7 @@
 // tab the buttons record what they asked the window to do, so these check the requests;
 // the Windows checklist covers what the system then does with them.
 import type { Page } from "@playwright/test";
-import { expect, reset, test } from "./fixtures";
+import { afterRoutineSave, expect, reset, test } from "./fixtures";
 
 test.beforeEach(async ({ daemon }) => reset(daemon));
 
@@ -62,8 +62,9 @@ test("a press in the strip while a menu is open only closes the menu", async ({ 
 
 for (const kind of ["windows", "linux"] as const) {
   for (const theme of ["light", "dark"] as const) {
-    test(`shot:chrome-${kind} ${theme}`, async ({ app }, info) => {
+    test(`shot:chrome-${kind} ${theme}`, async ({ app, daemon }, info) => {
       test.skip(info.project.name !== "webkit", "pictures in WebKit");
+      await afterRoutineSave(daemon);
       const page = await app.open({ FYKE_SCREEN: "all", FYKE_CHROME: kind }, theme);
       await page.getByRole("button", { name: "Close" }).hover();
       await app.snapshot(`chrome-${kind}-${theme}`);

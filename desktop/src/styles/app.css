@@ -543,11 +543,20 @@ svg.icon .dots circle {
   bottom: 6px;
 }
 
+/* The Mac's InlineState (Kit.swift): a label, a title in the title face and the
+   detail in the reading face, at most 520 wide. */
 .inline-empty {
   padding: 20px 12px 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  align-items: flex-start;
+  max-width: 520px;
+}
+.brief-state.inline-empty {
+  max-width: none;
+}
+.inline-empty > * {
+  max-width: 520px;
 }
 .inline-label {
   font-size: 11px;
@@ -555,14 +564,26 @@ svg.icon .dots circle {
   letter-spacing: 0.66px;
   color: var(--muted);
   text-transform: uppercase;
+  line-height: calc(var(--lh-ui, 1.21) * 11px);
+  margin: 0 0 12px;
 }
 .inline-title {
-  font-size: 15px;
-  font-weight: var(--ui-600);
+  font-family: var(--font-title), serif;
+  font-size: 26px;
+  font-weight: var(--title-600);
+  letter-spacing: -0.26px;
+  line-height: calc(var(--lh-title, 1.2) * 26px);
+  color: var(--ink);
+  margin: 0 0 12px;
 }
 .inline-detail {
-  font-size: 13px;
-  color: var(--muted);
+  font-family: var(--font-reading), serif;
+  font-size: 17px;
+  font-weight: var(--reading-400);
+  /* .line(26, size: 17): the font's own height plus 26 − 17 × 1.2 between lines. */
+  line-height: calc(var(--lh-reading, 1.2) * 17px + 5.6px);
+  color: var(--ink-soft);
+  margin: -2.8px 0;
 }
 
 /* MARK: Timeline */
@@ -1892,7 +1913,7 @@ svg.icon .dots circle {
   padding: 4px;
 }
 .inline-empty .action {
-  margin-top: 12px;
+  margin-top: 24px;
 }
 
 .catchup {

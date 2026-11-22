@@ -125,7 +125,7 @@ export function allCommands(model: App): Command[] {
   for (const routine of model.library.state.routines) {
     if (routine.id !== null && routine.viewId !== null) {
       const id = routine.id;
-      out.push({ id: `do.routine${id}`, group: "act", title: `Run ${routine.name} now`, icon: "clock.arrow.circlepath", run: () => void model.runRoutine(id) });
+      out.push({ id: `do.routine${id}`, group: "act", title: `Run ${routine.name} now`, detail: "Routine", icon: "play", run: () => void model.runRoutine(id) });
     }
   }
   if (model.canMarkAllHere()) {

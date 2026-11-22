@@ -1,6 +1,6 @@
 // Phase 3, reading: the places, the list, the reader and their keys, against the shared
 // fixtures (tools/gui_fixtures.py). Pictures use the Mac's names, for tools/parity.ts.
-import { expect, test } from "./fixtures";
+import { afterRoutineSave, expect, test } from "./fixtures";
 
 const themes = ["light", "dark"] as const;
 
@@ -13,8 +13,9 @@ test.beforeEach(async ({ daemon }) => {
 
 for (const screen of ["all", "view"] as const) {
   for (const theme of themes) {
-    test(`shot:${screen} ${theme}`, async ({ app }, info) => {
+    test(`shot:${screen} ${theme}`, async ({ app, daemon }, info) => {
       test.skip(info.project.name !== "webkit", "pictures compare against the Mac in WebKit");
+      await afterRoutineSave(daemon);
       const page = await app.open({ FYKE_SCREEN: screen, FYKE_QUERY: "needle" }, theme);
       await expect(page.locator(".article-title")).toHaveText("Needle one");
       await app.snapshot(`${screen}-${theme}`);

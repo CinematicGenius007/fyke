@@ -25,7 +25,7 @@ There are no releases yet. Everything below is built from source and is unreleas
 
 - **Desktop subscriptions.** Preview feeds before subscribing, choose or create a folder, drag feeds and folders in the sidebar, and import or export subscriptions with OPML.
 
-- **Desktop reading.** Edit saved views from their sentence and undo rule changes. Use Ctrl+J to catch up on unread articles and press C from a Hacker News story to expand its discussion.
+- **Desktop reading.** Edit saved views from their sentence and undo rule changes. Use Ctrl+J to catch up on unread articles and press C from a Hacker News story to expand its discussion. Empty places, such as a view with nothing matching or an empty Starred, say so in the same type and spacing as on the Mac.
 
 - **Desktop briefs and questions.** Write a brief in Today, open its cited articles, edit and try recipes, ask follow-up questions, and schedule a routine from a saved view. Activity shows running jobs and feeds that need attention. Open public pages in the app on Windows and Linux.
 

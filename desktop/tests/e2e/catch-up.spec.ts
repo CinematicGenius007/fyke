@@ -1,4 +1,4 @@
-import { expect, readTitles, reset, test } from "./fixtures";
+import { afterRoutineSave, expect, readTitles, reset, test } from "./fixtures";
 
 test.beforeEach(async ({ daemon }) => {
   await reset(daemon);
@@ -51,8 +51,9 @@ test("finishing catch-up shows the summary and can bring back the last card", as
 });
 
 for (const theme of ["light", "dark"] as const) {
-  test(`shot:catchup ${theme}`, async ({ app }, info) => {
+  test(`shot:catchup ${theme}`, async ({ app, daemon }, info) => {
     test.skip(info.project.name !== "webkit", "pictures compare against the Mac in WebKit");
+    await afterRoutineSave(daemon);
     const page = await app.open({ FYKE_SCREEN: "catchup" }, theme);
     await expect(page.getByRole("heading", { name: "Needle one" })).toBeVisible();
     await app.snapshot(`catchup-${theme}`);

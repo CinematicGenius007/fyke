@@ -1,4 +1,4 @@
-import { type Daemon, expect, reset, test } from "./fixtures";
+import { afterRoutineSave, type Daemon, expect, reset, test } from "./fixtures";
 
 async function published(daemon: Daemon) {
   return (await daemon.call<{ items: { id: number; title: string }[] }>("briefs.list")).items;
@@ -44,6 +44,7 @@ for (const theme of ["light", "dark"] as const) {
   for (const shot of ["today", "citation", "recipe"] as const) {
     test(`shot:${shot} ${theme}`, async ({ app, daemon }, info) => {
       test.skip(info.project.name !== "webkit", "pictures compare against the Mac in WebKit");
+      await afterRoutineSave(daemon);
       if (!(await published(daemon)).length) await publish(daemon);
       const page = await app.open({
         FYKE_SCREEN: shot === "recipe" ? "recipe" : "today",

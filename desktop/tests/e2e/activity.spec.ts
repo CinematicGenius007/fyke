@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, test } from "./fixtures";
+import { afterRoutineSave, expect, test } from "./fixtures";
 
 test("Ctrl+0 opens Activity and Esc closes it", async ({ app }) => {
   const page = await app.open();
@@ -40,8 +40,9 @@ test("Activity reveals a failing feed, its error, and the retry action", async (
 
 for (const theme of ["light", "dark"] as const) {
   for (const shot of ["activity", "health", "toast"] as const) {
-    test(`shot:${shot} ${theme}`, async ({ app }, info) => {
+    test(`shot:${shot} ${theme}`, async ({ app, daemon }, info) => {
       test.skip(info.project.name !== "webkit", "pictures compare against the Mac in WebKit");
+      await afterRoutineSave(daemon);
       const page = await app.open({ FYKE_SCREEN: shot }, theme);
       const title = shot === "activity" ? "Activity" : shot === "health" ? "Local" : "Marked 12 articles in Databases as read";
       await expect(page.getByText(title, { exact: true }).last()).toBeVisible();

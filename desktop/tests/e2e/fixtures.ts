@@ -37,7 +37,7 @@ export interface Screen {
 }
 
 export interface App {
-  open(screen?: Screen, theme?: "light" | "dark" | null): Promise<Page>;
+  open(screen?: Screen, theme?: "light" | "dark" | "newsprint" | "terminal" | null): Promise<Page>;
   /** Saves the window as `name`.png in zig-out/desktop-snapshots. */
   snapshot(name: string, locator?: Locator): Promise<string>;
 }
@@ -102,11 +102,25 @@ export interface Entry {
 
 /** As the Mac's checks do before each scenario: every article unread, no views. */
 export async function reset(daemon: Daemon) {
+  const routines = await daemon.call<{ items: { id: number }[] }>("routines.list");
+  for (const routine of routines.items) await daemon.call("routines.remove", { id: routine.id });
   const entries = await daemon.call<{ items: Entry[] }>("entries.list", { limit: 100 });
   const read = entries.items.filter((e) => e.read).map((e) => e.id);
   if (read.length) await daemon.call("entries.mark_many", { ids: read, read: false });
+  const starred = (await daemon.call<{ items: Entry[] }>("entries.list", { limit: 100, starred_only: true })).items.map((e) => e.id);
+  if (starred.length) await daemon.call("entries.mark_many", { ids: starred, starred: false });
   const views = await daemon.call<{ items: { id: number }[] }>("views.list");
   for (const view of views.items) await daemon.call("views.remove", { id: view.id, detach: true });
+}
+
+/** The Needle view and its routine, as the Mac's routine-save check leaves them for every
+ * picture after it (tools/e2e_gui.py `check`). Every picture starts from this. */
+export async function afterRoutineSave(daemon: Daemon) {
+  const views = (await daemon.call<{ items: { id: number; name: string }[] }>("views.list")).items;
+  const id = views.find((v) => v.name === "Needle")?.id ?? (await daemon.call<{ id: number }>("views.put", { name: "Needle", rule: { words: "needle" } })).id;
+  const routines = (await daemon.call<{ items: { name: string }[] }>("routines.list")).items;
+  if (routines.some((r) => r.name === "Morning needle")) return;
+  await daemon.call("routines.put", { name: "Morning needle", view_id: id, schedule: { kind: "weekdays", time: "07:30" }, actions: [{ kind: "brief", recipe_id: 1 }, { kind: "notify" }] });
 }
 
 /** The titles the daemon has as read, which is what opening an article leaves behind. */

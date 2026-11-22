@@ -1,7 +1,7 @@
 // Phase 4, managing feeds: renaming in place, folders, moving and removing. The Mac's
 // RenameField, newFolder and the sidebar menus (gui/Sources/Reader/Sidebar.swift).
 import type { Page } from "@playwright/test";
-import { type Daemon, expect, reset, test, viewNames } from "./fixtures";
+import { afterRoutineSave, type Daemon, expect, reset, test, viewNames } from "./fixtures";
 
 test.describe.configure({ mode: "serial" });
 
@@ -242,15 +242,17 @@ test("a view's menu moves it down and up", async ({ app, daemon }) => {
 });
 
 // The Mac takes these with a folder "Reading" holding Local (tools/e2e_gui.py `tree_snapshot`).
-for (const screen of ["rename-folder", "rename-feed", "delete-folder"] as const) {
+for (const screen of ["rename-folder", "rename-feed", "delete-folder", "folder"] as const) {
   for (const theme of ["light", "dark"] as const) {
     test(`shot:${screen} ${theme}`, async ({ app, daemon }, info) => {
       test.skip(info.project.name !== "webkit", "pictures compare against the Mac in WebKit");
+      await afterRoutineSave(daemon);
       const folder = await daemon.call<{ id: number }>("folders.add", { name: "Reading", parent_id: null });
       const local = (await feeds(daemon))[0];
       await daemon.call("feeds.update", { id: local.id, folder_id: folder.id, top_level: false });
       const page = await app.open({ FYKE_SCREEN: screen, FYKE_QUERY: "needle" }, theme);
       if (screen === "delete-folder") await expect(page.getByRole("alertdialog")).toBeVisible();
+      else if (screen === "folder") await expect(page.locator(".article-title")).toBeVisible();
       else await expect(page.locator(".rename-field")).toBeFocused();
       await app.snapshot(`${screen}-${theme}`);
     });

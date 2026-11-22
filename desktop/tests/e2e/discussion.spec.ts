@@ -1,5 +1,5 @@
 import { type Page } from "@playwright/test";
-import { discussionTest as test, expect, reset } from "./fixtures";
+import { afterRoutineSave, discussionTest as test, expect, reset } from "./fixtures";
 
 test.beforeEach(async ({ daemon }) => {
   await reset(daemon);
@@ -40,8 +40,9 @@ test("comments load on c, keep their replies, and can be collapsed", async ({ pa
 });
 
 for (const theme of ["light", "dark"] as const) {
-  test(`shot:comments ${theme}`, async ({ app }, info) => {
+  test(`shot:comments ${theme}`, async ({ app, daemon }, info) => {
     test.skip(info.project.name !== "webkit", "pictures compare against the Mac in WebKit");
+    await afterRoutineSave(daemon);
     const page = await app.open({}, theme);
     await openStory(page);
     await page.keyboard.press("c");

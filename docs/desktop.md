@@ -77,16 +77,16 @@ The AppImage runs from a mount that goes away when the app quits. The daemon out
 
 The app runs headless in test mode (`FYKE_MEASURE`), against the GUI checks' data in a scratch folder. Any figure over its budget in `desktop/budgets.json` fails CI. A change that needs more must raise the budget and say why in its pull request.
 
-The first measurement on CI, and the budgets set from it:
+The measurement on CI, and the budgets set from it:
 
 | Figure | Windows | Budget | Linux | Budget |
 |---|---:|---:|---:|---:|
-| Package | 4.8 MB setup | 6 | 10.7 MB `.deb`, 85.0 MB AppImage | 12, 95 |
-| Program files | 10.0 MB | 12 | 28.0 MB | 32 |
-| Cold start | 525 ms | 1000 | 408 ms | 1000 |
-| Idle memory | 144.7 MB | 175 | 133.3 MB | 160 |
+| Package | 4.8 MB setup | 6 | 6.2 MB `.deb`, 81.0 MB AppImage | 8, 90 |
+| Program files | 10.0 MB | 12 | 11.4 MB | 14 |
+| Cold start | 525–665 ms | 1000 | 408–429 ms | 1000 |
+| Idle memory | 144.7–145.8 MB | 175 | 133.1–133.3 MB | 160 |
 
-Shared CI runners vary from run to run, so cold start has the most room. The AppImage is larger than the `.deb` because it carries its own WebKitGTK. The Linux packages ship the daemon without its debug information (`strip --strip-debug`), which Zig otherwise keeps in a Linux release build; the Linux size figures above were measured before that and are set again from the next run.
+The ranges are two CI runs. Shared CI runners vary from run to run, so cold start has the most room. The AppImage is larger than the `.deb` because it carries its own WebKitGTK. The Linux packages ship the daemon without its debug information (`strip --strip-debug`), which Zig otherwise keeps in a Linux release build; that took the Linux program files from 28.0 MB to 11.4 MB.
 
 On Linux the checks run under `dbus-run-session`. Without a session bus, as under a bare `xvfb-run`, the web view waits out D-Bus's 25 second timeout before it draws. A desktop session always has a bus.
 

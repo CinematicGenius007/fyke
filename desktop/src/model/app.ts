@@ -1017,6 +1017,27 @@ function createApp() {
         if (state.entries[1]) await open(state.entries[1].id);
         break;
       }
+      case "starred":
+        go({ kind: "starred" });
+        await reloadEntries().catch(() => undefined);
+        await sleep(300);
+        if (state.entries[0]) await open(state.entries[0].id);
+        break;
+      case "folder": {
+        const folder = state.folders[0];
+        if (!folder) break;
+        go({ kind: "folder", id: folder.id });
+        await reloadEntries().catch(() => undefined);
+        await sleep(300);
+        if (state.entries[0]) await open(state.entries[0].id);
+        break;
+      }
+      case "view-empty": {
+        // The newest view, which the check makes to match nothing.
+        const view = library.state.views.at(-1);
+        if (view) go({ kind: "view", id: view.id });
+        break;
+      }
       case "today":
       case "briefing":
       case "recipe":

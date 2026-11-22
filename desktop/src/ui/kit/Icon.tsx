@@ -67,6 +67,7 @@ const shapes = {
   "rectangle.stack": () => <><rect x="2" y="5.6" width="12" height="8.6" rx="1.8" /><path d="M3.6 3.7H12.4M5.2 1.9H10.8" /></>,
   "line.3.horizontal.decrease": () => <path d="M2 4.2H14M4.4 8H11.6M6.6 11.8H9.4" />,
   "clock.arrow.circlepath": () => <path d="M2.6 8.4A5.6 5.6 0 1 0 4.3 4.3M1.4 6.9L2.6 8.6L4.2 7.1M8.2 5.2V8.4L10.4 9.8" />,
+  play: () => <path d="M5 3.4V12.6C5 13 5.4 13.2 5.7 13L12.6 8.4C12.9 8.2 12.9 7.8 12.6 7.6L5.7 3C5.4 2.8 5 3 5 3.4Z" />,
   gearshape: () => <><path d={gearOutline} /><circle cx="8" cy="8" r="2.2" /></>,
   "dot.radiowaves.up.forward": () => (
     <>

@@ -48,6 +48,11 @@ CHECKS = {}
 
 
 def check(name, needs=(), tags=()):
+    # Every picture has the Needle view and its routine in the sidebar, as a full run leaves
+    # them, so a picture looks the same however few checks run before it. The desktop's
+    # pictures start from the same (desktop/tests/e2e/fixtures.ts `afterRoutineSave`).
+    if name.startswith("shot:") and "routine-save" not in needs:
+        needs = [*needs, "routine-save"]
     def register(run):
         CHECKS[name] = {"run": run, "needs": list(needs), "tags": set(tags) | {name}}
         return run
@@ -398,6 +403,8 @@ def tree_snapshot(name):
     folder = call("folders.add", {"name": "Reading"})["id"]
     local = call("feeds.list")["items"][0]["id"]
     call("feeds.update", {"id": local, "folder_id": folder})
+    entries = call("entries.list", {"limit": 500})["items"]
+    call("entries.mark_many", {"ids": [entry["id"] for entry in entries], "read": False})
     try:
         snapshot(name, {"FYKE_SCREEN": name})
     finally:
@@ -414,6 +421,57 @@ for tab in SETTINGS_TABS:
     check(f"shot:{name}", tags=[name, "settings", "snapshots"])(
         # Settings is in the main window, beside the sidebar.
         lambda name=name, tab=tab: snapshot(name, {"FYKE_SCREEN": "settings", "FYKE_TAB": tab}))
+
+
+def starred_snapshot(name):
+    """Starred with the newest article starred, or with none."""
+    entries = call("entries.list", {"limit": 500})["items"]
+    ids = [entry["id"] for entry in entries]
+    call("entries.mark_many", {"ids": ids, "starred": False, "read": False})
+    if name == "starred":
+        call("entries.mark_many", {"ids": ids[:1], "starred": True})
+    try:
+        snapshot(name, {"FYKE_SCREEN": "starred"})
+    finally:
+        call("entries.mark_many", {"ids": ids, "starred": False})
+
+
+def empty_view_snapshot():
+    """A view that matches nothing, with its "Include read articles" way out."""
+    view = call("views.put", {"name": "Nothing yet", "rule": {"words": "zzqxv"}})["id"]
+    try:
+        unread_snapshot("view-empty", "view-empty")
+    finally:
+        call("views.remove", {"id": view, "detach": True})
+
+
+def theme_snapshot(theme):
+    """All, in one of the built-in themes that are neither light nor dark."""
+    name = f"all-{theme}"
+    target = snapshots / f"{name}.png"
+    target.unlink(missing_ok=True)
+    entries = call("entries.list", {"limit": 500})["items"]
+    call("entries.mark_many", {"ids": [entry["id"] for entry in entries], "read": False})
+    launch(dict(FYKE_SCREEN="all", FYKE_SNAPSHOT=str(target), FYKE_SNAPSHOT_DELAY="2"), "-theme", theme, "-followSystem", "NO")
+    if not target.exists() or target.stat().st_size < 10000:
+        fail(f"snapshot {name}", "no picture")
+    ok(f"snapshot {name} in {snapshots.relative_to(root)}")
+
+
+for name in ["starred", "starred-empty"]:
+    check(f"shot:{name}", tags=[name, "snapshots"])(lambda name=name: starred_snapshot(name))
+check("shot:folder", tags=["folder", "snapshots"])(lambda: tree_snapshot("folder"))
+def unread_snapshot(name, screen):
+    """A picture with every article unread, whatever earlier checks opened."""
+    entries = call("entries.list", {"limit": 500})["items"]
+    call("entries.mark_many", {"ids": [entry["id"] for entry in entries], "read": False})
+    snapshot(name, {"FYKE_SCREEN": screen})
+
+
+check("shot:feed", tags=["feed", "snapshots"])(lambda: unread_snapshot("feed", "feed"))
+check("shot:view-empty", tags=["view-empty", "snapshots"])(empty_view_snapshot)
+for theme in ["newsprint", "terminal"]:
+    check(f"shot:all-{theme}", tags=[f"all-{theme}", "themes", "snapshots"])(lambda theme=theme: theme_snapshot(theme))
 
 
 def select(names):

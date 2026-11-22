@@ -1,4 +1,4 @@
-import { expect, readTitles, reset, test } from "./fixtures";
+import { afterRoutineSave, expect, readTitles, reset, test } from "./fixtures";
 
 test.beforeEach(async ({ daemon }) => {
   await reset(daemon);
@@ -115,8 +115,9 @@ test("Data measures storage, saves retention and asks before trimming", async ({
 
 for (const theme of ["light", "dark"] as const) {
   for (const tab of ["General", "Reading", "Tokens", "Agents", "Data"]) {
-    test(`shot:settings-${tab.toLowerCase()} ${theme}`, async ({ app }, info) => {
+    test(`shot:settings-${tab.toLowerCase()} ${theme}`, async ({ app, daemon }, info) => {
       test.skip(info.project.name !== "webkit", "pictures compare against the Mac in WebKit");
+      await afterRoutineSave(daemon);
       const page = await app.open({ FYKE_SCREEN: "settings", FYKE_TAB: tab }, theme);
       if (tab === "Data") await expect(page.getByText("Used in all", { exact: true })).toBeVisible();
       if (tab === "Agents") await expect(page.getByRole("button", { name: "Copy MCP config" })).toBeVisible();

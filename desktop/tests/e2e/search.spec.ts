@@ -1,7 +1,7 @@
 // Phase 4, search: the panel, its keys and saving a search as a view. The scenarios are
 // the Mac's (tools/e2e_gui.py `keys` and `view-save`), with Ctrl for Command.
 import type { Page } from "@playwright/test";
-import { type Entry, expect, readTitles, reset, test, viewNames } from "./fixtures";
+import { afterRoutineSave, expect, readTitles, reset, test, viewNames } from "./fixtures";
 
 /** Plays the Mac's key words: `ctrl+f`, `esc`, `return`, `up`, `down`, or text to type. */
 async function play(page: Page, keys: string) {
@@ -92,11 +92,8 @@ test("Ctrl+Z takes the new view back", async ({ app, daemon }) => {
 for (const theme of ["light", "dark"] as const) {
   test(`shot:search ${theme}`, async ({ app, daemon }, info) => {
     test.skip(info.project.name !== "webkit", "pictures compare against the Mac in WebKit");
-    // The Mac takes this picture after `view-save`, which leaves the Needle view and
-    // Needle one read.
-    await daemon.call("views.put", { name: "Needle", rule: { words: "needle" } });
-    const entries = await daemon.call<{ items: Entry[] }>("entries.list", { limit: 100 });
-    await daemon.call("entries.mark_many", { ids: entries.items.filter((e) => e.title === "Needle one").map((e) => e.id), read: true });
+    await reset(daemon);
+    await afterRoutineSave(daemon);
     const page = await app.open({ FYKE_SCREEN: "search", FYKE_QUERY: "needle" }, theme);
     await expect(page.locator(".search-count")).toHaveText("3 results");
     await app.snapshot(`search-${theme}`);
@@ -114,8 +111,9 @@ test("the shortcuts sheet lists both columns with Ctrl for Command", async ({ ap
 });
 
 for (const theme of ["light", "dark"] as const) {
-  test(`shot:shortcuts ${theme}`, async ({ app }, info) => {
+  test(`shot:shortcuts ${theme}`, async ({ app, daemon }, info) => {
     test.skip(info.project.name !== "webkit", "pictures compare against the Mac in WebKit");
+    await afterRoutineSave(daemon);
     const page = await app.open({ FYKE_SCREEN: "shortcuts", FYKE_QUERY: "needle" }, theme);
     await expect(page.getByRole("dialog", { name: "Shortcuts" })).toBeVisible();
     await app.snapshot(`shortcuts-${theme}`);

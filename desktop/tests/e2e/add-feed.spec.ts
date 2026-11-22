@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { type Daemon, expect, test } from "./fixtures";
+import { afterRoutineSave, type Daemon, expect, test } from "./fixtures";
 
 const feeds = async (daemon: Daemon) =>
   (await daemon.call<{ items: { id: number; url: string; title: string; folder_id?: number }[] }>("feeds.list")).items;
@@ -112,6 +112,7 @@ for (const [screen, address, ready] of [
   for (const theme of ["light", "dark"] as const) {
     test(`shot:${screen} ${theme}`, async ({ app, daemon }, info) => {
       test.skip(info.project.name !== "webkit", "pictures compare against the Mac in WebKit");
+      await afterRoutineSave(daemon);
       const page = await app.open({ FYKE_SCREEN: "add", FYKE_ADDRESS: address.startsWith("/") ? daemon.base + address : address }, theme);
       const sheet = page.getByRole("dialog", { name: "Add a feed" });
       await expect(sheet.getByText(ready, { exact: true })).toBeVisible();

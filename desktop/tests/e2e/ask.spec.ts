@@ -1,4 +1,4 @@
-import { expect, reset, test } from "./fixtures";
+import { afterRoutineSave, expect, reset, test } from "./fixtures";
 
 test.beforeEach(async ({ daemon }) => {
   await reset(daemon);
@@ -31,7 +31,7 @@ test("the palette asks a question, shows citations, and turns the answer into a 
 for (const theme of ["light", "dark"] as const) {
   test(`shot:ask ${theme}`, async ({ app, daemon }, info) => {
     test.skip(info.project.name !== "webkit", "pictures compare against the Mac in WebKit");
-    await daemon.call("views.put", { name: "Needle", rule: { words: "needle" } });
+    await afterRoutineSave(daemon);
     const page = await app.open({ FYKE_SCREEN: "ask", FYKE_QUERY: "needle" }, theme);
     const ask = page.getByRole("region", { name: "Ask your feeds" });
     await expect(ask.getByRole("button", { name: "Source 1", exact: true }).first()).toBeVisible();
