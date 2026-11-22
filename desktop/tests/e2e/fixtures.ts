@@ -124,3 +124,18 @@ export async function viewNames(daemon: Daemon): Promise<string[]> {
 
 export { expect };
 
+
+/** A discussion story for one test. The worker's other suites still see only Local. */
+export const discussionTest = test.extend<{ threadFeed: number }>({
+  threadFeed: [
+    async ({ daemon }, use) => {
+      const { id } = await daemon.call<{ id: number }>("feeds.add", { url: daemon.base + "/thread.xml", allow_private_network: true });
+      try {
+        await use(id);
+      } finally {
+        await daemon.call("feeds.remove", { id });
+      }
+    },
+    { auto: true },
+  ],
+});

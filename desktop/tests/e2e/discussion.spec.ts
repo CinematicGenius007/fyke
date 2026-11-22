@@ -1,9 +1,8 @@
 import { type Page } from "@playwright/test";
-import { expect, reset, test } from "./fixtures";
+import { discussionTest as test, expect, reset } from "./fixtures";
 
 test.beforeEach(async ({ daemon }) => {
   await reset(daemon);
-  await daemon.call("feeds.add", { url: daemon.base + "/thread.xml", allow_private_network: true });
 });
 
 async function openStory(page: Page) {
