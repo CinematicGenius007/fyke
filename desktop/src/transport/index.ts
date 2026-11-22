@@ -85,6 +85,8 @@ export interface DesktopPaths {
   canMove: boolean;
 }
 
+export type WindowAction = "minimize" | "maximize" | "close" | "drag";
+
 export interface Transport {
   call<T = unknown>(method: string, params?: object, options?: CallOptions): Promise<T>;
   /** Live events from `since`, resuming after drops. Returns a stop function. */
@@ -98,6 +100,10 @@ export interface Transport {
   quit(code?: number): Promise<void>;
   /** Opens an http or https address in the system browser. */
   openExternal(url: string): Promise<void>;
+  /** The window's own buttons and title-bar drag, for the window chrome Fyke draws. */
+  windowAction(action: WindowAction): Promise<void>;
+  /** Calls `change` with whether the window is maximized now and whenever that changes. */
+  observeMaximized(change: (maximized: boolean) => void): Promise<() => void>;
   openViewer(token: number, url: string, bounds: ViewerBounds): Promise<void>;
   closeViewer(token: number): Promise<void>;
   positionViewer(token: number, bounds: ViewerBounds, visible: boolean): Promise<void>;

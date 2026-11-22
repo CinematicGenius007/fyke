@@ -47,6 +47,28 @@ Use a disposable Windows user account for the data move and sign-in tests, since
 4. Click Change again, pick an empty scratch directory with spaces in its name, and accept Move data. Confirm the progress dialog closes, the new path appears in Settings, and the feed and star survive both the move and a full relaunch. Open the data folder and the settings file with their respective Open buttons. Try a location you cannot write to and confirm Fyke reports the refusal and can still read the articles.
 5. In Settings · General, turn on Keep updating in the background. `& $env:FYKE_BIN service status` prints `installed`. Close Fyke and check the daemon still responds to `& $env:FYKE_BIN status`. Reopen Settings, turn the switch off, and confirm `service status` now prints `not installed`. When finished, close Fyke and run `& $env:FYKE_BIN daemon stop`.
 
+## Window chrome
+
+Run these on Windows 11 if you can, then repeat steps 1 to 3 on Windows 10.
+
+1. Start Fyke. The top right of the window shows minimize, maximize and close in the Windows style. Hover each: minimize and maximize get a faint grey, close turns red with a white cross. Click minimize, restore from the taskbar, click maximize: the glyph changes to restore and its tooltip reads Restore. Click it again to restore, then click close. The window closes and the daemon keeps running (`fyke status`).
+2. Drag the window by empty space at the top of the sidebar and of the article list. It moves. Double-click the same space: it maximizes; double-click again: it restores. Click the sidebar's rows, the search field and the reader's buttons in the top strip: each acts as usual and the window does not move.
+3. Drag the window to the left and right edges and to a corner: it snaps to half and quarter of the screen. Press Win+Left, Win+Right and Win+Up. On Windows 11, drag it to the top of the screen and drop it on a layout in the snap bar, and press Win+Z. Record whether the layout flyout appears when hovering maximize; it is expected not to (D3, planned).
+4. Resize the window from each of its four edges and corners. The cursor changes at each edge, and the layout follows without flicker.
+5. Set display scaling to 100 %, 150 % and 200 % (sign out if Windows asks). At each, check the buttons are sharp, the glyphs are centred, and the reader's actions stay to the left of the buttons.
+6. With two monitors at different scaling, drag the window from one to the other and maximize it on each. It fills the monitor it is on, and nothing is blurred after the move.
+7. Turn on a contrast theme. The three buttons and their glyphs stay visible, and hover shows the highlight colour.
+8. Press Ctrl+P, Ctrl+U, F5, F7, F12 and Ctrl+Shift+I, then hold Ctrl and turn the mouse wheel. Nothing happens: no print dialog, no source, no reload, no caret, no developer tools and no zoom. Ctrl+Q does nothing on Windows; Alt+F4 closes the window.
+
+## Linux desktop
+
+On a GNOME (Wayland) and a KDE Plasma machine, with the AppImage or `.deb` once they exist, or `bun run tauri dev` until then:
+
+1. The top right shows three round buttons, close last. Minimize, maximize and restore, and close work.
+2. Drag the window by the top strip and double-click it, as in step 2 above. On GNOME, drag it to the top and side edges and check it tiles.
+3. Resize from each edge and corner.
+4. Press Ctrl+Q. Fyke quits.
+
 ## Later phases
 
 Narrator, IME, multiple monitors, display scaling, notification activation, and installer upgrades and uninstalls are planned. Their checks belong here when the corresponding features are available.

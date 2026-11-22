@@ -1,6 +1,7 @@
 // The app's transport: Tauri commands in src-tauri/src/lib.rs.
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 import { type CallOptions, type DaemonEvent, RPCFailure, type Transport, type ViewerUpdate } from "./index";
 
@@ -51,5 +52,17 @@ export function tauriTransport(): Transport {
     importOpml: () => invoke("import_opml"),
     exportOpml: () => invoke("export_opml"),
     openExternal: (url) => invoke("open_external", { url }),
+    windowAction(action) {
+      const window = getCurrentWindow();
+      if (action === "minimize") return window.minimize();
+      if (action === "maximize") return window.toggleMaximize();
+      if (action === "close") return window.close();
+      return window.startDragging();
+    },
+    async observeMaximized(change) {
+      const window = getCurrentWindow();
+      change(await window.isMaximized());
+      return window.onResized(async () => change(await window.isMaximized()));
+    },
   };
 }

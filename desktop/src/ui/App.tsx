@@ -12,6 +12,7 @@ import { Icon } from "./kit/Icon";
 import { Rule } from "./kit/Controls";
 import { Panes } from "./Panes";
 import { CatchUp } from "./CatchUp";
+import { WindowButtons, titleBarPress } from "./Chrome";
 import { CommandPalette } from "./CommandPalette";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { RoutineList, RoutineReader } from "./Routines";
@@ -37,9 +38,17 @@ export function App(props: { localFeeds: boolean }) {
       if (!text) event.preventDefault();
     };
     window.addEventListener("contextmenu", menu);
+    // The window has no system frame, so its top strip moves it (src/ui/Chrome.tsx).
+    const press = (event: MouseEvent) => void titleBarPress(event);
+    window.addEventListener("mousedown", press);
+    // Ctrl with the wheel, and a pinch, would zoom the whole app (K23).
+    const zoom = (event: WheelEvent) => event.ctrlKey && event.preventDefault();
+    window.addEventListener("wheel", zoom, { passive: false });
     onCleanup(() => {
       window.removeEventListener("keydown", listener);
       window.removeEventListener("contextmenu", menu);
+      window.removeEventListener("mousedown", press);
+      window.removeEventListener("wheel", zoom);
     });
   });
 
@@ -73,6 +82,7 @@ export function App(props: { localFeeds: boolean }) {
             <ReaderDetails><ReaderPane /></ReaderDetails>
           </Match>
         </Switch>
+        <WindowButtons />
       </main>
       <Show when={model.catchUp()} keyed>{(session) => <CatchUp session={session} close={model.closeCatchUp} />}</Show>
       <Show when={model.search.state.isShowing}>

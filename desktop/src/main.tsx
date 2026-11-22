@@ -41,8 +41,19 @@ function followTheme() {
   });
 }
 
+/** The window chrome Fyke draws (src/ui/Chrome.tsx): the system's in the app, none in a
+ * browser, where the tab has its own. `FYKE_CHROME` picks one for the checks. */
+function chooseChrome(mode: Record<string, string>) {
+  const asked = mode.FYKE_CHROME;
+  const inApp = "__TAURI_INTERNALS__" in window;
+  const agent = navigator.userAgent;
+  const kind = asked ?? (!inApp || agent.includes("Macintosh") ? "none" : agent.includes("Windows") ? "windows" : "linux");
+  if (kind === "windows" || kind === "linux") document.documentElement.dataset.chrome = kind;
+}
+
 async function start() {
   const { mode, localFeeds } = await testMode();
+  chooseChrome(mode);
   if (mode.FYKE_THEME) prefs().force(mode.FYKE_THEME);
   followTheme();
   render(() => <App localFeeds={localFeeds} />, document.getElementById("root")!);

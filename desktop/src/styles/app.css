@@ -2829,3 +2829,81 @@ svg.icon .dots circle {
 .ask-follow-up {
   margin-top: 20px;
 }
+
+/* Window chrome (src/ui/Chrome.tsx, docs/desktop-parity.md D3, D4). The buttons sit at
+   the top right of the content, and what the Mac puts in that corner moves left of them. */
+:root[data-chrome="windows"] {
+  --chrome-width: 138px;
+}
+:root[data-chrome="linux"] {
+  --chrome-width: 104px;
+}
+:root[data-chrome] .reader-actions {
+  right: calc(16px + var(--chrome-width));
+}
+:root[data-chrome] .web-bar {
+  padding-right: calc(16px + var(--chrome-width));
+}
+.window-buttons {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+}
+.window-button {
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+/* Windows: 46 × 32 each, square, a tint on hover and red under Close. */
+.window-buttons.windows .window-button {
+  width: 46px;
+  height: 32px;
+}
+.window-buttons.windows .window-button:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.window-buttons.windows .window-button:active {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+.window-buttons.windows .window-button.close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+.window-buttons.windows .window-button.close:active {
+  background: #c83c31;
+  color: #fff;
+}
+/* Linux: Adwaita's round 24-pixel buttons, 8 apart, inset from the corner. */
+.window-buttons.linux {
+  top: 12px;
+  right: 12px;
+  gap: 8px;
+}
+.window-buttons.linux .window-button {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+.window-buttons.linux .window-button:hover {
+  background: color-mix(in srgb, var(--ink) 15%, transparent);
+}
+.window-buttons.linux .window-button:active {
+  background: color-mix(in srgb, var(--ink) 25%, transparent);
+}
+@media (forced-colors: active) {
+  .window-button {
+    color: ButtonText;
+    forced-color-adjust: none;
+  }
+  .window-button:hover,
+  .window-buttons.windows .window-button.close:hover {
+    background: Highlight;
+    color: HighlightText;
+  }
+}

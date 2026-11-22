@@ -110,5 +110,14 @@ export function bridgeTransport(page: URL): Transport {
     },
     // A page in a browser opens a tab; nothing here reaches the system.
     openExternal: async (url) => void window.open(url, "_blank", "noopener,noreferrer"),
+    // A browser tab has no window to move. The actions are kept for the checks to read.
+    windowAction: async (action) => {
+      const page = window as unknown as { fykeWindowActions?: string[] };
+      (page.fykeWindowActions ??= []).push(action);
+    },
+    observeMaximized: async (change) => {
+      change(false);
+      return () => undefined;
+    },
   };
 }

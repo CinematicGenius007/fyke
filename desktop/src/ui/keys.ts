@@ -1,6 +1,8 @@
 // The reader's keys, the same as the Mac's and the terminal app's where they have them
 // (gui/Sources/Reader/RootView.swift `handle`). Ctrl stands in for the Mac's Command.
 import { app } from "../model/app";
+import { transport } from "../transport";
+import { chromeKind } from "./Chrome";
 import { float } from "./Float";
 
 /** Typing into a field keeps its letters. */
@@ -53,8 +55,30 @@ function command(event: KeyboardEvent): boolean {
   return true;
 }
 
+/** What the webview would do on its own and an app must not (K14, K23): print, view
+ * source, reload, caret browsing and, in a release build, the developer tools. Ctrl+Q
+ * quits on Linux, as GNOME apps do; Windows quits with Alt+F4, which the system handles. */
+export function webviewKey(event: KeyboardEvent): boolean {
+  const key = event.key.toLowerCase();
+  const ctrl = event.ctrlKey || event.metaKey;
+  const devtools = key === "f12" || (ctrl && event.shiftKey && ["i", "j", "c"].includes(key));
+  const blocked =
+    (devtools && !import.meta.env.DEV) ||
+    ["f5", "f7"].includes(key) ||
+    (ctrl && !event.shiftKey && ["p", "u"].includes(key)) ||
+    (ctrl && event.shiftKey && ["r", "p"].includes(key));
+  if (ctrl && !event.shiftKey && key === "q" && chromeKind() === "linux") {
+    event.preventDefault();
+    void transport().quit();
+    return true;
+  }
+  if (blocked) event.preventDefault();
+  return blocked;
+}
+
 export function handleKey(event: KeyboardEvent): void {
   const model = app();
+  if (webviewKey(event)) return;
   if (event.defaultPrevented || event.isComposing || model.state.showingAddFeed || document.querySelector(".settings-move[open]")) return;
   const catchUp = model.catchUp();
   if (catchUp) {
