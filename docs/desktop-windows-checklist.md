@@ -69,6 +69,18 @@ On a GNOME (Wayland) and a KDE Plasma machine, with the AppImage or `.deb` once 
 3. Resize from each edge and corner.
 4. Press Ctrl+Q. Fyke quits.
 
+## Notifications and single instance
+
+Use the installed app once phase 8 has an installer, since the daemon only starts an app that sits beside it. Until then, set `FYKE_NOTIFIER` to the full path of `Fyke.App.exe` before starting the daemon.
+
+1. Start Fyke. Make a routine whose action is Notify, for a view that has unread articles, and click Run now. One notification appears, titled Fyke, reading "A routine has something for you". Click it: Fyke comes forward.
+2. Close Fyke, leaving the daemon running, and run the routine again with `& $env:FYKE_BIN` (or wait for its schedule). After about two seconds a notification appears and no Fyke window opens. Task Manager shows one `Fyke.App.exe` for at most a minute, then none.
+3. Repeat step 2 and click the notification within the minute. Fyke opens on its usual screen.
+4. With Fyke open, start it again from the Start menu or by running `Fyke.App.exe`. No second window opens, and the first comes forward, also when it was minimized.
+5. With Focus assist (Do not disturb) on, run the routine. Nothing interrupts, and the notification is in the notification centre afterwards.
+
+On Linux (GNOME), repeat steps 1 to 4 with `fyke-app`. In step 2 the process also ends when the notification is dismissed.
+
 ## Later phases
 
-Narrator, IME, multiple monitors, display scaling, notification activation, and installer upgrades and uninstalls are planned. Their checks belong here when the corresponding features are available.
+Narrator, IME and installer upgrades and uninstalls are planned. Their checks belong here when the corresponding features are available.

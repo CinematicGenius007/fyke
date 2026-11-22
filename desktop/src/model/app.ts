@@ -319,7 +319,7 @@ function createApp() {
         if (event.type === "artifact.new" && state.place.kind === "today" && state.selectedBrief === null) set("selectedBrief", library.state.briefs[0]?.id ?? null);
         break;
       case "routine.notify":
-        // Notifications reach the system in phase 7 (D15).
+        // The native side posts it as the event arrives (src-tauri/src/notify.rs, D15).
         break;
       default:
         scheduleReload();

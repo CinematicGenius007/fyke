@@ -4,6 +4,7 @@
 
 pub mod events;
 pub mod external;
+pub mod notify;
 mod opml;
 pub mod paths;
 pub mod rpc;
@@ -62,6 +63,10 @@ fn subscribe(handle: AppHandle, app: State<'_, App>, since: i64) {
     let client = app.client();
     std::thread::spawn(move || {
         events::run(client, stream, |event| {
+            // The daemon counts this app as having posted it (`notifies: true`).
+            if notify::wanted(&event) {
+                notify::post(&handle);
+            }
             let _ = handle.emit_to("main", EVENT, event);
         })
     });
@@ -107,6 +112,11 @@ fn quit(handle: AppHandle, code: Option<i32>) {
 }
 
 pub fn run() {
+    let args: Vec<String> = std::env::args().collect();
+    let notify_only = notify::requested(&args);
+    if notify_only && (testmode::headless() || !notify::hand_over(&args)) {
+        return;
+    }
     let home = match paths::current_data_home() {
         Ok(home) => home,
         Err(message) => {
@@ -126,18 +136,29 @@ pub fn run() {
     #[cfg(any(windows, target_os = "linux"))]
     let builder = builder.manage(web::Viewer::default());
     builder
-        // A second launch brings the running app forward instead of opening another.
-        .plugin(tauri_plugin_single_instance::init(|handle, _args, _cwd| {
-            if let Some(window) = handle.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
+        // A second launch brings the running app forward instead of opening another,
+        // and a `--notify` launch has the running app post instead.
+        .plugin(tauri_plugin_single_instance::init(|handle, args, _cwd| {
+            if notify::requested(&args) {
+                notify::post(handle);
+            } else {
+                notify::open(handle);
             }
         }))
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(state)
-        .setup(|app| {
+        .setup(move |app| {
+            notify::on_click(app.handle())?;
+            if notify_only {
+                // Post, open no window, and quit unless the notification is clicked.
+                if !notify::post(app.handle()) {
+                    app.handle().exit(0);
+                }
+                notify::quit_later(app.handle().clone());
+            } else {
+                notify::create_window(app)?;
+            }
             settings::watch_config(app.handle().clone(), app.state::<App>().inner().clone());
             Ok(())
         })
