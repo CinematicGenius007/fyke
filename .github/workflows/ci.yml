@@ -213,7 +213,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev patchelf libfuse2 xvfb dbus
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev patchelf libfuse2 xvfb dbus webkit2gtk-driver
 
       - name: Install
         working-directory: desktop
@@ -254,6 +254,34 @@ jobs:
       - name: Budgets (Linux)
         if: ${{ !cancelled() && runner.os == 'Linux' }}
         run: dbus-run-session -- xvfb-run -a python3 tools/desktop_budget.py --app desktop/src-tauri/target/release/fyke-app --fyke desktop/src-tauri/binaries/fyke-x86_64-unknown-linux-gnu --package dist/*.deb --package dist/*.AppImage --out budget-linux.json
+
+      # X12: the built app through tauri-driver, with a data folder of its own.
+      - name: tauri-driver
+        if: ${{ !cancelled() }}
+        run: cargo install tauri-driver --locked --version 2.1.0
+
+      - name: Smoke test (Windows)
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
+        shell: pwsh
+        run: |
+          # The Edge driver must match the WebView2 runtime the app runs on.
+          $key = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          $driver = Join-Path $env:EdgeWebDriver "msedgedriver.exe"
+          try {
+            $version = (Get-ItemProperty $key).pv
+            $zip = Join-Path $env:RUNNER_TEMP "edgedriver.zip"
+            Invoke-WebRequest "https://msedgedriver.microsoft.com/$version/edgedriver_win64.zip" -OutFile $zip
+            Expand-Archive $zip -DestinationPath (Join-Path $env:RUNNER_TEMP "edgedriver") -Force
+            $driver = Join-Path $env:RUNNER_TEMP "edgedriver\msedgedriver.exe"
+            Write-Host "Edge driver $version for WebView2 $version"
+          } catch {
+            Write-Host "Using the runner's Edge driver: $_"
+          }
+          python tools/desktop_smoke.py --app desktop/src-tauri/target/release/Fyke.App.exe --native-driver $driver --fyke desktop/src-tauri/binaries/fyke-x86_64-pc-windows-msvc.exe
+
+      - name: Smoke test (Linux)
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        run: dbus-run-session -- xvfb-run -a python3 tools/desktop_smoke.py --app desktop/src-tauri/target/release/fyke-app --native-driver "$(command -v WebKitWebDriver)" --fyke desktop/src-tauri/binaries/fyke-x86_64-unknown-linux-gnu
 
       - uses: actions/upload-artifact@v4
         with:
