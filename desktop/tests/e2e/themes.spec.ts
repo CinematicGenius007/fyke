@@ -1,7 +1,7 @@
 // The Mac's `themes` scenario (tools/e2e_gui.py): a font changed on top of a theme, from
 // the text menu (t), saved to that theme, dropped, cleared by another theme, or saved as
 // a new theme when the theme is built in.
-import { type Daemon, expect, reset, test } from "./fixtures";
+import { type App, type Daemon, expect, reset, test } from "./fixtures";
 
 test.describe.configure({ mode: "serial" });
 
@@ -16,7 +16,7 @@ const ui = async (daemon: Daemon) => (await daemon.call<{ ui: UI }>("config.get"
 test.beforeEach(async ({ daemon }) => reset(daemon));
 test.afterEach(async ({ daemon }) => daemon.call("config.set", { ui: {} }));
 
-async function menu(app: { open: (s: object, t: null) => Promise<import("@playwright/test").Page> }, daemon: Daemon, start: object) {
+async function menu(app: App, daemon: Daemon, start: object) {
   await daemon.call("config.set", { ui: start });
   const page = await app.open({ FYKE_SCREEN: "feed" }, null);
   await page.keyboard.press("t");
