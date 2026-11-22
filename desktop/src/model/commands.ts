@@ -77,7 +77,7 @@ export function createCommands() {
 export type Commands = ReturnType<typeof createCommands>;
 
 /** Everything the palette can do, built from what exists now. The Mac's brief, catch-up,
- * ask, routine, activity and add-feed commands join as those features
+ * ask, routine and activity commands join as those features
  * do (docs/desktop-parity.md). */
 export function allCommands(model: App): Command[] {
   const out: Command[] = [
@@ -100,6 +100,7 @@ export function allCommands(model: App): Command[] {
   out.push(
     { id: "do.search", group: "act", title: "Search articles", icon: "magnifyingglass", shortcut: "Ctrl+F", run: () => model.search.show() },
     { id: "do.refresh", group: "act", title: "Refresh feeds", icon: "arrow.clockwise", shortcut: "R", run: () => model.refresh() },
+    { id: "do.add", group: "act", title: "Add feed", icon: "plus", shortcut: "Ctrl+N", run: () => model.set("showingAddFeed", true) },
     { id: "do.folder", group: "act", title: "New folder", icon: "folder.badge.plus", run: () => void model.newFolder(null) },
     {
       id: "do.unread",

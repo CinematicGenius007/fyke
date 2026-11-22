@@ -3,6 +3,7 @@
 import { Match, onCleanup, onMount, Show, Switch } from "solid-js";
 import { app } from "../model/app";
 import { prefs } from "../model/prefs";
+import { AddFeed, FirstRun } from "./AddFeed";
 import { EntryList } from "./EntryList";
 import { FloatLayer } from "./Float";
 import { handleKey } from "./keys";
@@ -17,7 +18,7 @@ import { ShortcutsSheet } from "./ShortcutsSheet";
 import { Sidebar } from "./Sidebar";
 import { Timeline } from "./Timeline";
 
-export function App() {
+export function App(props: { localFeeds: boolean }) {
   const model = app();
   onMount(() => {
     const listener = (event: KeyboardEvent) => handleKey(event);
@@ -48,10 +49,17 @@ export function App() {
       <main class="content">
         <Switch fallback={<Timeline />}>
           <Match when={model.state.showingSettings}>
-            <div class="reader-empty">Settings</div>
+            <section class="subscription-settings">
+              <h2>Settings</h2>
+              <div class="subscription-row">
+                <div><strong>Your subscriptions</strong><p>Import or export as OPML</p></div>
+                <button type="button" class="outline-button" onClick={() => void model.importOpml()}>Import OPML</button>
+                <button type="button" class="outline-button" onClick={() => void model.exportOpml()}>Export</button>
+              </div>
+            </section>
           </Match>
           <Match when={model.isEmpty()}>
-            <div class="reader-empty">Add a feed to start reading</div>
+            <FirstRun />
           </Match>
           <Match when={model.usesPanes()}>
             <Panes list={<EntryList />} reader={<ReaderPane />} />
@@ -72,6 +80,9 @@ export function App() {
       </Show>
       <Show when={model.state.confirmation}>
         <ConfirmDialog />
+      </Show>
+      <Show when={model.state.showingAddFeed}>
+        <AddFeed localFeeds={props.localFeeds} />
       </Show>
       <FloatLayer />
       <div class="bottom-layer" aria-live="polite">

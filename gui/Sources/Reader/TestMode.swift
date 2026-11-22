@@ -6,6 +6,7 @@ import ObjectiveC
 //   FYKE_SCREEN    opens one screen at launch (AppModel.openRequestedScreen)
 //   FYKE_KEYS      plays key presses and clicks, then quits
 //   FYKE_SNAPSHOT  saves a picture of a window, then quits
+//   FYKE_SNAPSHOT_SHEET  takes the open sheet's window instead of the main one
 //   FYKE_HEADLESS  runs all of that without the person at this Mac noticing
 //
 // Headless is what lets the checks run while someone works. The app's activation policy
@@ -25,6 +26,9 @@ import ObjectiveC
     /// size, not the frame the window last had on this Mac.
     static let driven = environment["FYKE_KEYS"] != nil || environment["FYKE_SNAPSHOT"] != nil
     static let screen = environment["FYKE_SCREEN"]
+    /// The checks serve their feeds from this machine, which the daemon refuses unless
+    /// a request allows private addresses. Only the checks set this.
+    nonisolated static let localFeeds = environment["FYKE_HEADLESS"] == "1" && environment["FYKE_LOCAL_FEEDS"] == "1"
 
     /// Runs before any window exists, so that none is ever shown visibly.
     static func prepare() {
@@ -63,6 +67,12 @@ import ObjectiveC
     /// key window.
     static var target: NSWindow? { mainWindow }
 
+    /// A sheet's own window. Headless runs never attach sheets, so `FYKE_SNAPSHOT_SHEET`
+    /// takes a picture of the sheet alone, to compare with the same element elsewhere.
+    static var sheet: NSWindow? {
+        NSApp.windows.first { $0 !== mainWindow && $0.contentView != nil && (200..<960).contains($0.frame.width) && !($0 is NSPanel) }
+    }
+
     /// Saves the window after `FYKE_SNAPSHOT_DELAY` seconds, for screens that are still
     /// loading or animating once the app is ready. `FYKE_SNAPSHOT_CHROME` takes the frame
     /// around the content too, which holds the window buttons.
@@ -70,7 +80,8 @@ import ObjectiveC
         let delay = Double(environment["FYKE_SNAPSHOT_DELAY"] ?? "") ?? 1
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             let chrome = environment["FYKE_SNAPSHOT_CHROME"] != nil
-            guard let window = target,
+            let window = environment["FYKE_SNAPSHOT_SHEET"] != nil ? sheet : target
+            guard let window,
                 let view = chrome ? window.contentView?.superview : window.contentView,
                 let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)
             else { exit(1) }

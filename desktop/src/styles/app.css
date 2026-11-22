@@ -179,6 +179,11 @@ svg.icon .dots circle {
   background: var(--selected-strong);
 }
 
+.drag-target {
+  background: var(--selected);
+  border-radius: var(--radius-control);
+}
+
 .row-icon {
   flex: none;
   width: 14px;
@@ -1599,4 +1604,258 @@ svg.icon .dots circle {
   box-shadow:
     0 0 0 0.5px var(--unread),
     inset 0 0 0 0.5px var(--unread);
+}
+
+/* AddFeed.swift: the feed preview shares the subscription sheet with discovery. */
+.add-feed {
+  width: 560px;
+  max-height: calc(100% - 48px);
+  overflow: auto;
+  border: 0;
+  padding: 28px;
+  color: var(--ink);
+}
+.add-feed::backdrop {
+  background: var(--scrim);
+}
+.add-feed h2 {
+  margin: 0 0 16px;
+  font-family: var(--font-title), serif;
+  font-size: 26px;
+  font-weight: var(--title-600);
+  letter-spacing: -0.26px;
+}
+.feed-address,
+.add-feed-row input,
+.add-feed-row select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--ground);
+  color: var(--ink);
+  border: 1px solid var(--control);
+  border-radius: var(--radius-control);
+  font: inherit;
+}
+.feed-address {
+  height: 38px;
+  padding: 0 12px;
+  border: 2px solid var(--unread);
+  border-radius: 7px;
+  font-size: 15px;
+}
+.feed-address:focus {
+  outline: none;
+}
+.add-feed-hint {
+  padding: 8px 0 20px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.add-feed-error {
+  margin-top: 20px;
+}
+.add-feed-error strong,
+.add-feed-preview strong {
+  font-weight: var(--ui-600);
+}
+.add-feed-error p {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.add-feed-preview {
+  padding-top: 16px;
+}
+.add-feed-preview strong {
+  font-size: 16px;
+}
+.add-feed-url,
+.add-feed-latest {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.add-feed-url {
+  font-size: 13px;
+  color: var(--muted);
+}
+.add-feed-preview .add-feed-url {
+  margin-bottom: 12px;
+}
+.add-feed-latest {
+  padding: 2px 0;
+  color: var(--unread);
+  font-family: var(--font-reading), serif;
+  font-size: 17px;
+  font-weight: var(--reading-400);
+}
+.add-feed-choice {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  cursor: pointer;
+}
+.add-feed-choice input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  appearance: none;
+  cursor: inherit;
+}
+.add-feed-check {
+  display: grid;
+  place-items: center;
+}
+.add-feed-check > * {
+  grid-area: 1 / 1;
+}
+.add-feed-check svg {
+  pointer-events: none;
+}
+.add-feed-check input:focus-visible,
+.add-feed-row :is(input, select):focus-visible {
+  outline: 2px solid var(--unread);
+  outline-offset: 2px;
+}
+@media (forced-colors: active) {
+  .add-feed-check input {
+    appearance: auto;
+  }
+  .add-feed-check svg {
+    display: none;
+  }
+  .feed-address {
+    border-color: Highlight;
+  }
+}
+.add-feed-details {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+.add-feed-row {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  color: var(--muted);
+}
+.add-feed-select {
+  position: relative;
+}
+.add-feed-select select {
+  appearance: none;
+  padding-right: 32px;
+  cursor: pointer;
+}
+.add-feed-select svg {
+  position: absolute;
+  right: 10px;
+  top: 9px;
+  pointer-events: none;
+}
+.add-feed-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 24px;
+}
+.add-feed-actions button,
+.add-primary,
+.first-run button,
+.subscription-row button {
+  cursor: pointer;
+  transition: opacity 120ms ease-out;
+}
+.add-feed-actions button:disabled,
+.add-feed-select select:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+.add-feed-actions .import-opml {
+  margin-right: auto;
+  font-size: 13px;
+  color: var(--muted);
+}
+.add-primary {
+  height: 32px;
+  padding: 0 14px;
+  background: var(--unread);
+  color: var(--on-accent);
+  border-radius: var(--radius-control);
+  font-weight: var(--ui-500);
+}
+.add-primary:enabled:hover {
+  opacity: 0.9;
+}
+.add-primary:enabled:active {
+  opacity: 0.8;
+}
+.add-primary:focus-visible {
+  outline-color: var(--on-accent);
+}
+.first-run {
+  width: min(560px, calc(100% - 64px));
+  margin: auto 32px auto min(168px, max(32px, 100% - 592px));
+  padding-bottom: 80px;
+}
+.content:has(.first-run) {
+  display: flex;
+}
+.first-run h1 {
+  font-family: var(--font-title), serif;
+  font-size: 52px;
+  font-weight: var(--title-600);
+  letter-spacing: -1px;
+}
+.first-run p {
+  margin: 14px 0 32px;
+  font: var(--reading-400) 21px var(--font-reading), serif;
+  color: var(--ink-soft);
+}
+.first-run form,
+.first-run-import {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.first-run .feed-address,
+.first-run .add-primary {
+  height: 40px;
+}
+.first-run-import {
+  gap: 4px;
+  margin-top: 16px;
+  color: var(--muted);
+}
+.first-run-import button {
+  color: var(--unread);
+}
+.subscription-settings {
+  max-width: 640px;
+  margin: 72px auto;
+  padding: 0 24px;
+}
+.subscription-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 24px;
+}
+.subscription-row div {
+  flex: 1;
+}
+.subscription-row p {
+  margin-top: 4px;
+  color: var(--muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .add-feed-actions button, .add-primary, .first-run button, .subscription-row button {
+    transition: none;
+  }
 }

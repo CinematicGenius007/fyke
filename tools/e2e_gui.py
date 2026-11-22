@@ -33,6 +33,8 @@ SETTINGS_TABS = ["General", "Reading", "Tokens", "Agents", "Data"]
 SCREENS = ["today", "view", "all", "recipe", "routines", "catchup", "palette", "ask", "activity", "health", "toast", "search", "shortcuts"]
 # Pictures of the feed tree with a folder in it.
 TREE_SCREENS = ["rename-folder", "rename-feed", "delete-folder"]
+# Headless runs never attach a sheet, so these pictures hold the sheet alone.
+ADD_SCREENS = {"add": "news", "add-found": "/thread.xml", "add-none": "/missing", "add-multiple": "/feed-list"}
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument("--only", help="comma-separated names from --list; what they depend on runs first")
@@ -395,6 +397,9 @@ def tree_snapshot(name):
 
 for screen in TREE_SCREENS:
     check(f"shot:{screen}", tags=[screen, "snapshots"])(lambda screen=screen: tree_snapshot(screen))
+for name, address in ADD_SCREENS.items():
+    check(f"shot:{name}", tags=[name, "snapshots"])(lambda name=name, address=address: snapshot(
+        name, {"FYKE_SCREEN": "add", "FYKE_SNAPSHOT_SHEET": "1", "FYKE_ADDRESS": base + address if address.startswith("/") else address}))
 for tab in SETTINGS_TABS:
     name = f"settings-{tab.lower()}"
     check(f"shot:{name}", tags=[name, "settings", "snapshots"])(

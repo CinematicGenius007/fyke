@@ -55,6 +55,7 @@ interface State {
   updatedAt: Date | null;
   fullTextStatus: string | null;
   showingAddFeed: boolean;
+  addFeedAddress: string;
   /** The folder Add feed puts a new feed in, from a folder's menu. */
   addFeedFolder: number | null;
   showingType: boolean;
@@ -100,6 +101,7 @@ function createApp() {
     updatedAt: null,
     fullTextStatus: null,
     showingAddFeed: false,
+    addFeedAddress: "",
     addFeedFolder: null,
     showingType: false,
     showingShortcuts: false,
@@ -419,6 +421,22 @@ function createApp() {
     }
     await reload();
     if (refusal) set("problem", refusal);
+  }
+
+  async function importOpml() {
+    try {
+      if (await transport().importOpml()) await reload();
+    } catch (error) {
+      fail(error);
+    }
+  }
+
+  async function exportOpml() {
+    try {
+      await transport().exportOpml();
+    } catch (error) {
+      fail(error);
+    }
   }
 
   /** Makes a folder and starts renaming it, so that naming is one step. */
@@ -741,6 +759,12 @@ function createApp() {
       case "briefing":
         go({ kind: "today" });
         break;
+      case "add":
+        batch(() => {
+          set("addFeedAddress", mode.FYKE_ADDRESS ?? "");
+          set("showingAddFeed", true);
+        });
+        break;
       case "shortcuts":
         set("showingShortcuts", true);
         break;
@@ -789,6 +813,8 @@ function createApp() {
     renameView,
     moveView,
     removeView,
+    importOpml,
+    exportOpml,
     refreshFeed,
     newFolder,
     renameFolder,

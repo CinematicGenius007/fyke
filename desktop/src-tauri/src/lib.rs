@@ -4,6 +4,7 @@
 
 pub mod events;
 pub mod external;
+mod opml;
 pub mod paths;
 pub mod rpc;
 pub mod socket;
@@ -116,7 +117,18 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(state)
-        .invoke_handler(tauri::generate_handler![call, subscribe, pause, data_home, test_mode, ready, quit, open_external])
+        .invoke_handler(tauri::generate_handler![
+            call,
+            subscribe,
+            pause,
+            data_home,
+            test_mode,
+            ready,
+            quit,
+            open_external,
+            opml::import_opml,
+            opml::export_opml
+        ])
         .run(tauri::generate_context!())
         .expect("the window could not open");
 }

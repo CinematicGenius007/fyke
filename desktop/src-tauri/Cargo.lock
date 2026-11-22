@@ -1190,6 +1190,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-notification",
  "tauri-plugin-single-instance",
+ "tempfile",
  "uds_windows",
  "url",
  "windows-sys 0.61.2",

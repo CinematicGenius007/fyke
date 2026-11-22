@@ -56,11 +56,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         body, kind = FEED, "application/rss+xml"
-        if self.path == "/thread.xml":
+        if self.path == "/feed-list":
+            body = b'<html><head><link rel="alternate" type="application/rss+xml" href="/feed.xml"><link rel="alternate" type="application/rss+xml" href="/thread.xml"></head></html>'
+            kind = "text/html"
+        elif self.path == "/thread.xml":
             body = THREAD_FEED
         elif self.path.startswith("/items/"):
             thread_requests.append(self.path)
             body, kind = thread(), "application/json"
+        elif self.path != "/feed.xml":
+            self.send_error(404)
+            return
         self.send_response(200); self.send_header("Content-Type", kind)
         self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
 
@@ -78,7 +84,7 @@ def environment(home, fyke, base):
     writer = pathlib.Path(home) / "writer.py"
     writer.write_text(WRITER_SOURCE)
     return {"FYKE_HOME": str(home), "FYKE_BIN": str(fyke), "FYKE_WRITER_CMD": f"{sys.executable} {writer}",
-            "FYKE_HN_ITEMS_URL": f"{base}/items/"}
+            "FYKE_HN_ITEMS_URL": f"{base}/items/", "FYKE_LOCAL_FEEDS": "1"}
 
 
 def prepare(fyke, env, base, timeout=60):

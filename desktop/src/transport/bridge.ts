@@ -79,6 +79,16 @@ export function bridgeTransport(page: URL): Transport {
     ready: () => send({ op: "ready" }),
     quit: (code) => send({ op: "quit", code }),
     dataHome: () => send({ op: "data_home" }),
+    importOpml: () => send({ op: "import_opml" }),
+    async exportOpml() {
+      const { opml } = await send<{ opml: string }>({ op: "call", method: "opml.export" });
+      const url = URL.createObjectURL(new Blob([opml], { type: "application/xml" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "feeds.opml";
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    },
     // A page in a browser opens a tab; nothing here reaches the system.
     openExternal: async (url) => void window.open(url, "_blank", "noopener,noreferrer"),
   };

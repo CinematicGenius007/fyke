@@ -155,6 +155,10 @@ function main() {
       continue;
     }
     const b = PNG.sync.read(readFileSync(ours));
+    const sideBySide = new PNG({ width: a.width + b.width, height: Math.max(a.height, b.height) });
+    PNG.bitblt(a, sideBySide, 0, 0, a.width, a.height, 0, 0);
+    PNG.bitblt(b, sideBySide, 0, 0, b.width, b.height, a.width, 0);
+    writeFileSync(join(out, `${name}-side-by-side.png`), PNG.sync.write(sideBySide));
     const { equal, exact, total, diff } = compare(a, b);
     writeFileSync(join(out, `${name}-diff.png`), PNG.sync.write(diff));
     const percent = (100 * equal) / total;
@@ -164,7 +168,7 @@ function main() {
   const lines = [
     "# Desktop parity",
     "",
-    `Pixels equal to the Mac app's picture, within ${TOLERANCE} per channel, after the anti-aliasing allowance (an edge rasterized under a pixel apart). Target: ${TARGET} %. "Exact" is the share without the allowance. Differing pixels are red in each \`<name>-diff.png\`, allowed edges faint orange.`,
+    `Pixels equal to the Mac app's picture, within ${TOLERANCE} per channel, after the anti-aliasing allowance (an edge rasterized under a pixel apart). Target: ${TARGET} %. "Exact" is the share without the allowance. Differing pixels are red in each \`<name>-diff.png\`, allowed edges faint orange. The Mac is on the left in \`<name>-side-by-side.png\`.`,
     "",
     "| Screen | Equal | Exact | Result |",
     "| --- | ---: | ---: | --- |",

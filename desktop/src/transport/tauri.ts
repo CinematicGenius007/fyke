@@ -32,6 +32,8 @@ export function tauriTransport(): Transport {
     ready: () => invoke("ready"),
     quit: (code) => invoke("quit", { code }),
     dataHome: () => invoke("data_home"),
+    importOpml: () => invoke("import_opml"),
+    exportOpml: () => invoke("export_opml"),
     openExternal: (url) => invoke("open_external", { url }),
   };
 }

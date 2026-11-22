@@ -11,6 +11,7 @@ export type MenuItem =
   | "rule";
 
 interface Panel {
+  anchor?: HTMLElement;
   id: number;
   x: number;
   y: number;
@@ -30,16 +31,27 @@ export const float = {
   menu(event: MouseEvent, width: number, items: MenuItem[]) {
     event.preventDefault();
     setSide(null);
-    setItem({ id: next++, x: event.clientX, y: event.clientY, above: event.clientY, width, items });
+    const anchor = event.currentTarget as HTMLElement;
+    const box = anchor.getBoundingClientRect();
+    const x = event.clientX || box.left;
+    const y = event.clientY || box.bottom;
+    setItem({ id: next++, x, y, above: y, width, items, anchor });
+  },
+  below(anchor: HTMLElement, width: number, items: MenuItem[]) {
+    const box = anchor.getBoundingClientRect();
+    setSide(null);
+    setItem({ id: next++, x: box.left, y: box.bottom, above: box.top, width, items, anchor });
   },
   /** A submenu beside the row that opens it. */
   side(row: HTMLElement, width: number, items: MenuItem[]) {
     const box = row.getBoundingClientRect();
-    setSide({ id: next++, x: box.right + 8, y: box.top - 10, above: box.top - 10, width, items });
+    setSide({ id: next++, x: box.right + 8, y: box.top - 10, above: box.top - 10, width, items, anchor: row });
   },
-  close() {
+  close(restoreFocus = false) {
+    const anchor = item()?.anchor;
     setItem(null);
     setSide(null);
+    if (restoreFocus) anchor?.focus();
   },
 };
 
@@ -58,10 +70,18 @@ function Placed(props: { panel: Panel }) {
     const x = Math.min(Math.max(8, props.panel.x), Math.max(8, window.innerWidth - width - 8));
     box.style.transform = `translate(${x}px, ${y}px)`;
     box.style.visibility = "visible";
+    box.querySelector<HTMLElement>("[role=menuitem]")?.focus({ preventScroll: true });
   });
   const rows = () => props.panel.items.filter((i) => i !== "rule").length;
   return (
-    <div ref={box} class="float-panel" role="menu" style={{ width: `${props.panel.width}px` }}>
+    <div ref={box} class="float-panel" role="menu" style={{ width: `${props.panel.width}px` }} onKeyDown={(event) => {
+      const direction = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
+      if (direction === 0) return;
+      event.preventDefault();
+      const choices = [...box.querySelectorAll<HTMLElement>("[role=menuitem]")];
+      const current = choices.indexOf(document.activeElement as HTMLElement);
+      choices[(current + direction + choices.length) % choices.length]?.focus();
+    }}>
       <div class="float-rows scroll" style={rows() > LIMIT ? { "max-height": `${LIMIT * ROW + 12}px` } : undefined}>
         <For each={props.panel.items}>{(entry) => (entry === "rule" ? <Rule class="float-rule" /> : <MenuRow item={entry} />)}</For>
       </div>
@@ -109,7 +129,7 @@ export function FloatLayer() {
           if (event.key !== "Escape") return;
           event.preventDefault();
           event.stopPropagation();
-          float.close();
+          float.close(true);
         }}
       >
         <Show when={item()} keyed>

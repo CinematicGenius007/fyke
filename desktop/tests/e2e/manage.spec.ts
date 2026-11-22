@@ -256,3 +256,22 @@ for (const screen of ["rename-folder", "rename-feed", "delete-folder"] as const)
     });
   }
 }
+
+test("dragging a feed or folder moves it, and dragging to Feeds puts it back at the top level", async ({ app, daemon }) => {
+  const reading = (await daemon.call<{ id: number }>("folders.add", { name: "Reading" })).id;
+  const later = (await daemon.call<{ id: number }>("folders.add", { name: "Later" })).id;
+  const page = await app.open();
+  const local = page.getByRole("button", { name: "Local", exact: true });
+  const destination = page.getByRole("button", { name: "Reading, folder" });
+  const header = page.getByRole("heading", { name: "Feeds" });
+  await local.dragTo(destination);
+  await expect.poll(async () => (await feeds(daemon))[0].folder_id).toBe(reading);
+  await local.dragTo(header);
+  await expect.poll(async () => (await feeds(daemon))[0].folder_id ?? null).toBe(null);
+
+  const laterRow = page.getByRole("button", { name: "Later, folder" });
+  await laterRow.dragTo(destination);
+  await expect.poll(async () => (await folders(daemon)).find((folder) => folder.id === later)?.parent_id).toBe(reading);
+  await laterRow.dragTo(header);
+  await expect.poll(async () => (await folders(daemon)).find((folder) => folder.id === later)?.parent_id ?? null).toBe(null);
+});

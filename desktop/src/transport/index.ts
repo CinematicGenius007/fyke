@@ -73,6 +73,8 @@ export interface Transport {
   /** Opens an http or https address in the system browser. */
   openExternal(url: string): Promise<void>;
   dataHome(): Promise<string>;
+  importOpml(): Promise<boolean>;
+  exportOpml(): Promise<void>;
 }
 
 let chosen: Transport | undefined;

@@ -52,11 +52,11 @@ function command(event: KeyboardEvent): boolean {
 
 export function handleKey(event: KeyboardEvent): void {
   const model = app();
-  if (event.defaultPrevented || event.isComposing) return;
+  if (event.defaultPrevented || event.isComposing || model.state.showingAddFeed) return;
   // An open menu takes the keys: Esc closes it, and nothing behind it acts.
   if (float.isOpen()) {
-    if (event.key === "Escape") float.close();
-    if (!typing(event.target)) event.preventDefault();
+    if (event.key === "Escape") float.close(true);
+    if (!typing(event.target) && !["Enter", " ", "Tab"].includes(event.key)) event.preventDefault();
     return;
   }
   if (event.ctrlKey || event.metaKey) {

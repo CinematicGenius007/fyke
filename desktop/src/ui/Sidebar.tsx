@@ -1,6 +1,6 @@
 // The sidebar (gui/Sources/Reader/Sidebar.swift): places, views, the feed tree, then
 // Routines and the status line. Rows are 32 high; indent comes from SidebarIndent.
-import { For, type JSX, Match, onMount, Show, Switch } from "solid-js";
+import { createSignal, For, type JSX, Match, onMount, Show, Switch } from "solid-js";
 import { SidebarIndent } from "../logic/SidebarIndent";
 import { app, type Place } from "../model/app";
 import { prefs } from "../model/prefs";
@@ -12,6 +12,51 @@ import { float, type MenuItem } from "./Float";
 import { Icon, type IconName } from "./kit/Icon";
 
 type TreeRow = { kind: "folder"; folder: Folder; depth: number } | { kind: "feed"; feed: Feed; depth: number };
+
+type DraggedRow = { kind: "feed" | "folder"; id: number };
+const [dragged, setDragged] = createSignal<DraggedRow | null>(null);
+
+function startDrag(event: DragEvent, row: DraggedRow) {
+  if (!event.dataTransfer) return;
+  event.dataTransfer.setData("application/x-fyke-source", row.kind);
+  event.dataTransfer.effectAllowed = "move";
+  setDragged(row);
+}
+
+function dropTarget(folder: () => number | null) {
+  const [active, setActive] = createSignal(false);
+  const accepts = (event: DragEvent) => {
+    const row = dragged();
+    const data = event.dataTransfer;
+    if (!row || !data?.types.includes("application/x-fyke-source")) return null;
+    const destination = folder();
+    if (row.kind === "folder" && (row.id === destination || app().foldersInside(row.id).some((child) => child.id === destination))) return null;
+    return { row, data, destination };
+  };
+  return {
+    active: () => active() && dragged() !== null,
+    over(event: DragEvent) {
+      const drag = accepts(event);
+      if (!drag) return;
+      event.preventDefault();
+      drag.data.dropEffect = "move";
+      setActive(true);
+    },
+    leave(event: DragEvent) {
+      if (!(event.relatedTarget instanceof Node) || !(event.currentTarget as HTMLElement).contains(event.relatedTarget)) setActive(false);
+    },
+    drop(event: DragEvent) {
+      const drag = accepts(event);
+      if (!drag) return;
+      event.preventDefault();
+      const { row, destination } = drag;
+      setDragged(null);
+      setActive(false);
+      if (row.kind === "feed") void app().moveFeed(row.id, destination);
+      else void app().moveFolder(row.id, destination);
+    },
+  };
+}
 
 /** One destination row: icon, name, and whatever trails it. */
 export function SidebarRow(props: {
@@ -26,6 +71,7 @@ export function SidebarRow(props: {
   children?: JSX.Element;
   lead?: JSX.Element;
   onMenu?: (event: MouseEvent) => void;
+  drag?: DraggedRow;
 }) {
   return (
     <button
@@ -37,6 +83,9 @@ export function SidebarRow(props: {
       aria-current={props.selected ? "page" : undefined}
       onClick={() => props.onClick()}
       onContextMenu={(event) => props.onMenu?.(event)}
+      draggable={props.drag !== undefined}
+      onDragStart={(event) => props.drag && startDrag(event, props.drag)}
+      onDragEnd={() => setDragged(null)}
     >
       <Show when={props.icon}>{(icon) => <Icon name={icon()} size={14} class="row-icon" />}</Show>
       {props.lead}
@@ -51,6 +100,8 @@ export function SidebarRow(props: {
 export function Sidebar() {
   const model = app();
   const go = (place: Place) => () => model.go(place);
+  const topLevel = dropTarget(() => null);
+  let addButton!: HTMLButtonElement;
 
   function rows(parent: number | null = null, depth = 0): TreeRow[] {
     const out: TreeRow[] = [];
@@ -100,7 +151,14 @@ export function Sidebar() {
           </Show>
           <For each={model.library.state.views}>{(view) => <ViewRow view={view} />}</For>
 
-          <SectionHeader title="Feeds" help="Add a feed or a folder" onAdd={() => model.set("showingAddFeed", true)} />
+          <div classList={{ "drag-target": topLevel.active() }}
+            onDragOver={topLevel.over} onDragLeave={topLevel.leave} onDrop={topLevel.drop}>
+            <SectionHeader title="Feeds" help="Add a feed or a folder" ref={(button) => addButton = button}
+              onAdd={() => float.below(addButton, 180, [
+                { title: "Add feed", run: () => model.set("showingAddFeed", true) },
+                { title: "New folder", run: () => void model.newFolder(null) },
+              ])} />
+          </div>
           <For each={rows()}>
             {(row) => (
               <Switch>
@@ -120,11 +178,11 @@ export function Sidebar() {
   );
 }
 
-function SectionHeader(props: { title: string; help: string; onAdd: () => void }) {
+function SectionHeader(props: { title: string; help: string; onAdd: () => void; ref?: (button: HTMLButtonElement) => void }) {
   return (
     <div class="section-header">
       <SectionLabel text={props.title} />
-      <SymbolButton icon="plus" label={props.help} size={20} iconSize={13} onClick={props.onAdd} />
+      <SymbolButton icon="plus" label={props.help} size={20} iconSize={13} onClick={props.onAdd} ref={props.ref} />
     </div>
   );
 }
@@ -264,6 +322,7 @@ function ViewRow(props: { view: SavedView }) {
 
 function FolderRow(props: { folder: Folder; depth: number }) {
   const model = app();
+  const target = dropTarget(() => props.folder.id);
   const closed = () => prefs().ui.collapsed_folders.includes(props.folder.id);
   const unread = () => model.feedsInside(props.folder.id).reduce((sum, f) => sum + f.unread, 0);
   const selected = () => model.isShowing({ kind: "folder", id: props.folder.id });
@@ -280,7 +339,8 @@ function FolderRow(props: { folder: Folder; depth: number }) {
     </button>
   );
   return (
-    <div class="folder-row" onContextMenu={(event) => float.menu(event, 204, folderMenu(props.folder))}>
+    <div class="folder-row" classList={{ "drag-target": target.active() }}
+      onDragOver={target.over} onDragLeave={target.leave} onDrop={target.drop} onContextMenu={(event) => float.menu(event, 204, folderMenu(props.folder))}>
       <Show
         when={!isRenaming("folder", props.folder.id)}
         fallback={
@@ -291,6 +351,7 @@ function FolderRow(props: { folder: Folder; depth: number }) {
         }
       >
         <SidebarRow
+          drag={{ kind: "folder", id: props.folder.id }}
           title={props.folder.name}
           depth={props.depth}
           selected={selected()}
@@ -322,6 +383,7 @@ function FeedRow(props: { feed: Feed; depth: number }) {
       }
     >
       <SidebarRow
+        drag={{ kind: "feed", id: props.feed.id }}
         title={feedName(props.feed)}
         depth={props.depth}
         selected={model.isShowing({ kind: "feed", id: props.feed.id })}

@@ -207,6 +207,14 @@ const server = Bun.serve<Client>({
             return reply({ result: null });
           case "test_mode":
             return reply({ result: testMode() });
+          case "import_opml": {
+            const path = process.env.FYKE_OPML_IMPORT;
+            if (!path || process.env.FYKE_HEADLESS !== "1") {
+              return reply({ error: { message: "Open the desktop app to import a file." } });
+            }
+            await call("opml.import", { path, allow_private_network: process.env.FYKE_LOCAL_FEEDS === "1" }, true);
+            return reply({ result: true });
+          }
           case "data_home":
             return reply({ result: home });
           case "ready":

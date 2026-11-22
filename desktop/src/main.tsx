@@ -11,12 +11,15 @@ import { transport } from "./transport";
 import { App } from "./ui/App";
 
 /** Test mode from the app's environment, and in a browser also from the page's address. */
-async function testMode(): Promise<Record<string, string>> {
+async function testMode() {
   const fromApp = await transport()
     .testMode()
-    .catch(() => ({}));
+    .catch((): Record<string, string> => ({}));
   const fromPage = Object.fromEntries([...new URLSearchParams(window.location.search)].filter(([name]) => name.startsWith("FYKE_")));
-  return { ...fromApp, ...fromPage };
+  return {
+    mode: { ...fromApp, ...fromPage },
+    localFeeds: fromApp.FYKE_HEADLESS === "1" && fromApp.FYKE_LOCAL_FEEDS === "1",
+  };
 }
 
 /** Theme, fonts, weights and radii follow the settings as they change. */
@@ -37,10 +40,10 @@ function followTheme() {
 }
 
 async function start() {
-  const mode = await testMode();
+  const { mode, localFeeds } = await testMode();
   if (mode.FYKE_THEME) prefs().force(mode.FYKE_THEME);
   followTheme();
-  render(() => <App />, document.getElementById("root")!);
+  render(() => <App localFeeds={localFeeds} />, document.getElementById("root")!);
   await app().start(() => app().openScreen(mode));
   await document.fonts.ready;
   measureLineHeights();

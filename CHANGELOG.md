@@ -23,6 +23,8 @@ There are no releases yet. Everything below is built from source and is unreleas
 - **Website.** The project site in `site/` renders the documents in `docs/`.
 - **Desktop app for Windows and Linux (in progress).** A Tauri 2 app in `desktop/` that matches the macOS app. So far: the sidebar with places, views and the feed tree, the timeline for All and Starred, a feed, folder or view beside the reader with a divider that resizes and resets, the reader with its actions, the Mac's keys for moving, opening, starring and marking, and links that open in the default browser, and search (Ctrl+F or /) with its arrow keys, unread-only scope and Ctrl+S to keep a search as a view, with undo, and the command palette (Ctrl+K or the sidebar's Search row) with places, views, feeds, articles and the commands built so far, the shortcuts sheet (?), and managing feeds: rename in place, right-click menus for views, folders and feeds, new folders, Move to, and delete and remove with a confirmation that keeps data by default. Settings, briefs, catch-up, the web viewer and the installers are planned; [desktop-parity.md](docs/desktop-parity.md) tracks each line.
 
+- **Desktop subscriptions.** Preview feeds before subscribing, choose or create a folder, drag feeds and folders in the sidebar, and import or export subscriptions with OPML.
+
 ### Changed
 
 - **The project is named Fyke.** The command is `fyke`, the data folder is `~/.fyke` (set `FYKE_HOME` to use another), the app is `Fyke.app`, and the background service is `local.fyke.daemon`. Data in `~/.rss_`, from builds before the name, moves to `~/.fyke` the first time any `fyke` command runs, including a folder moved elsewhere with `data move`. Quit an earlier build's daemon first: while it runs, `fyke` stops with `EarlierDaemonRunning` and changes nothing. `fyke service install` and `uninstall` also remove a launch agent installed under the old label, and `bundle_app.py --install` removes `/Applications/rss_.app`.
@@ -31,6 +33,8 @@ There are no releases yet. Everything below is built from source and is unreleas
 - The macOS app's article list starts 368 points wide, as the design rules set, instead of 375. Double-click the divider to return to it.
 
 ### Fixed
+
+- macOS app: picking one feed from several advertised by a site keeps that feed’s own name.
 
 - macOS app: a folder name that is already taken now shows why it was refused.
 - Every HTTPS fetch no longer crashes.

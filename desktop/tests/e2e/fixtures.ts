@@ -1,11 +1,11 @@
 // A throwaway data folder with the shared GUI fixtures (tools/gui_fixtures.py), a
 // daemon, and a bridge, for each worker. `app.open` loads the UI on one screen.
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { test as base, expect, type Page } from "@playwright/test";
+import { test as base, expect, type Locator, type Page } from "@playwright/test";
 
 const desktop = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const repo = resolve(desktop, "..");
@@ -24,6 +24,7 @@ function firstLine(child: ChildProcess, what: string): Promise<string> {
 
 export interface Daemon {
   home: string;
+  base: string;
   env: Record<string, string>;
   bridge: { port: number; token: string };
   /** One request to the daemon, for setup and checks. */
@@ -38,7 +39,7 @@ export interface Screen {
 export interface App {
   open(screen?: Screen, theme?: "light" | "dark"): Promise<Page>;
   /** Saves the window as `name`.png in zig-out/desktop-snapshots. */
-  snapshot(name: string): Promise<string>;
+  snapshot(name: string, locator?: Locator): Promise<string>;
 }
 
 export const test = base.extend<{ app: App }, { daemon: Daemon }>({
@@ -47,8 +48,10 @@ export const test = base.extend<{ app: App }, { daemon: Daemon }>({
       // Short, because socket paths are limited to about 100 bytes.
       const home = mkdtempSync(process.platform === "win32" ? join(process.env.TEMP ?? ".", "fyke-p-") : "/tmp/fyke-p-");
       const fixtures = spawn("python3", [join(repo, "tools/gui_fixtures.py"), "--home", home, "--fyke", fyke], { stdio: ["pipe", "pipe", "pipe"] });
-      const prepared = JSON.parse(await firstLine(fixtures, "gui_fixtures.py")) as { env: Record<string, string> };
-      const env = { ...process.env, ...prepared.env, FYKE_HEADLESS: "1" } as Record<string, string>;
+      const prepared = JSON.parse(await firstLine(fixtures, "gui_fixtures.py")) as { base: string; env: Record<string, string> };
+      const opml = join(home, "subscriptions.opml");
+      writeFileSync(opml, `<opml version="2.0"><body><outline text="Imported"><outline type="rss" text="From OPML" xmlUrl="${prepared.base}/thread.xml"/></outline></body></opml>`);
+      const env = { ...process.env, ...prepared.env, FYKE_HEADLESS: "1", FYKE_OPML_IMPORT: opml } as Record<string, string>;
       const bridge = spawn("bun", [join(desktop, "tools/bridge.ts"), "--port", "0"], { env, stdio: ["ignore", "pipe", "pipe"] });
       const address = JSON.parse(await firstLine(bridge, "bridge.ts")) as { port: number; token: string };
       const call = async <T,>(method: string, params: object = {}): Promise<T> => {
@@ -62,7 +65,7 @@ export const test = base.extend<{ app: App }, { daemon: Daemon }>({
         if (reply.error) throw new Error(`${method}: ${reply.error.message}`);
         return reply.result as T;
       };
-      await use({ home, env: prepared.env, bridge: address, call });
+      await use({ home, base: prepared.base, env: prepared.env, bridge: address, call });
       bridge.kill();
       fixtures.stdin?.end();
       spawnSync(fyke, ["daemon", "stop"], { env, timeout: 30_000 });
@@ -78,10 +81,10 @@ export const test = base.extend<{ app: App }, { daemon: Daemon }>({
         await expect(page.locator("html[data-ready]")).toBeAttached();
         return page;
       },
-      async snapshot(name) {
+      async snapshot(name, locator) {
         mkdirSync(snapshots, { recursive: true });
         const path = join(snapshots, `${name}.png`);
-        await page.screenshot({ path, animations: "disabled", caret: "hide" });
+        await (locator ?? page).screenshot({ path, animations: "disabled", caret: "hide" });
         return path;
       },
     });
