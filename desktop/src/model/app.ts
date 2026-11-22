@@ -10,6 +10,7 @@ import type { Block, Entry, EntryPage, EntrySummary, Feed, Folder, Items, Stats 
 import { feedName, jobIsWriting } from "./types";
 import { Dates } from "../ui/format";
 import { createUndoCenter } from "./undo";
+import { createCommands } from "./commands";
 import { createSearch } from "./search";
 import { Rule } from "../logic/Rule";
 import { ViewName } from "../logic/ViewName";
@@ -110,6 +111,7 @@ function createApp() {
   const library = createLibrary();
   const undo = createUndoCenter();
   const search = createSearch();
+  const commands = createCommands();
   let pendingReload: ReturnType<typeof setTimeout> | undefined;
   let paused = false;
   let stopEvents: (() => void) | undefined;
@@ -635,6 +637,13 @@ function createApp() {
       case "shortcuts":
         set("showingShortcuts", true);
         break;
+      case "palette":
+        // One batch, so the field mounts with the words in it and selects them.
+        batch(() => {
+          commands.show();
+          commands.setQuery(mode.FYKE_QUERY ?? "");
+        });
+        break;
       case "search":
         // The words go in first, so the field starts with them selected, as on the Mac.
         search.setQuery(mode.FYKE_QUERY ?? "");
@@ -657,6 +666,7 @@ function createApp() {
     library,
     undo,
     search,
+    commands,
     openResult,
     saveSearchAsView,
     saveAsView,

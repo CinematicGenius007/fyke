@@ -88,4 +88,36 @@ export const test = base.extend<{ app: App }, { daemon: Daemon }>({
   },
 });
 
+// MARK: State the Mac's checks reset and read (tools/e2e_gui.py `scenario`)
+
+export interface Entry {
+  id: number;
+  title: string;
+  read: boolean;
+}
+
+/** As the Mac's checks do before each scenario: every article unread, no views. */
+export async function reset(daemon: Daemon) {
+  const entries = await daemon.call<{ items: Entry[] }>("entries.list", { limit: 100 });
+  const read = entries.items.filter((e) => e.read).map((e) => e.id);
+  if (read.length) await daemon.call("entries.mark_many", { ids: read, read: false });
+  const views = await daemon.call<{ items: { id: number }[] }>("views.list");
+  for (const view of views.items) await daemon.call("views.remove", { id: view.id, detach: true });
+}
+
+/** The titles the daemon has as read, which is what opening an article leaves behind. */
+export async function readTitles(daemon: Daemon): Promise<string[]> {
+  const entries = await daemon.call<{ items: Entry[] }>("entries.list", { limit: 100 });
+  return entries.items
+    .filter((e) => e.read)
+    .map((e) => e.title)
+    .sort();
+}
+
+export async function viewNames(daemon: Daemon): Promise<string[]> {
+  const views = await daemon.call<{ items: { name: string }[] }>("views.list");
+  return views.items.map((v) => v.name);
+}
+
 export { expect };
+

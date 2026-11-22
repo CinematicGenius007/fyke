@@ -68,6 +68,16 @@ const shapes = {
   "line.3.horizontal.decrease": () => <path d="M2 4.2H14M4.4 8H11.6M6.6 11.8H9.4" />,
   "clock.arrow.circlepath": () => <path d="M2.6 8.4A5.6 5.6 0 1 0 4.3 4.3M1.4 6.9L2.6 8.6L4.2 7.1M8.2 5.2V8.4L10.4 9.8" />,
   gearshape: () => <><path d={gearOutline} /><circle cx="8" cy="8" r="2.2" /></>,
+  "dot.radiowaves.up.forward": () => (
+    <>
+      <circle cx="8" cy="8.5" r="1.2" />
+      <path d="M5.6 6.1A3.4 3.4 0 0 0 5.6 10.9M10.4 6.1A3.4 3.4 0 0 1 10.4 10.9M3.6 3.9A6.3 6.3 0 0 0 3.6 13.1M12.4 3.9A6.3 6.3 0 0 1 12.4 13.1" />
+    </>
+  ),
+  "arrow.clockwise": () => <path d="M13.2 8.6A5.2 5.2 0 1 1 11.6 4.3M12 1.6V4.7H8.9" />,
+  "checkmark.circle": () => <><circle cx="8" cy="8" r="6" /><path d="M5.4 8.2L7.2 10L10.7 6.2" /></>,
+  "arrow.uturn.backward": () => <path d="M5.5 3.5L2.5 6.5L5.5 9.5M2.5 6.5H10A3.5 3.5 0 0 1 10 13.5H7" />,
+  return: () => <path d="M13 3.5V8.5A1.5 1.5 0 0 1 11.5 10H3.5M6.5 7L3.5 10L6.5 13" />,
   ellipsis: () => <g class="dots"><circle cx="3.4" cy="8" r="1.15" /><circle cx="8" cy="8" r="1.15" /><circle cx="12.6" cy="8" r="1.15" /></g>,
 } satisfies Record<string, () => JSX.Element>;
 

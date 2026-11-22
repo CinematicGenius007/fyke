@@ -13,9 +13,9 @@ export function Count(props: { value: number; quiet?: boolean }) {
 }
 
 /** The caps label above a group: 11 px, weight 600, +0.06em, muted. */
-export function SectionLabel(props: { text: string }) {
+export function SectionLabel(props: { text: string; class?: string }) {
   return (
-    <span class="section-label" role="heading" aria-level="2">
+    <span class={`section-label${props.class ? ` ${props.class}` : ""}`} role="heading" aria-level="2">
       {props.text.toUpperCase()}
     </span>
   );

@@ -1185,3 +1185,138 @@ svg.icon .dots circle {
 .search-footer .action {
   margin-left: 8px;
 }
+
+/* The command palette (CommandPalette.swift), in the popover panel (Kit.swift PopoverPanel). */
+.scrim.quiet {
+  background: color-mix(in srgb, var(--scrim) 60%, transparent);
+}
+.palette {
+  --panel-ground: var(--ground);
+  width: 620px;
+  /* 120 below the Mac's 28 point title bar strip. */
+  margin-top: 148px;
+  max-height: calc(100% - 168px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--panel-ground);
+  border-radius: var(--radius-panel);
+  /* A CSS blur of 32 is SwiftUI's shadow radius of 16. */
+  box-shadow:
+    inset 0 0 0 1px var(--hairline),
+    0 12px 32px rgb(0 0 0 / 12.2%),
+    0 2px 6px rgb(0 0 0 / 7.8%);
+}
+:root[data-dark="1"] .palette {
+  --panel-ground: var(--surface);
+  box-shadow:
+    inset 0 0 0 1px var(--hairline),
+    0 12px 32px rgb(0 0 0 / 45%),
+    0 2px 6px rgb(0 0 0 / 30%);
+}
+.palette-query {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  padding: 0 20px;
+}
+.palette-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  font-size: 18px;
+  color: var(--ink);
+}
+.palette-field::placeholder {
+  color: var(--muted);
+}
+.palette-esc {
+  font-size: 12px;
+  color: var(--muted);
+}
+.palette-list {
+  max-height: 420px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 0 8px 8px;
+}
+.palette-section {
+  padding: 12px 20px 4px;
+}
+.palette-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-control);
+  text-align: left;
+  font-size: 14px;
+  color: var(--ink);
+}
+.palette-row.selected {
+  background: var(--selected);
+}
+.palette-row.article {
+  align-items: flex-start;
+  padding: 8px 12px;
+}
+.palette-icon {
+  flex: none;
+  width: 16px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-soft);
+}
+.palette-dot {
+  padding-top: 8px;
+}
+.palette-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-right: 0;
+  white-space: nowrap;
+}
+.palette-mark {
+  font-weight: var(--ui-600);
+}
+.palette-detail {
+  flex: none;
+  max-width: 50%;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.palette-article {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.palette-article-title {
+  font-family: var(--font-title), serif;
+  font-size: 16px;
+  font-weight: var(--title-500);
+  color: var(--unread);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.palette-article-title.read {
+  color: var(--read);
+}
+.palette-article-meta {
+  font-size: 12px;
+  color: var(--muted);
+}

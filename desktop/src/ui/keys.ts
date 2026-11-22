@@ -20,7 +20,14 @@ function command(event: KeyboardEvent): boolean {
   const plain: Record<string, () => void> = {
     ",": () => model.openSettings(),
     n: () => model.set("showingAddFeed", true),
-    f: () => model.search.show(),
+    f: () => {
+      model.commands.close();
+      model.search.show();
+    },
+    k: () => {
+      model.search.close();
+      model.commands.show();
+    },
     "1": go("today"),
     "2": go("all"),
     "3": go("starred"),
@@ -51,7 +58,7 @@ export function handleKey(event: KeyboardEvent): void {
   }
   if (event.altKey) return;
   // These hold their own focus and keys.
-  if (model.search.state.isShowing) return;
+  if (model.search.state.isShowing || model.commands.state.isShowing) return;
   if (typing(event.target)) return;
   if (model.state.confirmation) return void event.preventDefault();
   if (model.state.renaming) return;

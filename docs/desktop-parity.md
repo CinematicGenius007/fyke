@@ -83,7 +83,7 @@ UI modules live in `desktop/src`, Rust in `desktop/src-tauri/src`. Logic ported 
 | F32 | Today.swift | Brief list, Today reader, back bar | `src/ui/Today.tsx` | planned | |
 | F33 | Views.swift | View sentence, its editors, view menu | `src/ui/ViewSentence.tsx`, `ViewMenu.tsx` | planned | |
 | F34 | Search.swift | Search popup | `src/model/search.ts`, `src/ui/Search.tsx` | planned | |
-| F35 | CommandPalette.swift | ⌘K palette | `src/model/palette.ts`, `src/ui/Palette.tsx` | planned | |
+| F35 | CommandPalette.swift | ⌘K palette | `src/model/commands.ts`, `src/ui/CommandPalette.tsx` | built | `palette.spec.ts`. The brief, catch-up, ask, new routine, new folder, activity, shortcuts, add feed, Settings · Agents, run-routine and edit-recipe commands, and the Ask row with Tab, are planned: each joins with its feature |
 | F36 | AddFeed.swift | Add feed sheet, OPML | `src/ui/AddFeed.tsx`, `src/model/opml.ts` (Rust dialog for files) | planned | |
 | F37 | Brief.swift | Citations, source list, "made with", artifact column | `src/ui/Brief.tsx` | planned | |
 | F38 | RecipeView.swift | Recipe edit, try, history, reset | `src/ui/Recipe.tsx` | planned | |
@@ -108,7 +108,7 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 | S8 | A saved view: sentence rule, chips, editing in place | `view` | built | `view-light` 99.688 %, `view-dark` 99.740 % equal after the allowance; the sentence rule shows; editing in place is planned |
 | S9 | A view with nothing matching ("Nothing matches yet", "Include read articles") | `view-empty` (new) | planned | |
 | S10 | Search with results, and with none | `search`, `search-none` (new) | built | `search-light` 99.468 %, `search-dark` 99.361 % equal after the allowance (D21, D22, K24); nothing found: `search.spec.ts` "nothing found opens nothing"; the `search-none` picture is planned |
-| S11 | Command palette | `palette` | planned | |
+| S11 | Command palette | `palette` | built | `palette-light` 93.558 %, `palette-dark` 93.939 %: the field, Go to and Articles sections line up; the Mac's "Run Morning needle now" row and its Ask row are missing until routines and Ask exist (F35) |
 | S12 | Shortcuts sheet | `shortcuts` (new) | planned | |
 | S13 | Catch-up: a card / finished / could not start | `catchup`, `catchup-done` (new) | planned | |
 | S14 | Ask with a cited answer; answering; not answered | `ask` | planned | |
@@ -149,14 +149,14 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 | K3 | ⌘S | Ctrl+S | Save search as view (and Save in the routine editor) | WebView2 offers to save the page. Fyke prevents the default. | built | search: `search.spec.ts` "Ctrl+S keeps a search as a view, named for its words"; the routine editor is planned |
 | K4 | ⌘Z | Ctrl+Z | Undo (text field first, then catch-up, then the undo stack) | | planned | |
 | K5 | ⇧⌘Z | Ctrl+Shift+Z, and Ctrl+Y on Windows | Redo | Windows apps use Ctrl+Y, so it is added. | planned | |
-| K6 | ⌘K | Ctrl+K | Everything (palette) | WebView2 and Chromium focus the address or search bar. There is none, and Fyke prevents the default. | planned | |
+| K6 | ⌘K | Ctrl+K | Everything (palette) | WebView2 and Chromium focus the address or search bar. There is none, and Fyke prevents the default. | done | `palette.spec.ts` "the palette finds a command by its letters"; the sidebar's Search row: "the sidebar's Search row opens the palette, and Esc closes it" |
 | K7 | ⌘F | Ctrl+F | Search | WebView2 and WebKitGTK open find-in-page. Fyke prevents the default. | done | `search.spec.ts` "Ctrl+F, type and Return opens the first result" and the arrow, Esc and nothing-found scenarios |
 | K8 | ⌘1 ⌘2 ⌘3 ⌘4 | Ctrl+1 … Ctrl+4 | Today, All, Starred, Routines | | planned | |
 | K9 | ⌘J | Ctrl+J | Catch up | WebView2 opens downloads. Fyke prevents the default. | planned | |
 | K10 | ⌘0 | Ctrl+0 | Activity | WebView2 resets the zoom. Fyke prevents the default and turns off zoom hotkeys. | planned | |
 | K11 | ⌘R | Ctrl+R | Write a brief | The webview reloads (and F5 does too). Fyke prevents both in release builds. | planned | |
 | K12 | ⇧⌘A | Ctrl+Shift+A | Ask your feeds | Chromium's tab search; not bound in WebView2. Fyke prevents the default. | planned | |
-| K13 | ⇧⌘K | Ctrl+Shift+K | Mark all read (only where `canMarkAllHere`) | | planned | |
+| K13 | ⇧⌘K | Ctrl+Shift+K | Mark all read (only where `canMarkAllHere`) | | built | bound; through the palette: `palette.spec.ts` "Mark all read in All marks every article" and "… is not offered in Starred" |
 | K14 | ⌘Q | Ctrl+Q on Linux; Alt+F4 on Windows (system) | Quit | Neither system has ⌘Q. Ctrl+Q is the GNOME convention. | planned | |
 | K15 | ⌘-click | Ctrl+click | Open link in browser | D14 | planned | |
 | K16 | Return, Esc | same | Open; close the float layer or go back | | done | `reading.spec.ts` "Escape goes back to the timeline, and Return opens the selected row again" |
@@ -174,7 +174,7 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 
 | Id | Action | Undo message | Status | Evidence |
 |---|---|---|---|---|
-| U1 | Mark all read in a place | "Marked N article(s) in <name> as read" | planned | |
+| U1 | Mark all read in a place | "Marked N article(s) in <name> as read" | done | `palette.spec.ts` "Ctrl+Z takes back mark all read" |
 | U2 | Save a search as a view | "Saved “X” as a view" | done | `search.spec.ts` "Ctrl+Z takes the new view back" |
 | U3 | Change a view's rule | "Changed “X”" | planned | |
 | U4 | Remove a view (routines detach, then re-point on undo) | "Removed “X”" | planned | |

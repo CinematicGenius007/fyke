@@ -8,6 +8,7 @@ import { handleKey } from "./keys";
 import { Icon } from "./kit/Icon";
 import { Rule } from "./kit/Controls";
 import { Panes } from "./Panes";
+import { CommandPalette } from "./CommandPalette";
 import { ReaderPane } from "./Reader";
 import { SearchPanel } from "./SearchPanel";
 import { Sidebar } from "./Sidebar";
@@ -48,6 +49,9 @@ export function App() {
       </main>
       <Show when={model.search.state.isShowing}>
         <SearchPanel />
+      </Show>
+      <Show when={model.commands.state.isShowing}>
+        <CommandPalette />
       </Show>
       <div class="bottom-layer" aria-live="polite">
         <Show when={problem()}>

@@ -35,6 +35,8 @@ export function createUndoCenter() {
   return {
     toast,
     canUndo: () => count() > 0,
+    /** What Ctrl+Z would take back, for the palette's Undo command. */
+    lastMessage: (): string | undefined => (count() > 0 ? stack.last?.message : undefined),
     push(message: string, undo: UndoItem["undo"]) {
       const item = { id: next++, message, undo };
       stack.push(item);

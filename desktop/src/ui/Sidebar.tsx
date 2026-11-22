@@ -62,7 +62,7 @@ export function Sidebar() {
 
   return (
     <nav class="sidebar" aria-label="Sources">
-      <SidebarRow title="Search" icon="magnifyingglass" selected={false} onClick={() => undefined}>
+      <SidebarRow title="Search" icon="magnifyingglass" selected={false} onClick={() => model.commands.show()}>
         <span class="row-note">Ctrl+K</span>
       </SidebarRow>
       <SidebarRow title="Today" icon="calendar" selected={model.isShowing({ kind: "today" })} onClick={go({ kind: "today" })}>
