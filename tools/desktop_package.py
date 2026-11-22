@@ -45,7 +45,12 @@ def main():
     triple = host_triple()
     binaries = tauri / "binaries"
     binaries.mkdir(exist_ok=True)
-    shutil.copy2(fyke, binaries / f"fyke-{triple}{exe}")
+    bundled = binaries / f"fyke-{triple}{exe}"
+    shutil.copy2(fyke, bundled)
+    if not windows:
+        # Zig keeps DWARF in a Linux release build; the packages do not need it. (On
+        # Windows it goes to a separate .pdb.)
+        subprocess.run(["strip", "--strip-debug", str(bundled)], check=True)
 
     bundles = "nsis" if windows else "deb,appimage"
     bunx = shutil.which("bunx") or "bunx"

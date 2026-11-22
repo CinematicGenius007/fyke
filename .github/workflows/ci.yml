@@ -249,11 +249,11 @@ jobs:
 
       - name: Budgets (Windows)
         if: ${{ !cancelled() && runner.os == 'Windows' }}
-        run: python tools/desktop_budget.py --app desktop/src-tauri/target/release/Fyke.App.exe --fyke zig-out/bin/fyke.exe --package dist/*-setup-x64.exe --out budget-windows.json
+        run: python tools/desktop_budget.py --app desktop/src-tauri/target/release/Fyke.App.exe --fyke desktop/src-tauri/binaries/fyke-x86_64-pc-windows-msvc.exe --package dist/*-setup-x64.exe --out budget-windows.json
 
       - name: Budgets (Linux)
         if: ${{ !cancelled() && runner.os == 'Linux' }}
-        run: dbus-run-session -- xvfb-run -a python3 tools/desktop_budget.py --app desktop/src-tauri/target/release/fyke-app --fyke zig-out/bin/fyke --package dist/*.deb --package dist/*.AppImage --out budget-linux.json
+        run: dbus-run-session -- xvfb-run -a python3 tools/desktop_budget.py --app desktop/src-tauri/target/release/fyke-app --fyke desktop/src-tauri/binaries/fyke-x86_64-unknown-linux-gnu --package dist/*.deb --package dist/*.AppImage --out budget-linux.json
 
       - uses: actions/upload-artifact@v4
         with:
