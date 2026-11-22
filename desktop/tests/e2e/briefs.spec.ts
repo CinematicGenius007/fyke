@@ -59,6 +59,7 @@ for (const theme of ["light", "dark"] as const) {
 
 test("recipes save revisions, show history and can undo a reset", async ({ app, daemon }) => {
   const before = await recipe(daemon);
+  const briefsBefore = (await published(daemon)).length;
   const page = await app.open({ FYKE_SCREEN: "recipe" });
   const field = page.getByRole("textbox", { name: "Recipe text" });
   await expect(field).toHaveValue(before.text);
@@ -66,6 +67,9 @@ test("recipes save revisions, show history and can undo a reset", async ({ app, 
   await field.fill(edited);
   await field.press("Control+s");
   await expect.poll(async () => (await recipe(daemon)).text).toBe(edited);
+  if (briefsBefore > 0) {
+    await expect.poll(async () => (await published(daemon)).length).toBe(briefsBefore + 1);
+  }
 
   await page.getByRole("tab", { name: "History" }).click();
   await expect(page.getByRole("button", { name: new RegExp(`Revision ${before.revision + 1}\\b`) })).toBeVisible();
