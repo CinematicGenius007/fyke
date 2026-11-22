@@ -52,6 +52,10 @@ def request(method, path, body=None, timeout=60):
             return json.load(reply)["value"]
     except urllib.error.HTTPError as error:
         raise RuntimeError(f"{method} {path}: {error.code} {error.read().decode(errors='replace')[:400]}") from None
+    except OSError as error:
+        # tauri-driver listens before its native driver does, and drops requests until
+        # then; a refused or dropped connection is worth another try.
+        raise RuntimeError(f"{method} {path}: {error!r}") from None
 
 
 def wait_for(probe, seconds=30):
