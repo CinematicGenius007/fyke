@@ -55,7 +55,7 @@ function command(event: KeyboardEvent): boolean {
 
 export function handleKey(event: KeyboardEvent): void {
   const model = app();
-  if (event.defaultPrevented || event.isComposing || model.state.showingAddFeed) return;
+  if (event.defaultPrevented || event.isComposing || model.state.showingAddFeed || document.querySelector(".settings-move[open]")) return;
   const catchUp = model.catchUp();
   if (catchUp) {
     if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "z") {

@@ -77,6 +77,14 @@ export interface ViewerUpdate {
 
 export type ViewerAction = "back" | "forward" | "reload";
 
+export interface DesktopPaths {
+  data: string;
+  config: string;
+  home: string | null;
+  program: string;
+  canMove: boolean;
+}
+
 export interface Transport {
   call<T = unknown>(method: string, params?: object, options?: CallOptions): Promise<T>;
   /** Live events from `since`, resuming after drops. Returns a stop function. */
@@ -96,6 +104,14 @@ export interface Transport {
   navigateViewer(token: number, action: ViewerAction): Promise<void>;
   observeViewer(update: (update: ViewerUpdate) => void): Promise<() => void>;
   dataHome(): Promise<string>;
+  observeSettings(change: () => void): Promise<() => void>;
+  desktopPaths(): Promise<DesktopPaths>;
+  openData(item: "folder" | "config"): Promise<void>;
+  chooseFolder(title: string): Promise<string | null>;
+  chooseDataFolder(): Promise<string | null>;
+  moveData(target: string, stage: (name: string) => void): Promise<void>;
+  fontFamilies(): Promise<string[]>;
+  backgroundService(action: "status" | "install" | "uninstall"): Promise<boolean>;
   importOpml(): Promise<boolean>;
   exportOpml(): Promise<void>;
 }

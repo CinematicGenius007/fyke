@@ -1,10 +1,12 @@
 // The reader pane (gui/Sources/Reader/ReaderPane.swift): the article in a centered
 // column, with its actions in the top-right corner.
-import { Show } from "solid-js";
+import { createEffect, on, onCleanup, Show } from "solid-js";
 import { app, type Article } from "../model/app";
 import { prefs } from "../model/prefs";
 import { Blocks } from "./Blocks";
 import { Discussion } from "./Discussion";
+import { float } from "./Float";
+import { TypeMenu } from "./TypeMenu";
 import { isSafeLink } from "./links";
 import { Dates } from "./format";
 import { IconButton } from "./kit/Controls";
@@ -61,9 +63,21 @@ function Column(props: { article: Article }) {
 function Actions() {
   const model = app();
   const entry = () => model.state.article!.entry;
+  let type!: HTMLButtonElement;
+  createEffect(on(() => model.state.showingType, (opened) => {
+    if (opened) float.custom(type, 308, () => <TypeMenu />);
+    else if (float.isAnchoredAt(type)) float.close();
+  }));
+  createEffect(() => {
+    if (!float.isOpen() && model.state.showingType) model.set("showingType", false);
+  });
+  onCleanup(() => {
+    if (float.isAnchoredAt(type)) float.close();
+    model.set("showingType", false);
+  });
   return (
     <div class="reader-actions">
-      <button type="button" class="type-button" title="Text and theme" onClick={() => model.set("showingType", (v) => !v)}>
+      <button ref={type} type="button" class="type-button" title="Text and theme" aria-label="Text and theme" onClick={() => model.set("showingType", (v) => !v)}>
         Aa
       </button>
       <IconButton icon="star" label={entry().starred ? "Remove star" : "Star"} color={entry().starred ? "var(--unread)" : undefined} filled={entry().starred} onClick={() => model.toggleStar()} />

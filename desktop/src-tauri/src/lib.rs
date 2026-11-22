@@ -7,6 +7,7 @@ pub mod external;
 mod opml;
 pub mod paths;
 pub mod rpc;
+mod settings;
 pub mod socket;
 pub mod testmode;
 #[cfg(any(windows, target_os = "linux"))]
@@ -23,14 +24,22 @@ use tauri::{AppHandle, Emitter, Manager, State};
 /// The event the UI listens to for the daemon's changes.
 pub const EVENT: &str = "fyke://event";
 
+#[derive(Clone)]
 struct App {
-    client: Arc<Client>,
-    events: Mutex<Option<Arc<events::Stream>>>,
+    client: Arc<Mutex<Arc<Client>>>,
+    events: Arc<Mutex<Option<Arc<events::Stream>>>>,
+    move_lock: Arc<Mutex<()>>,
+}
+
+impl App {
+    fn client(&self) -> Arc<Client> {
+        self.client.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
 }
 
 #[tauri::command]
 async fn call(app: State<'_, App>, method: String, params: Option<Value>, slow: Option<bool>) -> Result<Value, RpcError> {
-    let client = app.client.clone();
+    let client = app.client();
     let params = params.unwrap_or_else(|| Value::Object(Default::default()));
     tauri::async_runtime::spawn_blocking(move || {
         if slow.unwrap_or(false) {
@@ -50,7 +59,7 @@ fn subscribe(handle: AppHandle, app: State<'_, App>, since: i64) {
     if let Some(old) = app.events.lock().unwrap_or_else(|e| e.into_inner()).replace(stream.clone()) {
         old.stop.store(true, std::sync::atomic::Ordering::SeqCst);
     }
-    let client = app.client.clone();
+    let client = app.client();
     std::thread::spawn(move || {
         events::run(client, stream, |event| {
             let _ = handle.emit_to("main", EVENT, event);
@@ -60,12 +69,12 @@ fn subscribe(handle: AppHandle, app: State<'_, App>, since: i64) {
 
 #[tauri::command]
 fn pause(app: State<'_, App>, paused: bool) {
-    app.client.set_paused(paused);
+    app.client().set_paused(paused);
 }
 
 #[tauri::command]
 fn data_home(app: State<'_, App>) -> String {
-    app.client.home().display().to_string()
+    app.client().home().display().to_string()
 }
 
 #[tauri::command]
@@ -107,7 +116,11 @@ pub fn run() {
     };
     let exe = std::env::current_exe().unwrap_or_default();
     let program = paths::daemon_binary(|name| std::env::var(name).ok(), &exe);
-    let state = App { client: Arc::new(Client::new(home, program)), events: Mutex::new(None) };
+    let state = App {
+        client: Arc::new(Mutex::new(Arc::new(Client::new(home, program)))),
+        events: Arc::new(Mutex::new(None)),
+        move_lock: Arc::new(Mutex::new(())),
+    };
 
     let builder = tauri::Builder::default();
     #[cfg(any(windows, target_os = "linux"))]
@@ -124,6 +137,10 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(state)
+        .setup(|app| {
+            settings::watch_config(app.handle().clone(), app.state::<App>().inner().clone());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             call,
             subscribe,
@@ -133,6 +150,12 @@ pub fn run() {
             ready,
             quit,
             open_external,
+            settings::desktop_paths,
+            settings::open_data,
+            settings::background_service,
+            settings::choose_data_folder,
+            settings::move_data,
+            settings::font_families,
             opml::import_opml,
             opml::export_opml,
             #[cfg(any(windows, target_os = "linux"))]

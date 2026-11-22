@@ -17,6 +17,7 @@ import { ConfirmDialog } from "./ConfirmDialog";
 import { RoutineList, RoutineReader } from "./Routines";
 import { ReaderPane } from "./Reader";
 import { SearchPanel } from "./SearchPanel";
+import { Settings } from "./settings/Settings";
 import { ShortcutsSheet } from "./ShortcutsSheet";
 import { Sidebar } from "./Sidebar";
 import { Timeline } from "./Timeline";
@@ -54,14 +55,7 @@ export function App(props: { localFeeds: boolean }) {
       <main class="content" inert={!!model.catchUp()}>
         <Switch fallback={<Timeline />}>
           <Match when={model.state.showingSettings}>
-            <section class="subscription-settings">
-              <h2>Settings</h2>
-              <div class="subscription-row">
-                <div><strong>Your subscriptions</strong><p>Import or export as OPML</p></div>
-                <button type="button" class="outline-button" onClick={() => void model.importOpml()}>Import OPML</button>
-                <button type="button" class="outline-button" onClick={() => void model.exportOpml()}>Export</button>
-              </div>
-            </section>
+            <Settings />
           </Match>
           <Match when={model.isEmpty()}>
             <FirstRun />

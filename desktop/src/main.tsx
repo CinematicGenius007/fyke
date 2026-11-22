@@ -3,6 +3,7 @@ import { render } from "solid-js/web";
 import "./styles/fonts.css";
 import "./styles/base.css";
 import "./styles/app.css";
+import "./styles/settings.css";
 import { app } from "./model/app";
 import { prefs } from "./model/prefs";
 import { applyFonts, applyPalette, applyRadii, applyWeights } from "./theme/apply";
@@ -36,6 +37,7 @@ function followTheme() {
     });
     createEffect(() => applyWeights(prefs().ui.weights));
     createEffect(() => applyRadii(prefs().radii()));
+    createEffect(() => { document.documentElement.dataset.scrollbars = prefs().ui.scrollbars; });
   });
 }
 
@@ -45,6 +47,7 @@ async function start() {
   followTheme();
   render(() => <App localFeeds={localFeeds} />, document.getElementById("root")!);
   await app().start(() => app().openScreen(mode));
+  await transport().observeSettings(() => void prefs().load()).catch(() => undefined);
   await document.fonts.ready;
   measureLineHeights();
   // Test mode's pictures wait for the screen to settle, as the Mac's do.

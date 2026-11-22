@@ -116,6 +116,7 @@ export function allCommands(model: App): Command[] {
     },
     { id: "do.activity", group: "act", title: "Show activity", icon: "circle", shortcut: "Ctrl+0", run: () => model.set("showingActivity", true) },
     { id: "do.shortcuts", group: "act", title: "Keyboard shortcuts", icon: "keyboard", shortcut: "?", run: () => model.set("showingShortcuts", true) },
+    { id: "do.settings-agents", group: "act", title: "Settings · Agents", icon: "gearshape", run: () => model.openSettings("Agents") },
     { id: "do.settings", group: "act", title: "Settings", icon: "gearshape", shortcut: "Ctrl+,", run: () => model.openSettings() },
   );
   if (model.library.state.views.length) {

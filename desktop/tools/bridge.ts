@@ -215,6 +215,8 @@ const server = Bun.serve<Client>({
             await call("opml.import", { path, allow_private_network: process.env.FYKE_LOCAL_FEEDS === "1" }, true);
             return reply({ result: true });
           }
+          case "desktop_paths":
+            return reply({ result: { data: home, config: join(home, "config.json"), home: process.env.HOME ?? null, program, canMove: false } });
           case "data_home":
             return reply({ result: home });
           case "ready":

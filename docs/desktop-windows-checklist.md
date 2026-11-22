@@ -37,6 +37,16 @@ After closing Fyke, stop the test daemon with `& $env:FYKE_BIN daemon stop`. Rep
 3. Repeat the launch with `$env:FYKE_ADDRESS = "http://127.0.0.1:1420/"`. The reader shows a private-address refusal and never loads content from that address. Repeat with `http://[::1]/`.
 4. Remove the two variables with `Remove-Item Env:FYKE_SCREEN,Env:FYKE_ADDRESS`. Open a web-linked article and use Open page. Confirm that Article returns to the same article and Open in browser opens the address in your default browser. Ctrl-click an article link and confirm it opens in your browser while the article stays visible.
 
+## Native Settings
+
+Use a disposable Windows user account for the data move and sign-in tests, since they change that account's Fyke data pointer and startup registration.
+
+1. With `FYKE_HOME` set to the scratch home above, open Settings with Ctrl+,. Click Reading, open the Reading font picker, and search for an installed Windows font such as Consolas. Select it, set Titles weight to Bolder, quit Fyke, and reopen it. Reading retains the font and the separate weight. Select a different theme. The temporary font clears and the weight stays Bolder.
+2. In Agents, verify the MCP configuration names the bundled or overridden `fyke.exe`. If Claude Code is installed, click Choose next to Profile folder, cancel the dialog, and verify the profile stays the same. Choose a disposable existing profile folder, then click Use default and verify the displayed path resets.
+3. With the app and scratch daemon stopped, clear the override with `Remove-Item Env:FYKE_HOME`. Reopen Fyke. In Settings · Data, verify the data folder is `%LOCALAPPDATA%\Fyke`. Add one feed, open an article, and star it. Click Change and cancel the folder dialog. The data folder and star stay in place.
+4. Click Change again, pick an empty scratch directory with spaces in its name, and accept Move data. Confirm the progress dialog closes, the new path appears in Settings, and the feed and star survive both the move and a full relaunch. Open the data folder and the settings file with their respective Open buttons. Try a location you cannot write to and confirm Fyke reports the refusal and can still read the articles.
+5. In Settings · General, turn on Keep updating in the background. `& $env:FYKE_BIN service status` prints `installed`. Close Fyke and check the daemon still responds to `& $env:FYKE_BIN status`. Reopen Settings, turn the switch off, and confirm `service status` now prints `not installed`. When finished, close Fyke and run `& $env:FYKE_BIN daemon stop`.
+
 ## Later phases
 
 Narrator, IME, multiple monitors, display scaling, notification activation, and installer upgrades and uninstalls are planned. Their checks belong here when the corresponding features are available.

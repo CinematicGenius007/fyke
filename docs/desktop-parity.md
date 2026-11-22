@@ -62,7 +62,7 @@ UI modules live in `desktop/src`, Rust in `desktop/src-tauri/src`. Logic ported 
 | F9 | Tests/ReaderLogicTests/LogicTests.swift | 7 suites, 22 tests | `desktop/tests/unit/logic.test.ts` (`bun test`) | done | every Swift case ported, case for case, plus one more |
 | F10 | Tokens.swift (generated) | Token values | `src/theme/palette.ts` (`tokens`), checked value for value against `gui/tokens.css` | done | `theme.test.ts` › the light and dark tokens are gui/tokens.css |
 | F11 | Theme.swift | Palettes (Newsprint and Terminal derived by mixing), hex, contrast, font resolving, weight ladder | `src/theme/color.ts`, `src/theme/palette.ts`, `src/theme/fonts.ts` | built | palettes and mixing: `theme.test.ts` (OKLab mix equals SwiftUI's printed values). Font resolving and the weight ladder are planned. |
-| F12 | Prefs.swift | `ui` settings in config.json, themes, temporary fonts, a debounced save of 300 ms, reload on change | `src/model/prefs.ts`; Rust `config_watch.rs` (file watch that emits an event) | planned | |
+| F12 | Prefs.swift | `ui` settings in config.json, themes, temporary fonts, a debounced save of 300 ms, reload on change | `src/model/prefs.ts`; Rust `settings.rs` (file watch that emits an event) | built | `settings.spec.ts` checks persistence, independent font weights and temporary font clearing. The native shell watches `config.json` for file changes. |
 | F13 | Daemon.swift | Socket client, starting the daemon, timeouts, the event thread | Rust `rpc.rs`, `socket.rs`, `events.rs`, `paths.rs`; UI `src/transport/{index,tauri,bridge}.ts` | done | `cargo test` (rpc, events, paths); Playwright `harness.spec.ts` |
 | F14 | Models.swift | Wire types and their tolerant decoding | `src/model/types.ts`, `src/model/decode.ts` | built | `tsc`; decoded by every Playwright scenario in `reading.spec.ts` |
 | F15 | AppModel.swift | Places, selection, entries, marks, reload, events, data move | `src/model/app.ts` | built | Playwright `reading.spec.ts`: places, open and mark read, Esc and Return, j and k, star and unread, divider. Search, data move and the palette are planned (phase 4) |
@@ -75,12 +75,12 @@ UI modules live in `desktop/src`, Rust in `desktop/src-tauri/src`. Logic ported 
 | F22 | Kit.swift | Metrics, motion, buttons, chips, tabs, inline state, spinner, key hints, fields | `src/ui/kit/*.tsx`, `src/styles/kit.css` | built | Count, section label, rule, spinner, symbol and icon buttons, chips, dot (`src/ui/kit/Controls.tsx`). Tabs, fields and key hints are planned |
 | F23 | Controls.swift | Glyphs, icon buttons, float layer, menus, select, checkbox, themed scrollbar, right-click menus, window buttons | `src/ui/controls/*.tsx`; window buttons in `src/ui/Chrome.tsx` (D3, D4) | built | Glyphs and drawn SF equivalents (`src/ui/kit/Icon.tsx`, D20). Float layer, menus with submenus and checks, the checkbox and right-click menus (`src/ui/Float.tsx`; the webview's own menu shows only over text fields and selected text). Select and window buttons are planned |
 | F24 | Sidebar.swift | Sidebar rows, tree, drag and drop, rename, menus, status line, confirmations, shortcuts sheet, move dialog | `src/ui/Sidebar.tsx`, `SidebarTree.tsx`, `ConfirmDialog.tsx`, `ShortcutsSheet.tsx`, `MoveDialog.tsx` | built | Rows, tree, status line, Routines row (`src/ui/Sidebar.tsx`), shortcuts sheet (`src/ui/ShortcutsSheet.tsx`), rename in place, the view, folder and feed menus with Move to, and the delete-folder and remove-feed confirmations (`src/ui/ConfirmDialog.tsx`), checked in `manage.spec.ts`. The menus' brief, catch-up and routine items join with those features in phase 5; restoring a removed view also points its routines back at it then. Feed and folder drag-and-drop is checked in `manage.spec.ts`. The data move dialog is planned |
-| F25 | ReaderPane.swift | Article column, actions, blocks, images, text-and-theme menu | `src/ui/Reader.tsx`, `Blocks.tsx` (DOM nodes with `textContent` only), `TypeMenu.tsx` | built | Article column, actions, blocks as text nodes ("feed content is text, never markup" in `reading.spec.ts`), images on request. The text-and-theme menu is planned |
+| F25 | ReaderPane.swift | Article column, actions, blocks, images, text-and-theme menu | `src/ui/Reader.tsx`, `Blocks.tsx` (DOM nodes with `textContent` only), `TypeMenu.tsx` | built | Article blocks render as text and DOM elements in `Blocks.tsx` (`reading.spec.ts`). `settings.spec.ts` checks the text menu and its Reading shortcut. |
 | F26 | WebPane.swift | Web viewer and its address guard | Rust `web.rs` (a second webview with no IPC, an incognito profile, and the guard after DNS); `src/ui/WebPane.tsx` (the bar) | built | `web-pane.spec.ts` checks open and back. Rust builds the WebView2 implementation and unit-tests the network guard. Native navigation and isolation are in the [Windows checklist](desktop-windows-checklist.md). |
 | F27 | Discussion.swift | Hacker News thread under the article | `src/ui/Discussion.tsx` | built | `discussion.spec.ts` verifies lazy loading, text and links from blocks, and folded replies. |
 | F28 | Ask.swift | Ask your feeds | `src/ui/Ask.tsx`, `src/model/library.ts` | built | `ask.spec.ts` checks cited answers, follow-ups and starting a routine from a question. |
 | F29 | Activity.swift | Status line, Activity popover, feed health | `src/ui/Activity.tsx`, `src/model/library.ts` | built | `activity.spec.ts` checks the popover, a failing feed, its cause and retry. |
-| F30 | StoragePane.swift | Settings · Data | `src/ui/settings/Data.tsx` | planned | |
+| F30 | StoragePane.swift | Settings · Data | `src/ui/settings/Data.tsx` | built | `settings.spec.ts` reads disk usage, changes retention and cancels trimming. Native folder move and file opening are in the [Windows checklist](desktop-windows-checklist.md). |
 | F31 | CatchUp.swift | Catch-up card | `src/model/catchUp.ts`, `src/ui/CatchUp.tsx` | built | `catch-up.spec.ts` checks keyboard triage, daemon marks, undo and the completed state. |
 | F32 | Today.swift | Brief list, Today reader, back bar | `src/ui/Today.tsx` | built | `briefs.spec.ts` checks writing on request, selecting a brief and opening a cited article. |
 | F33 | Views.swift | View sentence, editors, view menu | `src/ui/ViewSentence.tsx`, `Sidebar.tsx` | built | `views.spec.ts` checks editing, undo, scope, an empty unread view, and revision conflicts. |
@@ -90,8 +90,8 @@ UI modules live in `desktop/src`, Rust in `desktop/src-tauri/src`. Logic ported 
 | F37 | Brief.swift | Citations, source list, "made with", artifact column | `src/ui/Artifact.tsx` | built | `briefs.spec.ts` and `ask.spec.ts` check the shared citation renderer in `src/ui/Artifact.tsx`. |
 | F38 | RecipeView.swift | Recipe edit, try, history, reset | `src/ui/Recipe.tsx` | built | `briefs.spec.ts` checks saving, history, reset with undo, and trying unsaved text. |
 | F39 | Routines.swift | Routine list, editor, dry run | `src/ui/Routines.tsx` | built | `routines.spec.ts` checks editing, preview, running, pause and resume, and undo. |
-| F40 | SettingsView.swift | Settings shell; General, Reading, Agents | `src/ui/settings/{Settings,General,Reading,Agents}.tsx` | planned | |
-| F41 | TokensPane.swift | Theme gallery, new theme, token editor, color and font pickers | `src/ui/settings/Tokens.tsx`, `ColorPanel.tsx`, `FontPicker.tsx` | planned | |
+| F40 | SettingsView.swift | Settings shell; General, Reading, Agents | `src/ui/settings/{Settings,General,Reading,Agents}.tsx` | built | `settings.spec.ts` checks routing, General preferences and independent font weights. The native sign-in switch and writer profile picker are in the Windows checklist. |
+| F41 | TokensPane.swift | Theme gallery, new theme, token editor, color and font pickers | `src/ui/settings/Tokens.tsx` and `Reading.tsx` | built | `settings.spec.ts` creates a custom theme, edits its ground color, activates it and deletes it. |
 | F42 | (none) | Notification on `--notify`, single instance, service toggle | Rust `notify.rs`, `instance.rs`, `service.rs` | planned | |
 
 ## S: Screens and states
@@ -131,11 +131,11 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 | S29 | First run (no feeds) | `first-run` (new) | planned | |
 | S30 | Daemon unavailable ("The background service did not start"), outdated daemon replaced, config.json mistake banner | `unavailable` (new) | planned | |
 | S31 | Empty, failed and in-progress states for every list (feed, folder, view, All, Starred, Today, routines, search) | (per list, above) | planned | |
-| S32 | Settings · General | `settings-general` | planned | |
-| S33 | Settings · Reading (font family and weight for each kind of text) | `settings-reading`, `settings-reading-weights` | planned | |
-| S34 | Settings · Tokens (gallery, new theme, token editor, color panel, font picker) | `settings-tokens` | planned | |
-| S35 | Settings · Agents (writers, profiles, agent tier) | `settings-agents` | planned | |
-| S36 | Settings · Data (storage, trimming, data move with its stages and failures) | `settings-data` | planned | |
+| S32 | Settings · General | `settings-general` | built | `settings.spec.ts` verifies saving fetch, link and image settings. Pictures match 97.405% (light) and 97.319% (dark). Text spacing, controls and background-service state differ. |
+| S33 | Settings · Reading (font family and weight for each kind of text) | `settings-reading`, `settings-reading-weights` | built | `settings.spec.ts` selects a font and saves two weights. Pictures match 96.197% (light) and 96.053% (dark). Native sliders, selects and row alignment differ. The weights picture pair is planned. |
+| S34 | Settings · Tokens (gallery, new theme, token editor, color panel, font picker) | `settings-tokens` | built | `settings.spec.ts` exercises the theme and color editor. Pictures match 96.720% (light) and 96.611% (dark). Tab, row and button spacing differ. |
+| S35 | Settings · Agents (writers, profiles, agent tier) | `settings-agents` | built | Settings opens Agents from the palette. Pictures match 96.829% (light) and 96.731% (dark). System paths, prose spacing and control positions differ. Native profile checks are in the Windows checklist. |
+| S36 | Settings · Data (storage, trimming, data move with its stages and failures) | `settings-data` | built | The storage scenario checks retention and cancel. Pictures match 96.174% (light) and 96.087% (dark). Scratch paths, byte counts and row spacing differ. Native move is in the Windows checklist. |
 | S37 | Built-in themes Newsprint and Terminal on the reading screens (S4, S7) | `all-newsprint`, `all-terminal` (new) | planned | |
 | S38 | Every control in every state: rest, hover, pressed, focus ring, selected, disabled; cursors; motion of 120–200 ms that stops under `prefers-reduced-motion`; `forced-colors` | `controls` (a test page in the desktop app only) | planned | |
 | S39 | Window chrome: caption buttons, drag region, snap layouts (D3, D4) | Windows checklist | planned | |
@@ -146,7 +146,7 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 
 | Id | Mac | Windows and Linux | Action | Clash and choice | Status | Evidence |
 |---|---|---|---|---|---|---|
-| K1 | ⌘, | Ctrl+, | Settings | | planned | |
+| K1 | ⌘, | Ctrl+, | Settings | | done | `settings.spec.ts` checks Ctrl+, and Esc. |
 | K2 | ⌘N | Ctrl+N | Add feed | WebView2 opens a new window. Fyke prevents the default. | done | `add-feed.spec.ts` opens, previews and subscribes via Ctrl+N. |
 | K3 | ⌘S | Ctrl+S | Save search as view (and Save in the routine editor) | WebView2 offers to save the page. Fyke prevents the default. | done | `search.spec.ts` saves the search as a view and `routines.spec.ts` saves an edited routine. |
 | K4 | ⌘Z | Ctrl+Z | Undo (text field first, then catch-up, then the undo stack) | | built | `catch-up.spec.ts`, `views.spec.ts`, `search.spec.ts`, `palette.spec.ts`. |
@@ -170,7 +170,7 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 | K22 | ← ↓ → (catch-up) | same | Skip, later, read now | | done | `catch-up.spec.ts` verifies all three against the daemon. |
 | K23 | — | Ctrl+P, Ctrl+U, Ctrl+Shift+I, F12, Ctrl+wheel and Ctrl+± zoom, the context menu | Webview defaults | Fyke prevents them in release builds (print, view source, devtools, zoom, and the browser's own menu). Fyke's right-click menus replace the context menu. | planned | |
 | K24 | Key hints shown in the UI ("⌘K", "⌘J", "⌘Z" in the toast, the shortcuts sheet, palette shortcuts) | "Ctrl+K", "Ctrl+J", "Ctrl+Z", … | Text | It is drawn from one table (`src/keys.ts`), so the hints and the bindings never differ. | planned | |
-| K25 | Keys while a dialog shows, while renaming, in the palette, in search and in catch-up | same rules | Blocking | Only Esc in Settings. | in progress | Dialogs, menus and renaming: `manage.spec.ts`; the palette: `palette.spec.ts`; search: `search.spec.ts`. Catch-up: `catch-up.spec.ts`. Settings is planned |
+| K25 | Keys while a dialog shows, while renaming, in the palette, in search and in catch-up | same rules | Blocking | Only Esc in Settings. | built | `manage.spec.ts`, `palette.spec.ts`, `search.spec.ts`, and `catch-up.spec.ts` exercise modal keys. `settings.spec.ts` checks that reader keys stay out of Settings. |
 
 ## U: Undoable actions
 
@@ -192,16 +192,16 @@ Folder delete and feed removal are confirmations (D13), as on the Mac.
 | Id | Mac | Windows | Linux | Status | Evidence |
 |---|---|---|---|---|---|
 | C1 | "Add a site you like. Everything stays on this Mac." | "… on this PC." | "… on this computer." | built | FirstRun in `src/ui/AddFeed.tsx`. |
-| C2 | "Feeds, articles and settings stay in one folder on this Mac." | "… on this PC." | "… on this computer." | planned | |
-| C3 | "Fyke hands the selected articles and your recipe to an agent already on this Mac. …" | "… on this PC. …" | "… on this computer. …" | planned | |
-| C4 | "Not found on this Mac" (writer status) | "Not found on this PC" | "Not found on this computer" | planned | |
-| C5 | "Starts when you log in, even with this window closed" | "Starts when you sign in, …" | "Starts when you log in, …" | planned | |
-| C6 | "⌘-click always uses your browser" | "Ctrl+click always uses your browser" | same as Windows | planned | |
-| C7 | Paths shown with `~` (data folder, settings file) | Full path with `%LOCALAPPDATA%` written out | `~` | planned | |
+| C2 | "Feeds, articles and settings stay in one folder on this Mac." | "… on this PC." | "… on this computer." | built | `src/platform.ts` supplies the copy in the Data pane. |
+| C3 | "Fyke hands the selected articles and your recipe to an agent already on this Mac. …" | "… on this PC. …" | "… on this computer. …" | built | `src/platform.ts` supplies the copy in the Agents pane. |
+| C4 | "Not found on this Mac" (writer status) | "Not found on this PC" | "Not found on this computer" | built | `src/platform.ts` supplies the fallback. Writer problems come from the daemon. |
+| C5 | "Starts when you log in, even with this window closed" | "Starts when you sign in, …" | "Starts when you log in, …" | built | The General pane uses sign in on Windows and log in on Linux. |
+| C6 | "⌘-click always uses your browser" | "Ctrl+click always uses your browser" | same as Windows | built | The General pane shows the Ctrl-click hint. |
+| C7 | Paths shown with `~` (data folder, settings file) | Full path with `%LOCALAPPDATA%` written out | `~` | built | Data shows the Windows path in full and shortens paths under the home directory on Linux. |
 | C8 | The default browser's own name (`DefaultBrowser`) | Read from the registry's `http` association | Read from `xdg-settings get default-web-browser` | planned | |
 | C9 | Writer and daemon copy ("on this Mac") that comes from the daemon | Already says "this PC" or "this computer" | same | planned | |
 
-All of these come from one module, `src/platform.ts`, which reads the system from Tauri once at start.
+All of these come from one module, `src/platform.ts`, which uses the webview’s platform at startup.
 
 ## X: Systems, packaging and checks
 

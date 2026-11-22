@@ -186,6 +186,10 @@ impl Client {
         &self.home
     }
 
+    pub fn program(&self) -> &Path {
+        &self.program
+    }
+
     pub fn socket_path(&self) -> PathBuf {
         self.home.join(crate::paths::SOCKET_FILE)
     }

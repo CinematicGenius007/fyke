@@ -1767,8 +1767,7 @@ svg.icon .dots circle {
 }
 .add-feed-actions button,
 .add-primary,
-.first-run button,
-.subscription-row button {
+.first-run button {
   cursor: pointer;
   transition: opacity 120ms ease-out;
 }
@@ -1836,26 +1835,8 @@ svg.icon .dots circle {
 .first-run-import button {
   color: var(--unread);
 }
-.subscription-settings {
-  max-width: 640px;
-  margin: 72px auto;
-  padding: 0 24px;
-}
-.subscription-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 24px;
-}
-.subscription-row div {
-  flex: 1;
-}
-.subscription-row p {
-  margin-top: 4px;
-  color: var(--muted);
-}
 @media (prefers-reduced-motion: reduce) {
-  .add-feed-actions button, .add-primary, .first-run button, .subscription-row button {
+  .add-feed-actions button, .add-primary, .first-run button {
     transition: none;
   }
 }

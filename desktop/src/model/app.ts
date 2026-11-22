@@ -32,6 +32,8 @@ export type Place =
 export const samePlace = (a: Place, b: Place) => a.kind === b.kind && ("id" in a ? a.id : 0) === ("id" in b ? b.id : 0);
 const placeId = (place: Place) => ("id" in place ? place.id : null);
 
+export type SettingsTab = "General" | "Reading" | "Tokens" | "Agents" | "Data";
+
 export type Renaming = { kind: "feed" | "folder" | "view"; id: number } | null;
 
 export type Confirmation = { kind: "deleteFolder"; folder: Folder } | { kind: "removeFeed"; feed: Feed } | null;
@@ -66,6 +68,8 @@ interface State {
   showingType: boolean;
   showingShortcuts: boolean;
   showingSettings: boolean;
+  settingsTab: SettingsTab;
+  editingTheme: string | null;
   showingActivity: boolean;
   confirmation: Confirmation;
   renaming: Renaming;
@@ -119,6 +123,8 @@ function createApp() {
     showingType: false,
     showingShortcuts: false,
     showingSettings: false,
+    settingsTab: "General",
+    editingTheme: null,
     showingActivity: false,
     confirmation: null,
     renaming: null,
@@ -321,6 +327,7 @@ function createApp() {
   }
 
   async function start(openScreen: () => Promise<void> = async () => undefined) {
+    stopEvents?.();
     await replaceOutdatedDaemon();
     await prefs().load();
     try {
@@ -878,8 +885,12 @@ function createApp() {
     }
   }
 
-  function openSettings() {
-    set("showingSettings", true);
+  function openSettings(tab?: SettingsTab) {
+    batch(() => {
+      closeWeb();
+      if (tab) set("settingsTab", tab);
+      set("showingSettings", true);
+    });
   }
 
   // MARK: Marking many
@@ -1013,6 +1024,11 @@ function createApp() {
         if (mode.FYKE_PIN_CITATION) set("pinCitation", Number(mode.FYKE_PIN_CITATION));
         if (mode.FYKE_SCREEN === "recipe") openRecipe();
         break;
+      case "settings": {
+        const tab = ["General", "Reading", "Tokens", "Agents", "Data"].find((item) => item.toLowerCase() === mode.FYKE_TAB?.toLowerCase());
+        openSettings(tab as SettingsTab | undefined);
+        break;
+      }
       case "web":
         if (mode.FYKE_ADDRESS) openLink(mode.FYKE_ADDRESS);
         break;

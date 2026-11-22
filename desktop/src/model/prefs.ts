@@ -194,11 +194,14 @@ function createPrefs() {
   const [systemIsDark, setSystemIsDark] = createSignal(false);
   const [fileProblem, setFileProblem] = createSignal<string | null>(null);
   const [fullText, setFullText] = createSignal(true);
+  const [retention, setRetention] = createSignal(0);
   /** Test mode's theme, for this run only (D18). It is never saved. */
   let forcedTheme: string | null = null;
   /** False until `ui` holds what config.json says, and while the file is broken. */
   let readFile = false;
   let pendingSave: ReturnType<typeof setTimeout> | null = null;
+  let saving = false;
+  let patch: Partial<UISettings> = {};
   let lastTheme = "light";
 
   const active = () => activeTheme(ui, systemIsDark());
@@ -219,6 +222,7 @@ function createPrefs() {
     try {
       const reply = (await transport().call("config.get")) as Record<string, unknown>;
       setFullText(reply.full_text !== false);
+      setRetention(typeof reply.remove_read_after_days === "number" ? reply.remove_read_after_days : 0);
       const problem = typeof reply.config_error === "string" ? reply.config_error : null;
       setFileProblem(problem);
       if (problem) {
@@ -226,7 +230,7 @@ function createPrefs() {
         return;
       }
       // A change waiting to be saved is newer than what the file held.
-      if (pendingSave) return;
+      if (pendingSave || saving) return;
       setUI(reconcile(withTestMode(decodeUI(reply.ui))));
       lastTheme = active();
       readFile = true;
@@ -237,26 +241,55 @@ function createPrefs() {
   }
 
   function save() {
-    if (!readFile) return;
+    if (!readFile || forcedTheme) return;
     if (pendingSave) clearTimeout(pendingSave);
-    pendingSave = setTimeout(async () => {
-      const settings = structuredClone(unwrap(ui));
-      if (forcedTheme) return void (pendingSave = null);
-      try {
-        await transport().call("config.set", { ui: settings });
-      } catch (error) {
-        setFileProblem(error instanceof Error ? error.message : String((error as { message?: string }).message ?? error));
-      }
+    pendingSave = setTimeout(() => {
       pendingSave = null;
+      if (!saving) void flush();
     }, 300);
+  }
+
+  async function setConfig(params: object) {
+    try {
+      await transport().call("config.set", params);
+      return true;
+    } catch (error) {
+      setFileProblem(error instanceof Error ? error.message : String(error));
+      return false;
+    }
+  }
+
+  async function flush() {
+    if (!Object.keys(patch).length) return;
+    saving = true;
+    const changes = patch;
+    patch = {};
+    await setConfig({ ui_patch: changes });
+    saving = false;
+    if (!pendingSave) void flush();
   }
 
   /** Changes settings, then saves them after 300 ms of quiet. */
   function update(change: (draft: UISettings) => void) {
-    const draft = structuredClone(unwrap(ui));
+    const before = structuredClone(unwrap(ui));
+    const draft = structuredClone(before);
     change(draft);
     setUI(reconcile(draft));
     clearFontsIfThemeChanged();
+    if (!readFile || forcedTheme) return;
+    const settings = structuredClone(unwrap(ui));
+    for (const key of Object.keys(settings) as (keyof UISettings)[]) {
+      if (JSON.stringify(before[key]) === JSON.stringify(settings[key])) continue;
+      if (key === "fonts" || key === "weights") {
+        const changes = { ...patch[key] };
+        for (const slot of ["reading", "title", "ui", "code"] as const) {
+          if (before[key][slot] !== settings[key][slot]) Object.assign(changes, { [slot]: settings[key][slot] ?? null });
+        }
+        Object.assign(patch, { [key]: changes });
+      } else {
+        Object.assign(patch, { [key]: settings[key] });
+      }
+    }
     save();
   }
 
@@ -267,6 +300,13 @@ function createPrefs() {
     active,
     fileProblem,
     fullText,
+    retention,
+    async setFullText(on: boolean) {
+      if (await setConfig({ full_text: on })) setFullText(on);
+    },
+    async setRetention(days: number) {
+      if (await setConfig({ remove_read_after_days: days })) setRetention(days);
+    },
     systemIsDark,
     setSystemIsDark(dark: boolean) {
       setSystemIsDark(dark);

@@ -1,6 +1,7 @@
 // The app's transport: Tauri commands in src-tauri/src/lib.rs.
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
 import { type CallOptions, type DaemonEvent, RPCFailure, type Transport, type ViewerUpdate } from "./index";
 
 const EVENT = "fyke://event";
@@ -32,6 +33,14 @@ export function tauriTransport(): Transport {
     ready: () => invoke("ready"),
     quit: (code) => invoke("quit", { code }),
     dataHome: () => invoke("data_home"),
+    observeSettings: (change) => listen("fyke://config", change),
+    desktopPaths: () => invoke("desktop_paths"),
+    openData: (item) => invoke("open_data", { item }),
+    chooseFolder: (title) => open({ title, directory: true }),
+    chooseDataFolder: () => invoke("choose_data_folder"),
+    moveData: (target, stage) => invoke("move_data", { target, stages: new Channel<string>(stage) }),
+    fontFamilies: () => invoke("font_families"),
+    backgroundService: (action) => invoke("background_service", { action }),
     openViewer: (token, url, bounds) => navigator.userAgent.includes("Macintosh")
       ? Promise.reject(new Error("Open the Windows or Linux app to read pages here."))
       : invoke("open_viewer", { token, url, bounds }),

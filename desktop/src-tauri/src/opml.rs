@@ -9,7 +9,7 @@ use tauri_plugin_dialog::DialogExt;
 
 #[tauri::command]
 pub(crate) async fn import_opml(window: WebviewWindow, app: State<'_, App>) -> Result<bool, RpcError> {
-    let client = app.client.clone();
+    let client = app.client();
     tauri::async_runtime::spawn_blocking(move || {
         let path = window.dialog().file().set_parent(&window).add_filter("OPML", &["opml", "xml"]).blocking_pick_file();
         let Some(path) = path else { return Ok(false) };
@@ -24,7 +24,7 @@ pub(crate) async fn import_opml(window: WebviewWindow, app: State<'_, App>) -> R
 
 #[tauri::command]
 pub(crate) async fn export_opml(window: WebviewWindow, app: State<'_, App>) -> Result<(), RpcError> {
-    let client = app.client.clone();
+    let client = app.client();
     tauri::async_runtime::spawn_blocking(move || {
         let path =
             window.dialog().file().set_parent(&window).add_filter("OPML", &["opml"]).set_file_name("feeds.opml").blocking_save_file();

@@ -37,7 +37,7 @@ export interface Screen {
 }
 
 export interface App {
-  open(screen?: Screen, theme?: "light" | "dark"): Promise<Page>;
+  open(screen?: Screen, theme?: "light" | "dark" | null): Promise<Page>;
   /** Saves the window as `name`.png in zig-out/desktop-snapshots. */
   snapshot(name: string, locator?: Locator): Promise<string>;
 }
@@ -76,7 +76,8 @@ export const test = base.extend<{ app: App }, { daemon: Daemon }>({
   app: async ({ page, daemon }, use) => {
     await use({
       async open(screen = {}, theme = "light") {
-        const query = new URLSearchParams({ bridge: String(daemon.bridge.port), token: daemon.bridge.token, FYKE_THEME: theme, ...screen });
+        const query = new URLSearchParams({ bridge: String(daemon.bridge.port), token: daemon.bridge.token, ...screen });
+        if (theme) query.set("FYKE_THEME", theme);
         await page.goto(`/?${query}`);
         await expect(page.locator("html[data-ready]")).toBeAttached();
         return page;

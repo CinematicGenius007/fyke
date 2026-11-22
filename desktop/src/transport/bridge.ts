@@ -79,6 +79,20 @@ export function bridgeTransport(page: URL): Transport {
     ready: () => send({ op: "ready" }),
     quit: (code) => send({ op: "quit", code }),
     dataHome: () => send({ op: "data_home" }),
+    observeSettings: async (change) => {
+      window.addEventListener("focus", change);
+      return () => window.removeEventListener("focus", change);
+    },
+    desktopPaths: () => send({ op: "desktop_paths" }),
+    openData: async () => { throw new Error("Open the desktop app to view local files."); },
+    chooseFolder: async () => null,
+    chooseDataFolder: async () => null,
+    moveData: async () => { throw new Error("Open the desktop app to move the data folder."); },
+    fontFamilies: async () => [],
+    backgroundService: async (action) => {
+      if (action === "status") return false;
+      throw new Error("Open the desktop app to change background updating.");
+    },
     openViewer: async () => { throw new Error("Open the Windows or Linux app to read pages here."); },
     closeViewer: async () => undefined,
     positionViewer: async () => undefined,
