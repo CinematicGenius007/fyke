@@ -2,6 +2,7 @@ import { createSignal, For, Match, onCleanup, onMount, Show, Switch } from "soli
 import { app, words } from "../model/app";
 import { type FeedCandidate, previewFeeds, subscribeFeeds } from "../model/subscriptions";
 import { RPCFailure, transport } from "../transport";
+import { thisComputer } from "../platform";
 import { Rule } from "./kit/Controls";
 import { Icon } from "./kit/Icon";
 
@@ -266,11 +267,10 @@ export function AddFeed(props: { localFeeds: boolean }) {
 export function FirstRun() {
   const model = app();
   const [address, setAddress] = createSignal("");
-  const device = navigator.userAgent.includes("Windows") ? "PC" : "computer";
   return (
     <div class="first-run">
       <h1>Nothing to read yet.</h1>
-      <p>Add a site you like. Everything stays on this {device}.</p>
+      <p>Add a site you like. Everything stays on {thisComputer}.</p>
       <form onSubmit={(event) => {
         event.preventDefault();
         model.set("addFeedAddress", address());

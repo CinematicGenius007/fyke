@@ -2,16 +2,13 @@
 // running. The app asks its api_version, stops it when it is older than its own, and
 // the next call starts the current one (app.ts `replaceOutdatedDaemon`, as the Mac's
 // AppModel does). Here an older daemon is a stand-in on the socket.
-import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
 import { createServer, type Socket } from "node:net";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { expect, test } from "@playwright/test";
-import { firstLine, fyke, repo } from "./fixtures";
+import { ownHome } from "./fixtures";
 
 test("an older daemon is stopped and the current one takes its place", async ({ page }) => {
-  const home = mkdtempSync(process.platform === "win32" ? join(process.env.TEMP ?? ".", "fyke-o-") : "/tmp/fyke-o-");
   const asked: string[] = [];
   const open = new Set<Socket>();
   const old = createServer((socket) => {
@@ -33,12 +30,10 @@ test("an older daemon is stopped and the current one takes its place", async ({ 
       }
     });
   });
-  await new Promise<void>((done) => old.listen(join(home, "fyked.sock"), done));
-  const env = { ...process.env, FYKE_HOME: home, FYKE_BIN: fyke, FYKE_HEADLESS: "1" } as Record<string, string>;
-  const bridge = spawn("bun", [join(repo, "desktop/tools/bridge.ts"), "--port", "0"], { env, stdio: ["ignore", "pipe", "pipe"] });
+  const own = await ownHome((home) => new Promise<void>((done) => old.listen(join(home, "fyked.sock"), done)));
+  const { port, token } = own;
   try {
-    const { port, token } = JSON.parse(await firstLine(bridge, "bridge.ts")) as { port: number; token: string };
-    await page.goto(`/?bridge=${port}&token=${token}&FYKE_THEME=light`);
+    await page.goto(own.url({ FYKE_THEME: "light" }));
     await expect(page.locator("html[data-ready]")).toBeAttached({ timeout: 15_000 });
     expect(asked.slice(0, 2)).toEqual(["stats.get", "daemon.stop"]);
     const stats = await page.evaluate(async ({ port, token }) => {
@@ -54,9 +49,7 @@ test("an older daemon is stopped and the current one takes its place", async ({ 
     expect(stats.api_version).toBe(2);
     await expect(page.getByRole("button", { name: "All", exact: true })).toBeVisible();
   } finally {
-    bridge.kill();
     old.close();
-    spawnSync(fyke, ["daemon", "stop"], { env, timeout: 30_000 });
-    rmSync(home, { recursive: true, force: true });
+    own.stop();
   }
 });

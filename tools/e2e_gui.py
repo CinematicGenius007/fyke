@@ -470,6 +470,18 @@ def unread_snapshot(name, screen):
 
 check("shot:feed", tags=["feed", "snapshots"])(lambda: unread_snapshot("feed", "feed"))
 check("shot:view-empty", tags=["view-empty", "snapshots"])(empty_view_snapshot)
+def first_run_snapshot():
+    """A picture of the first run: a data folder of its own with no feeds, whose daemon
+    stops again after."""
+    empty = tempfile.mkdtemp(prefix="fyke-f-", dir=TMP)
+    try:
+        snapshot("first-run", {"FYKE_HOME": empty})
+    finally:
+        subprocess.run([str(app / "fyke"), "daemon", "stop"], env=dict(env, FYKE_HOME=empty), capture_output=True, timeout=60)
+        shutil.rmtree(empty, ignore_errors=True)
+
+
+check("shot:first-run", tags=["first-run", "snapshots"])(first_run_snapshot)
 for theme in ["newsprint", "terminal"]:
     check(f"shot:all-{theme}", tags=[f"all-{theme}", "themes", "snapshots"])(lambda theme=theme: theme_snapshot(theme))
 

@@ -1844,9 +1844,16 @@ svg.icon .dots circle {
   align-items: center;
   gap: 8px;
 }
-.first-run .feed-address,
-.first-run .add-primary {
+.first-run .feed-address {
   height: 40px;
+  padding-left: 10px;
+}
+.first-run .feed-address::placeholder {
+  color: color-mix(in srgb, var(--ink) 45%, transparent);
+}
+.first-run .add-primary {
+  height: 29px;
+  font-size: 14px;
 }
 .first-run-import {
   gap: 4px;
