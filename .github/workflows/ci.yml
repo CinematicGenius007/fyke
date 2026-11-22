@@ -277,6 +277,8 @@ jobs:
           } catch {
             Write-Host "Using the runner's Edge driver: $_"
           }
+          # Earlier steps launch the app; one left running takes the launch over.
+          Get-Process Fyke.App, fyke, msedgewebview2 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "stopping $($_.Name) $($_.Id)"; Stop-Process $_ -Force }
           python tools/desktop_smoke.py --app desktop/src-tauri/target/release/Fyke.App.exe --native-driver $driver --fyke desktop/src-tauri/binaries/fyke-x86_64-pc-windows-msvc.exe
 
       - name: Smoke test (Linux)

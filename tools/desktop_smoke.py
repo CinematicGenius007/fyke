@@ -74,6 +74,10 @@ def wait_for(probe, seconds=30):
 
 home = tempfile.mkdtemp(prefix="fyke-smoke-")
 env = dict(os.environ, FYKE_HOME=home)
+if sys.platform == "win32":
+    # A profile of its own: WebView2 joins any browser process already using the app's
+    # profile, and that process never opens the debugging port msedgedriver asks for.
+    env["WEBVIEW2_USER_DATA_FOLDER"] = os.path.join(home, "webview2")
 command = [args.driver, "--port", str(port)]
 if args.native_driver:
     command += ["--native-driver", args.native_driver]
