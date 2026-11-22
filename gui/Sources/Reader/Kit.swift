@@ -222,11 +222,17 @@ private struct SymbolBody: View {
     var body: some View {
         configuration.label
             .foregroundStyle(enabled ? (selected ? p.ink : p.inkSoft) : p.control)
-            .background(configuration.isPressed || selected ? p.selectedStrong : hovering && enabled ? p.selected : .clear, in: RoundedRectangle(cornerRadius: Radii.control))
+            .background(background, in: RoundedRectangle(cornerRadius: Radii.control))
             .contentShape(Rectangle())
             .onHover { hovering = $0 }
             .interactiveCursor()
             .motion(hovering, Motion.quick)
+    }
+
+    private var background: Color {
+        if configuration.isPressed { return selected ? p.control.opacity(0.6) : p.selectedStrong }
+        if selected { return p.selectedStrong }
+        return hovering && enabled ? p.selected : .clear
     }
 }
 

@@ -44,6 +44,25 @@ button {
   text-align: inherit;
 }
 
+/* A hand over what acts on a click, the arrow over what is disabled (Kit.swift
+   interactiveCursor). Text fields keep the I-beam. */
+:is(button, select, summary, [role="switch"], [role="tab"]):not(:disabled, [aria-disabled="true"]) {
+  cursor: pointer;
+}
+:is(button, select, input):disabled {
+  cursor: default;
+}
+
+/* Motion stops when the system asks for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0s !important;
+    animation: none !important;
+  }
+}
+
 button:focus-visible,
 [tabindex]:focus-visible {
   outline: 2px solid var(--unread);

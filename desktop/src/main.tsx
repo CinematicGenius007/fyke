@@ -56,6 +56,14 @@ async function start() {
   chooseChrome(mode);
   if (mode.FYKE_THEME) prefs().force(mode.FYKE_THEME);
   followTheme();
+  if (mode.FYKE_SCREEN === "controls") {
+    // S38's test page needs no daemon; it loads only when asked for.
+    const { ControlsPage } = await import("./ui/ControlsPage");
+    render(() => <ControlsPage />, document.getElementById("root")!);
+    await document.fonts.ready;
+    document.documentElement.dataset.ready = "1";
+    return;
+  }
   render(() => <App localFeeds={localFeeds} />, document.getElementById("root")!);
   await app().start(() => app().openScreen(mode));
   await transport().observeSettings(() => void prefs().load()).catch(() => undefined);

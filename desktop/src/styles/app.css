@@ -87,15 +87,21 @@ svg.icon .dots circle {
   border-radius: var(--radius-control);
   transition: background-color 0.12s;
 }
-.symbol-button:hover {
+.symbol-button:not(:disabled):hover {
   background: var(--selected);
 }
-.symbol-button:active,
+.symbol-button:disabled {
+  color: var(--control);
+}
+.symbol-button:not(:disabled):active,
 .symbol-button.selected {
   background: var(--selected-strong);
 }
 .symbol-button.selected {
   color: var(--ink);
+}
+.symbol-button.selected:active {
+  background: color-mix(in srgb, var(--control) 60%, transparent);
 }
 
 .icon-button {
@@ -105,6 +111,15 @@ svg.icon .dots circle {
   display: grid;
   place-items: center;
   color: var(--ink-soft);
+  border-radius: var(--radius-control);
+  transition: background-color 0.12s;
+}
+/* Controls.swift IconButton draws with SymbolStyle. */
+.icon-button:not(:disabled):hover {
+  background: var(--selected);
+}
+.icon-button:not(:disabled):active {
+  background: var(--selected-strong);
 }
 
 .chip {
@@ -121,6 +136,9 @@ svg.icon .dots circle {
 .chip:hover {
   background: var(--selected-strong);
 }
+.chip:active {
+  background: color-mix(in srgb, var(--control) 60%, transparent);
+}
 .chip.muted {
   color: var(--muted);
 }
@@ -128,6 +146,9 @@ svg.icon .dots circle {
   background: var(--unread);
   color: var(--on-accent);
   font-weight: var(--ui-500);
+}
+.chip.selected:active {
+  background: color-mix(in srgb, var(--unread), black 15%);
 }
 
 .one-line {
@@ -1049,7 +1070,6 @@ svg.icon .dots circle {
 }
 .action:disabled {
   color: var(--muted);
-  cursor: default;
 }
 .action.secondary:disabled {
   background: var(--ground);
@@ -1676,6 +1696,10 @@ svg.icon .dots circle {
 }
 .feed-address:focus {
   outline: none;
+}
+.feed-address:disabled {
+  border-color: var(--control);
+  color: var(--muted);
 }
 .add-feed-hint {
   padding: 8px 0 20px;
@@ -3002,7 +3026,49 @@ svg.icon .dots circle {
   .catchup-card {
     border: 1px solid CanvasText;
   }
+  /* Filled buttons lose their fill; an edge keeps their shape. */
+  .action:is(.primary, .secondary, .inverse),
+  .chip {
+    outline: 1px solid ButtonText;
+    outline-offset: -1px;
+  }
+  .action:is(.primary, .secondary, .inverse):disabled {
+    outline-color: GrayText;
+  }
   :focus-visible {
     outline-color: Highlight !important;
   }
+}
+
+/* S38's controls test page (src/ui/ControlsPage.tsx). */
+.controls-page {
+  height: 100%;
+  overflow: auto;
+  padding: 32px;
+  background: var(--ground);
+  color: var(--ink);
+}
+.controls-page h1 {
+  font: var(--title-600) 26px var(--font-title), serif;
+  margin-bottom: 24px;
+}
+.controls-group {
+  margin-bottom: 20px;
+}
+.controls-group h2 {
+  font-size: 11px;
+  font-weight: var(--ui-600);
+  letter-spacing: 0.66px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.controls-row .feed-address {
+  width: 280px;
 }

@@ -94,9 +94,10 @@
   border-radius: 999px;
   transition: background 150ms ease-out;
 }
-.setting-switch:hover { background: var(--muted); }
+.setting-switch:not(:disabled):hover { background: var(--muted); }
+.setting-switch:disabled { opacity: 0.6; }
 .setting-switch[aria-checked="true"] { background: var(--unread); }
-.setting-switch[aria-checked="true"]:hover { background: color-mix(in oklab, var(--unread), black 8%); }
+.setting-switch[aria-checked="true"]:not(:disabled):hover { background: color-mix(in oklab, var(--unread), black 8%); }
 .setting-switch span {
   display: block;
   width: 12px;
@@ -120,7 +121,8 @@
   font-size: 13px;
   cursor: pointer;
 }
-.setting-select select:hover { background: var(--selected); }
+.setting-select select:not(:disabled):hover { background: var(--selected); }
+.setting-select select:disabled { cursor: default; color: var(--muted); }
 .setting-select svg {
   position: absolute;
   right: 9px;
