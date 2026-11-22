@@ -115,7 +115,7 @@ export function Sidebar() {
   }
 
   return (
-    <nav class="sidebar" aria-label="Sources">
+    <nav class="sidebar" aria-label="Sources" inert={!!model.catchUp()}>
       <SidebarRow title="Search" icon="magnifyingglass" selected={false} onClick={() => model.commands.show()}>
         <span class="row-note">Ctrl+K</span>
       </SidebarRow>
@@ -139,7 +139,7 @@ export function Sidebar() {
           <Count value={model.totalStarred()} quiet />
         </Show>
       </SidebarRow>
-      <SidebarRow title="Catch up" icon="rectangle.stack" selected={false} onClick={() => undefined}>
+      <SidebarRow title="Catch up" icon="rectangle.stack" selected={!!model.catchUp()} onClick={() => void model.startCatchUp()}>
         <span class="row-note">Ctrl+J</span>
       </SidebarRow>
 
@@ -234,10 +234,14 @@ const isRenaming = (kind: "feed" | "folder" | "view", id: number) => {
 
 /** The menu a view row opens (Views.swift ViewMenu). Brief, catch-up and routine rows
  * join with those features. */
-function viewMenu(view: SavedView): MenuItem[] {
+export function viewMenu(view: SavedView): MenuItem[] {
   const model = app();
   return [
     { title: "Rename", run: () => model.set("renaming", { kind: "view", id: view.id }) },
+    { title: "Catch up", run: () => {
+      model.go({ kind: "view", id: view.id });
+      void model.startCatchUp();
+    } },
     { title: "Mark all read", run: () => model.markAllRead({ view: view.id }) },
     "rule",
     { title: "Move up", run: () => model.moveView(view.id, -1) },

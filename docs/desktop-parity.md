@@ -77,15 +77,15 @@ UI modules live in `desktop/src`, Rust in `desktop/src-tauri/src`. Logic ported 
 | F24 | Sidebar.swift | Sidebar rows, tree, drag and drop, rename, menus, status line, confirmations, shortcuts sheet, move dialog | `src/ui/Sidebar.tsx`, `SidebarTree.tsx`, `ConfirmDialog.tsx`, `ShortcutsSheet.tsx`, `MoveDialog.tsx` | built | Rows, tree, status line, Routines row (`src/ui/Sidebar.tsx`), shortcuts sheet (`src/ui/ShortcutsSheet.tsx`), rename in place, the view, folder and feed menus with Move to, and the delete-folder and remove-feed confirmations (`src/ui/ConfirmDialog.tsx`), checked in `manage.spec.ts`. The menus' brief, catch-up and routine items join with those features in phase 5; restoring a removed view also points its routines back at it then. Feed and folder drag-and-drop is checked in `manage.spec.ts`. The data move dialog is planned |
 | F25 | ReaderPane.swift | Article column, actions, blocks, images, text-and-theme menu | `src/ui/Reader.tsx`, `Blocks.tsx` (DOM nodes with `textContent` only), `TypeMenu.tsx` | built | Article column, actions, blocks as text nodes ("feed content is text, never markup" in `reading.spec.ts`), images on request. The text-and-theme menu is planned |
 | F26 | WebPane.swift | Web viewer and its address guard | Rust `web.rs` (a second webview with no IPC, an incognito profile, and the guard after DNS); `src/ui/WebPane.tsx` (the bar) | planned | |
-| F27 | Discussion.swift | Hacker News thread under the article | `src/ui/Discussion.tsx` | planned | |
+| F27 | Discussion.swift | Hacker News thread under the article | `src/ui/Discussion.tsx` | built | `discussion.spec.ts` verifies lazy loading, text and links from blocks, and folded replies. |
 | F28 | Ask.swift | Ask your feeds | `src/model/ask.ts`, `src/ui/Ask.tsx` | planned | |
 | F29 | Activity.swift | Status line, Activity popover, feed health | `src/model/activity.ts`, `src/ui/Activity.tsx`, `FeedHealth.tsx` | planned | |
 | F30 | StoragePane.swift | Settings · Data | `src/ui/settings/Data.tsx` | planned | |
-| F31 | CatchUp.swift | Catch-up card | `src/model/catchup.ts`, `src/ui/CatchUp.tsx` | planned | |
+| F31 | CatchUp.swift | Catch-up card | `src/model/catchUp.ts`, `src/ui/CatchUp.tsx` | built | `catch-up.spec.ts` checks keyboard triage, daemon marks, undo and the completed state. |
 | F32 | Today.swift | Brief list, Today reader, back bar | `src/ui/Today.tsx` | planned | |
-| F33 | Views.swift | View sentence, its editors, view menu | `src/ui/ViewSentence.tsx`, `ViewMenu.tsx` | planned | |
+| F33 | Views.swift | View sentence, editors, view menu | `src/ui/ViewSentence.tsx`, `Sidebar.tsx` | built | `views.spec.ts` checks editing, undo, scope, an empty unread view, and revision conflicts. |
 | F34 | Search.swift | Search popup | `src/model/search.ts`, `src/ui/Search.tsx` | planned | |
-| F35 | CommandPalette.swift | ⌘K palette | `src/model/commands.ts`, `src/ui/CommandPalette.tsx` | built | `palette.spec.ts`. New folder is built. The brief, catch-up, ask, new routine, activity, add feed, Settings · Agents, run-routine and edit-recipe commands, and the Ask row with Tab, are planned: each joins with its feature |
+| F35 | CommandPalette.swift | ⌘K palette | `src/model/commands.ts`, `src/ui/CommandPalette.tsx` | built | `palette.spec.ts`. New folder is built. Add feed and Catch up are built. The brief, ask, new routine, activity, Settings · Agents, run-routine and edit-recipe commands, and the Ask row with Tab, are planned: each joins with its feature |
 | F36 | AddFeed.swift | Add feed sheet, OPML | `src/ui/AddFeed.tsx`, `src/model/subscriptions.ts`, `src-tauri/src/opml.rs` | built | `add-feed.spec.ts` covers discovery, subscription and OPML over the bridge. The native file dialogs are in the [Windows checklist](desktop-windows-checklist.md). |
 | F37 | Brief.swift | Citations, source list, "made with", artifact column | `src/ui/Brief.tsx` | planned | |
 | F38 | RecipeView.swift | Recipe edit, try, history, reset | `src/ui/Recipe.tsx` | planned | |
@@ -107,19 +107,19 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 | S5 | Starred, with items and empty | `starred`, `starred-empty` (new) | planned | |
 | S6 | A folder | `folder` (new) | planned | |
 | S7 | A feed with an article open | `feed` (new) | planned | |
-| S8 | A saved view: sentence rule, chips, editing in place | `view` | built | `view-light` 99.688 %, `view-dark` 99.740 % equal after the allowance; the sentence rule shows; editing in place is planned |
+| S8 | A saved view: sentence rule, chips, editing in place | `view` | built | `view-light` 99.688 %, `view-dark` 99.740 % equal after the allowance; editing in place is covered by `views.spec.ts` |
 | S9 | A view with nothing matching ("Nothing matches yet", "Include read articles") | `view-empty` (new) | planned | |
 | S10 | Search with results, and with none | `search`, `search-none` (new) | built | `search-light` 99.468 %, `search-dark` 99.361 % equal after the allowance (D21, D22, K24); nothing found: `search.spec.ts` "nothing found opens nothing"; the `search-none` picture is planned |
 | S11 | Command palette | `palette` | built | `palette-light` 93.558 %, `palette-dark` 93.939 %: the field, Go to and Articles sections line up; the Mac's "Run Morning needle now" row and its Ask row are missing until routines and Ask exist (F35) |
 | S12 | Shortcuts sheet | `shortcuts` (new) | built | `shortcuts-light` 99.408 %, `shortcuts-dark` 99.345 % equal after the allowance: the rest is the keys spelled Ctrl and Shift for ⌘ and ⇧ (K24), text edges (D21) and the scrim (D23) |
-| S13 | Catch-up: a card / finished / could not start | `catchup`, `catchup-done` (new) | planned | |
+| S13 | Catch-up: a card / finished / could not start | `catchup`, `catchup-done` (planned) | built | `catch-up.spec.ts`; the card pictures match 99.588% (light) and 99.628% (dark). The finished and failed pictures are planned. |
 | S14 | Ask with a cited answer; answering; not answered | `ask` | planned | |
 | S15 | Recipe open in place, edit, try (working, failed), reset with undo, history | `recipe` | planned | |
 | S16 | Routines: list, editor, dry run, run now; "Routines start from a view" | `routines` | planned | |
 | S17 | Activity popover and the status line (working, needs you, quiet) | `activity` | planned | |
 | S18 | Feed health panel | `health` | planned | |
 | S19 | Toast with Undo | `toast` | planned | |
-| S20 | Discussion (comments) under an article | `comments` | planned | |
+| S20 | Discussion (comments) under an article | `comments` | built | `discussion.spec.ts`; the pictures match 98.557% (light) and 98.516% (dark). Comment spacing, article and sidebar text edges, and timestamps differ. |
 | S21 | Web viewer: page, failure, blocked private address | `web` (new) | planned | |
 | S22 | Add feed: discovery, preview, choosing a folder, failure | `add`, `add-found`, `add-multiple`, `add-none` | built | `add-feed.spec.ts` exercises the dialog and writes eight picture pairs. Light and dark are 93.127–94.766% equal after the allowance. The differences include text edges and selection (D21–D22), sheet corners and button height (D24), and the fixture server ports. |
 | S23 | Folder rename, feed rename | `rename-folder`, `rename-feed` (new) | built | `rename-folder-light` 99.669 %, `rename-folder-dark` 99.705 %, `rename-feed-light` 99.684 %, `rename-feed-dark` 99.715 % equal after the allowance: the rest is the selection color (D22), Ctrl for ⌘ (K24) and text edges (D21) |
@@ -149,12 +149,12 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 | K1 | ⌘, | Ctrl+, | Settings | | planned | |
 | K2 | ⌘N | Ctrl+N | Add feed | WebView2 opens a new window. Fyke prevents the default. | done | `add-feed.spec.ts` opens, previews and subscribes via Ctrl+N. |
 | K3 | ⌘S | Ctrl+S | Save search as view (and Save in the routine editor) | WebView2 offers to save the page. Fyke prevents the default. | built | search: `search.spec.ts` "Ctrl+S keeps a search as a view, named for its words"; the routine editor is planned |
-| K4 | ⌘Z | Ctrl+Z | Undo (text field first, then catch-up, then the undo stack) | | planned | |
+| K4 | ⌘Z | Ctrl+Z | Undo (text field first, then catch-up, then the undo stack) | | built | `catch-up.spec.ts`, `views.spec.ts`, `search.spec.ts`, `palette.spec.ts`. |
 | K5 | ⇧⌘Z | Ctrl+Shift+Z, and Ctrl+Y on Windows | Redo | Windows apps use Ctrl+Y, so it is added. | planned | |
 | K6 | ⌘K | Ctrl+K | Everything (palette) | WebView2 and Chromium focus the address or search bar. There is none, and Fyke prevents the default. | done | `palette.spec.ts` "the palette finds a command by its letters"; the sidebar's Search row: "the sidebar's Search row opens the palette, and Esc closes it" |
 | K7 | ⌘F | Ctrl+F | Search | WebView2 and WebKitGTK open find-in-page. Fyke prevents the default. | done | `search.spec.ts` "Ctrl+F, type and Return opens the first result" and the arrow, Esc and nothing-found scenarios |
 | K8 | ⌘1 ⌘2 ⌘3 ⌘4 | Ctrl+1 … Ctrl+4 | Today, All, Starred, Routines | | planned | |
-| K9 | ⌘J | Ctrl+J | Catch up | WebView2 opens downloads. Fyke prevents the default. | planned | |
+| K9 | ⌘J | Ctrl+J | Catch up | WebView2 opens downloads. Fyke prevents the default. | done | `catch-up.spec.ts` opens the card with Ctrl+J. |
 | K10 | ⌘0 | Ctrl+0 | Activity | WebView2 resets the zoom. Fyke prevents the default and turns off zoom hotkeys. | planned | |
 | K11 | ⌘R | Ctrl+R | Write a brief | The webview reloads (and F5 does too). Fyke prevents both in release builds. | planned | |
 | K12 | ⇧⌘A | Ctrl+Shift+A | Ask your feeds | Chromium's tab search; not bound in WebView2. Fyke prevents the default. | planned | |
@@ -167,10 +167,10 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 | K19 | o, ⇧O | o, Shift+O | Open page here, open in browser | | planned | |
 | K20 | c f r a t | same | Comments, fetch full, refresh, add feed, text and theme | | planned | |
 | K21 | / ? | same | Search, shortcuts sheet | | built | /: `search.spec.ts` "/ opens search too"; ?: `search.spec.ts` "? shows shortcuts and swallows keys until closed", "Esc closes shortcuts" |
-| K22 | ← ↓ → (catch-up) | same | Skip, later, read now | | planned | |
+| K22 | ← ↓ → (catch-up) | same | Skip, later, read now | | done | `catch-up.spec.ts` verifies all three against the daemon. |
 | K23 | — | Ctrl+P, Ctrl+U, Ctrl+Shift+I, F12, Ctrl+wheel and Ctrl+± zoom, the context menu | Webview defaults | Fyke prevents them in release builds (print, view source, devtools, zoom, and the browser's own menu). Fyke's right-click menus replace the context menu. | planned | |
 | K24 | Key hints shown in the UI ("⌘K", "⌘J", "⌘Z" in the toast, the shortcuts sheet, palette shortcuts) | "Ctrl+K", "Ctrl+J", "Ctrl+Z", … | Text | It is drawn from one table (`src/keys.ts`), so the hints and the bindings never differ. | planned | |
-| K25 | Keys while a dialog shows, while renaming, in the palette, in search and in catch-up | same rules | Blocking | Only Esc in Settings. | in progress | Dialogs, menus and renaming: `manage.spec.ts`; the palette: `palette.spec.ts`; search: `search.spec.ts`. Catch-up and Settings are planned |
+| K25 | Keys while a dialog shows, while renaming, in the palette, in search and in catch-up | same rules | Blocking | Only Esc in Settings. | in progress | Dialogs, menus and renaming: `manage.spec.ts`; the palette: `palette.spec.ts`; search: `search.spec.ts`. Catch-up: `catch-up.spec.ts`. Settings is planned |
 
 ## U: Undoable actions
 
@@ -178,11 +178,11 @@ Each screen is checked in light and dark. A screen with an `e2e_gui.py` picture 
 |---|---|---|---|---|
 | U1 | Mark all read in a place | "Marked N article(s) in <name> as read" | done | `palette.spec.ts` "Ctrl+Z takes back mark all read" |
 | U2 | Save a search as a view | "Saved “X” as a view" | done | `search.spec.ts` "Ctrl+Z takes the new view back" |
-| U3 | Change a view's rule | "Changed “X”" | planned | |
+| U3 | Change a view's rule | “Changed ‘X’” | done | `views.spec.ts` checks that Ctrl+Z restores the previous rule and results. |
 | U4 | Remove a view (routines detach, then re-point on undo) | "Removed “X”" | planned | |
 | U5 | Reset a recipe to the built-in text | "Reset “X” to the built-in text" | planned | |
 | U6 | Remove a routine | "Removed “X”" | planned | |
-| U7 | Catch-up decisions (skip, later, read now), with Ctrl+Z while catch-up is open | (no toast; the card comes back) | planned | |
+| U7 | Catch-up decisions (skip, later, read now), with Ctrl+Z while catch-up is open | The previous card returns | done | `catch-up.spec.ts` verifies restoration of both read and Later marks. |
 | U8 | Redo of all of the above | | planned | |
 
 Folder delete and feed removal are confirmations (D13), as on the Mac.

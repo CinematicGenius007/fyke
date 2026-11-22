@@ -21,6 +21,7 @@ function command(event: KeyboardEvent): boolean {
   const plain: Record<string, () => void> = {
     ",": () => model.openSettings(),
     n: () => model.set("showingAddFeed", true),
+    j: () => void model.startCatchUp(),
     f: () => {
       model.commands.close();
       model.search.show();
@@ -53,6 +54,25 @@ function command(event: KeyboardEvent): boolean {
 export function handleKey(event: KeyboardEvent): void {
   const model = app();
   if (event.defaultPrevented || event.isComposing || model.state.showingAddFeed) return;
+  const catchUp = model.catchUp();
+  if (catchUp) {
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "z") {
+      event.preventDefault();
+      void catchUp.undo();
+      return;
+    }
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    const decisions = { ArrowLeft: "skip", ArrowDown: "later", ArrowRight: "read", Enter: "read" } as const;
+    const decision = decisions[event.key as keyof typeof decisions];
+    if (event.key === "Escape") {
+      event.preventDefault();
+      model.closeCatchUp();
+    } else if (decision && !(event.key === "Enter" && (event.target as HTMLElement | null)?.tagName === "BUTTON")) {
+      event.preventDefault();
+      void catchUp.decide(decision);
+    }
+    return;
+  }
   // An open menu takes the keys: Esc closes it, and nothing behind it acts.
   if (float.isOpen()) {
     if (event.key === "Escape") float.close(true);
@@ -100,6 +120,7 @@ export function handleKey(event: KeyboardEvent): void {
     o: () => model.openPage(),
     O: () => model.openPage(),
     f: () => model.fetchFull(),
+    c: () => model.set("discussionRequest", (request) => request + 1),
     r: () => model.refresh(),
     a: () => model.set("showingAddFeed", true),
     t: () => model.set("showingType", (v) => !v),

@@ -25,6 +25,8 @@ There are no releases yet. Everything below is built from source and is unreleas
 
 - **Desktop subscriptions.** Preview feeds before subscribing, choose or create a folder, drag feeds and folders in the sidebar, and import or export subscriptions with OPML.
 
+- **Desktop reading.** Edit saved views from their sentence and undo rule changes. Use Ctrl+J to catch up on unread articles and press C from a Hacker News story to expand its discussion.
+
 ### Changed
 
 - **The project is named Fyke.** The command is `fyke`, the data folder is `~/.fyke` (set `FYKE_HOME` to use another), the app is `Fyke.app`, and the background service is `local.fyke.daemon`. Data in `~/.rss_`, from builds before the name, moves to `~/.fyke` the first time any `fyke` command runs, including a folder moved elsewhere with `data move`. Quit an earlier build's daemon first: while it runs, `fyke` stops with `EarlierDaemonRunning` and changes nothing. `fyke service install` and `uninstall` also remove a launch agent installed under the old label, and `bundle_app.py --install` removes `/Applications/rss_.app`.

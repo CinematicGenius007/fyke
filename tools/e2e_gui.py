@@ -377,10 +377,19 @@ def snapshot(name, extra):
 # What each picture needs in the database before it means anything.
 SCREEN_NEEDS = {"today": ["brief"], "citation": ["brief"], "recipe": ["brief"], "view": ["view-save"],
                 "routines": ["routine-save"], "ask": ["answer"]}
+def screen_snapshot(screen):
+    extra = {"FYKE_SCREEN": screen}
+    if screen == "citation":
+        extra = {"FYKE_SCREEN": "today", "FYKE_PIN_CITATION": "1"}
+    elif screen == "catchup":
+        entries = call("entries.list", {"limit": 500})["items"]
+        call("entries.mark_many", {"ids": [entry["id"] for entry in entries], "read": False, "later": False})
+    snapshot(screen, extra)
+
+
 for screen in SCREENS + ["citation"]:
-    extra = {"FYKE_SCREEN": "today", "FYKE_PIN_CITATION": "1"} if screen == "citation" else {"FYKE_SCREEN": screen}
     check(f"shot:{screen}", needs=SCREEN_NEEDS.get(screen, []), tags=[screen, "snapshots"])(
-        lambda screen=screen, extra=extra: snapshot(screen, extra))
+        lambda screen=screen: screen_snapshot(screen))
 
 
 def tree_snapshot(name):

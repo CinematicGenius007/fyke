@@ -1,9 +1,10 @@
 // View state only (gui/Sources/Reader/AppModel.swift). Everything durable lives behind
 // the daemon, and this store reloads from it when an event says something changed.
-import { batch, createRoot } from "solid-js";
-import { createStore, produce, reconcile } from "solid-js/store";
+import { batch, createRoot, createSignal } from "solid-js";
+import { createStore, produce, reconcile, unwrap } from "solid-js/store";
 import { Plural } from "../logic/Plural";
 import { type DaemonEvent, RPCFailure, transport } from "../transport";
+import { type CatchUpModel, createCatchUp } from "./catchUp";
 import { createLibrary } from "./library";
 import { prefs } from "./prefs";
 import type { Block, Entry, EntryPage, EntrySummary, Feed, Folder, Items, Stats } from "./types";
@@ -54,6 +55,7 @@ interface State {
   problem: string | null;
   updatedAt: Date | null;
   fullTextStatus: string | null;
+  discussionRequest: number;
   showingAddFeed: boolean;
   addFeedAddress: string;
   /** The folder Add feed puts a new feed in, from a folder's menu. */
@@ -100,6 +102,7 @@ function createApp() {
     problem: null,
     updatedAt: null,
     fullTextStatus: null,
+    discussionRequest: 0,
     showingAddFeed: false,
     addFeedAddress: "",
     addFeedFolder: null,
@@ -113,6 +116,7 @@ function createApp() {
     healthFeed: null,
   });
 
+  const [catchUp, setCatchUp] = createSignal<CatchUpModel | null>(null);
   const library = createLibrary();
   const undo = createUndoCenter();
   const search = createSearch();
@@ -348,6 +352,25 @@ function createApp() {
     void open(id);
   }
 
+  async function startCatchUp() {
+    if (catchUp()) return;
+    const params = listParams();
+    if (params.view_id === undefined) params.unread_only = true;
+    const session = createCatchUp(listsEntries() ? placeTitle() : "All", params, library, words, (id) => {
+      if (catchUp() !== session) return;
+      setCatchUp(null);
+      if (!listsEntries()) go({ kind: "all" });
+      void open(id);
+    });
+    setCatchUp(session);
+    await session.load();
+  }
+
+  function closeCatchUp() {
+    setCatchUp(null);
+    void reload();
+  }
+
   // MARK: Views
 
   function saveSearchAsView() {
@@ -378,6 +401,43 @@ function createApp() {
     const view = library.state.views.find((v) => v.id === id);
     if (!view || !name.trim() || name === view.name) return;
     library.saveView({ id, name, rule: view.rule, revision: view.revision }).catch(fail);
+  }
+
+  async function setViewRule(id: number, revision: number, rule: Rule) {
+    const view = library.view(id);
+    if (!view) return;
+    const conflict = "This view changed elsewhere. It now shows the newer rule.";
+    if (view.revision !== revision) {
+      set("problem", conflict);
+      return;
+    }
+    if (Rule.same(view.rule, rule)) return;
+    const { name } = view;
+    const previous = structuredClone(unwrap(view.rule));
+    try {
+      const saved = await library.saveView({ id, name, rule, revision });
+      undo.push(`Changed “${name}”`, async () => {
+        const current = library.view(id);
+        if (!current) return;
+        if (!Rule.same(current.rule, saved.rule)) {
+          set("problem", conflict);
+          return;
+        }
+        try {
+          await library.saveView({ id, name: current.name, rule: previous, revision: current.revision });
+          await reloadEntries();
+        } catch (error) {
+          fail(error);
+        }
+      });
+      await reloadEntries();
+    } catch (error) {
+      if (RPCFailure.from(error).is("RevisionConflict")) {
+        await library.loadViews();
+        await reloadEntries().catch(() => undefined);
+        set("problem", conflict);
+      } else fail(error);
+    }
   }
 
   function moveView(id: number, by: number) {
@@ -759,6 +819,9 @@ function createApp() {
       case "briefing":
         go({ kind: "today" });
         break;
+      case "catchup":
+        await startCatchUp();
+        break;
       case "add":
         batch(() => {
           set("addFeedAddress", mode.FYKE_ADDRESS ?? "");
@@ -808,9 +871,13 @@ function createApp() {
     search,
     commands,
     openResult,
+    catchUp,
+    startCatchUp,
+    closeCatchUp,
     saveSearchAsView,
     saveAsView,
     renameView,
+    setViewRule,
     moveView,
     removeView,
     importOpml,

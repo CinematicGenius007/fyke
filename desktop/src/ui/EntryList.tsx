@@ -1,12 +1,15 @@
 // The article list beside the reader (gui/Sources/Reader/RootView.swift `EntryList`).
 import { createEffect, For, Show } from "solid-js";
-import { RuleSentence } from "../logic/RuleSentence";
+import { Rule as SelectionRule } from "../logic/Rule";
 import { app } from "../model/app";
 import type { EntrySummary } from "../model/types";
-import { entryDate, feedName, preview } from "../model/types";
+import { entryDate, preview } from "../model/types";
 import { Dates } from "./format";
-import { Chip, Rule, SymbolButton } from "./kit/Controls";
+import { Action, Rule, SymbolButton } from "./kit/Controls";
 import { StarToggle } from "./StarToggle";
+import { ViewSentence } from "./ViewSentence";
+import { float } from "./Float";
+import { viewMenu } from "./Sidebar";
 
 export function EntryList() {
   const model = app();
@@ -25,10 +28,14 @@ export function EntryList() {
           <h2 class="list-title">{model.placeTitle()}</h2>
           <span class="list-unread">{model.placeUnread()} unread</span>
           <Show when={view()}>
-            <SymbolButton icon="ellipsis" label="View actions" size={24} onClick={() => undefined} />
+            {(current) => {
+              let actions!: HTMLButtonElement;
+              return <SymbolButton ref={(button) => actions = button} icon="ellipsis" label="View actions" size={24}
+                onClick={() => float.below(actions, 220, viewMenu(current()))} />;
+            }}
           </Show>
         </div>
-        <Show when={view()}>{(v) => <ViewSentence rule={v().rule} />}</Show>
+        <Show when={view()}>{(v) => <ViewSentence view={v()} />}</Show>
         <Show when={view()}>
           <Rule class="meets-divider" />
         </Show>
@@ -40,32 +47,18 @@ export function EntryList() {
               <div class="inline-label">View · {view()!.name}</div>
               <div class="inline-title">Nothing matches yet</div>
               <div class="inline-detail">No article fits this rule right now. New articles that fit appear here as they arrive; tap a word above to widen it.</div>
+              <Show when={view()?.rule.state === "unread" && view()}>{(current) =>
+                <Action kind="primary" compact onClick={() => {
+                  const { id, revision, rule } = current();
+                  void model.setViewRule(id, revision, SelectionRule.setState(rule, "any"));
+                }}>Include read articles</Action>
+              }</Show>
             </div>
           </Show>
           <For each={model.state.entries}>{(row, index) => <EntryRow row={row} last={index() === model.state.entries.length - 1} />}</For>
         </div>
       </div>
     </section>
-  );
-}
-
-/** The view's rule as words (gui/Sources/Reader/Views.swift `ViewSentence`). */
-function ViewSentence(props: { rule: Parameters<typeof RuleSentence.parts>[0] }) {
-  const model = app();
-  const parts = () =>
-    RuleSentence.parts(
-      props.rule,
-      (id) => {
-        const feed = model.state.feeds.find((f) => f.id === id);
-        return feed ? feedName(feed) : null;
-      },
-      (id) => model.state.folders.find((f) => f.id === id)?.name,
-    );
-  return (
-    <div class="sentence" aria-label={`Rule: ${RuleSentence.text(parts())}`}>
-      <For each={parts()}>{(part) => (part.kind === "joiner" ? <span class="joiner">{part.text}</span> : <Chip text={part.text} aria-label={`${part.clause}: ${part.text}`} />)}</For>
-      <Chip text="+" muted aria-label="Add to the rule" />
-    </div>
   );
 }
 

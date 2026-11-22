@@ -4,6 +4,8 @@ import { Show } from "solid-js";
 import { app, type Article } from "../model/app";
 import { prefs } from "../model/prefs";
 import { Blocks } from "./Blocks";
+import { Discussion } from "./Discussion";
+import { isSafeLink } from "./links";
 import { Dates } from "./format";
 import { IconButton } from "./kit/Controls";
 import { Icon } from "./kit/Icon";
@@ -49,6 +51,9 @@ function Column(props: { article: Article }) {
       <div class="blocks selectable">
         <Blocks blocks={props.article.blocks} context={{ open: (url) => model.openLink(url) }} />
       </div>
+      <Show when={isSafeLink(entry().discussion_url) && entry().discussion_url} keyed>
+        {(address) => <Discussion id={entry().id} address={address} />}
+      </Show>
     </article>
   );
 }

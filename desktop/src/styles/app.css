@@ -1859,3 +1859,257 @@ svg.icon .dots circle {
     transition: none;
   }
 }
+
+/* Views.swift puts each rule editor in its own anchored panel. */
+.rule-text-editor {
+  display: grid;
+  gap: 12px;
+  padding: 8px;
+}
+.rule-text-editor > label:first-child {
+  display: grid;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: var(--ui-500);
+}
+.rule-text-editor input[type="text"] {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--ground);
+  color: var(--ink);
+  border: 1px solid var(--control);
+  border-radius: var(--radius-control);
+  font: var(--ui-400) 14px var(--font-ui), sans-serif;
+}
+.rule-editor-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.rule-editor-toggle input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--unread);
+}
+.rule-editor-actions {
+  display: flex;
+  justify-content: space-between;
+}
+.rule-editor-actions .primary {
+  margin-left: auto;
+}
+.rule-scope-list {
+  max-height: 252px;
+  overflow-y: auto;
+}
+.rule-scope .rule-editor-actions {
+  padding: 4px;
+}
+.inline-empty .action {
+  margin-top: 12px;
+}
+
+.catchup {
+  position: absolute;
+  inset: 0;
+  z-index: 16;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: auto;
+  background: var(--surface);
+}
+.catchup:focus {
+  outline: 0;
+}
+.catchup-header {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  padding: 38px 16px 0;
+}
+.catchup-header > .action {
+  position: absolute;
+  right: 16px;
+  top: 38px;
+  gap: 8px;
+}
+.catchup-progress {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+.catchup-progress h2 {
+  font-size: 13px;
+  font-weight: var(--ui-600);
+}
+.catchup-progress progress {
+  appearance: none;
+  width: 200px;
+  height: 3px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--hairline);
+  overflow: hidden;
+}
+.catchup-progress progress::-webkit-progress-bar { background: var(--hairline); }
+.catchup-progress progress::-webkit-progress-value { background: var(--unread); }
+.catchup-progress progress::-moz-progress-bar { background: var(--unread); }
+.catchup-esc {
+  color: var(--muted);
+}
+.catchup-center {
+  width: min(680px, calc(100% - 64px));
+  margin: auto;
+  padding: 24px 0;
+}
+.catchup-stack {
+  position: relative;
+  isolation: isolate;
+}
+.catchup-stack.stacked::before,
+.catchup-stack.stacked::after,
+.catchup-card {
+  border-radius: var(--radius-sheet);
+  outline: 1px solid var(--hairline);
+  background: var(--ground);
+}
+.catchup-stack.stacked::before,
+.catchup-stack.stacked::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  height: 40px;
+  inset: auto 32px -24px;
+}
+.catchup-stack.stacked::after {
+  inset: auto 16px -12px;
+}
+.catchup-card {
+  min-height: 396px;
+  padding: 48px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 8%);
+}
+.catchup-meta {
+  margin-bottom: 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.catchup-card h2 {
+  margin-bottom: 20px;
+  font: var(--title-600) 32px var(--font-title), serif;
+  letter-spacing: -0.4px;
+}
+.catchup-card p {
+  font: var(--reading-400) 17px/28px var(--font-reading), serif;
+  color: var(--ink-soft);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
+}
+.catchup-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 52px;
+}
+.catchup-actions .action {
+  flex: 1;
+  height: 56px;
+  justify-content: center;
+  gap: 8px;
+  font-size: 16px;
+}
+.catchup-footer {
+  min-height: 20px;
+  margin-top: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.catchup-undo {
+  color: var(--unread);
+  cursor: pointer;
+}
+
+.discussion {
+  margin-top: 16px;
+  scroll-margin-top: 24px;
+}
+.discussion > .rule {
+  margin-bottom: 24px;
+}
+.discussion-head,
+.discussion-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: var(--ui-400) 13px var(--font-ui), sans-serif;
+  color: var(--muted);
+}
+.discussion-head {
+  gap: 16px;
+}
+.discussion-head > div {
+  flex: 1;
+}
+.discussion-head h2 {
+  margin-bottom: 4px;
+  font-size: 15px;
+  font-weight: var(--ui-600);
+  color: var(--ink);
+}
+.discussion-head .action {
+  flex: none;
+}
+.discussion-replies {
+  margin-top: 20px;
+}
+.discussion-replies > p {
+  font: var(--ui-400) 13px var(--font-ui), sans-serif;
+  color: var(--muted);
+}
+.discussion-row {
+  display: flex;
+}
+.discussion-indent {
+  flex: none;
+  width: 16px;
+  border-left: 1px solid var(--hairline);
+}
+.discussion-comment {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 4px;
+}
+.discussion-row.folded .discussion-comment {
+  padding-bottom: 12px;
+}
+.discussion-author {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: var(--ui-400) 13px var(--font-ui), sans-serif;
+  color: var(--muted);
+  cursor: pointer;
+}
+.discussion-author strong {
+  font-weight: var(--ui-600);
+  color: var(--ink);
+}
+.discussion-author .deleted {
+  color: var(--muted);
+}
+.discussion-comment .blocks {
+  font-size: 0.85em;
+  margin-top: 6px;
+}

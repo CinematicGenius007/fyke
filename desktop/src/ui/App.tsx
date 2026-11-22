@@ -10,6 +10,7 @@ import { handleKey } from "./keys";
 import { Icon } from "./kit/Icon";
 import { Rule } from "./kit/Controls";
 import { Panes } from "./Panes";
+import { CatchUp } from "./CatchUp";
 import { CommandPalette } from "./CommandPalette";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ReaderPane } from "./Reader";
@@ -46,7 +47,7 @@ export function App(props: { localFeeds: boolean }) {
     <div class="shell">
       <Sidebar />
       <Rule vertical />
-      <main class="content">
+      <main class="content" inert={!!model.catchUp()}>
         <Switch fallback={<Timeline />}>
           <Match when={model.state.showingSettings}>
             <section class="subscription-settings">
@@ -69,6 +70,7 @@ export function App(props: { localFeeds: boolean }) {
           </Match>
         </Switch>
       </main>
+      <Show when={model.catchUp()} keyed>{(session) => <CatchUp session={session} close={model.closeCatchUp} />}</Show>
       <Show when={model.search.state.isShowing}>
         <SearchPanel />
       </Show>

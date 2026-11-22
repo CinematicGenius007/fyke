@@ -99,6 +99,7 @@ export function allCommands(model: App): Command[] {
   }
   out.push(
     { id: "do.search", group: "act", title: "Search articles", icon: "magnifyingglass", shortcut: "Ctrl+F", run: () => model.search.show() },
+    { id: "do.catchup", group: "act", title: `Catch up on ${model.placeTitle()}`, icon: "rectangle.stack", shortcut: "Ctrl+J", run: () => void model.startCatchUp() },
     { id: "do.refresh", group: "act", title: "Refresh feeds", icon: "arrow.clockwise", shortcut: "R", run: () => model.refresh() },
     { id: "do.add", group: "act", title: "Add feed", icon: "plus", shortcut: "Ctrl+N", run: () => model.set("showingAddFeed", true) },
     { id: "do.folder", group: "act", title: "New folder", icon: "folder.badge.plus", run: () => void model.newFolder(null) },

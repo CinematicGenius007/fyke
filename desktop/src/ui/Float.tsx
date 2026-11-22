@@ -2,7 +2,7 @@
 // `FloatLayer`): right-click menus, and a submenu beside one. It sits above everything,
 // so a panel is never clipped by the view that opened it, and a click anywhere else
 // closes it.
-import { createSignal, For, onMount, Show } from "solid-js";
+import { createSignal, For, type JSX, onMount, Show } from "solid-js";
 import { Rule } from "./kit/Controls";
 import { Icon } from "./kit/Icon";
 
@@ -18,7 +18,8 @@ interface Panel {
   /** The top of what opened it, so a panel with no room below opens above it. */
   above: number;
   width: number;
-  items: MenuItem[];
+  items?: MenuItem[];
+  content?: () => JSX.Element;
 }
 
 const [item, setItem] = createSignal<Panel | null>(null);
@@ -27,6 +28,7 @@ let next = 0;
 
 export const float = {
   isOpen: () => item() !== null,
+  isAnchoredAt: (anchor: HTMLElement) => item()?.anchor === anchor,
   /** A menu at the pointer. */
   menu(event: MouseEvent, width: number, items: MenuItem[]) {
     event.preventDefault();
@@ -41,6 +43,11 @@ export const float = {
     const box = anchor.getBoundingClientRect();
     setSide(null);
     setItem({ id: next++, x: box.left, y: box.bottom, above: box.top, width, items, anchor });
+  },
+  custom(anchor: HTMLElement, width: number, content: () => JSX.Element) {
+    const box = anchor.getBoundingClientRect();
+    setSide(null);
+    setItem({ id: next++, x: box.left, y: box.bottom, above: box.top, width, content, anchor });
   },
   /** A submenu beside the row that opens it. */
   side(row: HTMLElement, width: number, items: MenuItem[]) {
@@ -72,19 +79,21 @@ function Placed(props: { panel: Panel }) {
     box.style.visibility = "visible";
     box.querySelector<HTMLElement>("[role=menuitem]")?.focus({ preventScroll: true });
   });
-  const rows = () => props.panel.items.filter((i) => i !== "rule").length;
+  const rows = () => props.panel.items?.filter((i) => i !== "rule").length ?? 0;
   return (
-    <div ref={box} class="float-panel" role="menu" style={{ width: `${props.panel.width}px` }} onKeyDown={(event) => {
+    <div ref={box} class="float-panel" role={props.panel.items ? "menu" : "group"} style={{ width: `${props.panel.width}px` }} onKeyDown={(event) => {
       const direction = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
-      if (direction === 0) return;
+      if (!props.panel.items || direction === 0) return;
       event.preventDefault();
       const choices = [...box.querySelectorAll<HTMLElement>("[role=menuitem]")];
       const current = choices.indexOf(document.activeElement as HTMLElement);
       choices[(current + direction + choices.length) % choices.length]?.focus();
     }}>
-      <div class="float-rows scroll" style={rows() > LIMIT ? { "max-height": `${LIMIT * ROW + 12}px` } : undefined}>
-        <For each={props.panel.items}>{(entry) => (entry === "rule" ? <Rule class="float-rule" /> : <MenuRow item={entry} />)}</For>
-      </div>
+      <Show when={props.panel.items} fallback={props.panel.content?.()}>
+        <div class="float-rows scroll" style={rows() > LIMIT ? { "max-height": `${LIMIT * ROW + 12}px` } : undefined}>
+          <For each={props.panel.items}>{(entry) => (entry === "rule" ? <Rule class="float-rule" /> : <MenuRow item={entry} />)}</For>
+        </div>
+      </Show>
     </div>
   );
 }
@@ -97,7 +106,7 @@ function MenuRow(props: { item: Exclude<MenuItem, "rule"> }) {
       role="menuitem"
       style={props.item.indent ? { "padding-left": `${8 + props.item.indent}px` } : undefined}
       onClick={(event) => {
-        if (!props.item.submenu) float.close();
+        if (!props.item.submenu) float.close(true);
         props.item.run(event.currentTarget);
       }}
     >
