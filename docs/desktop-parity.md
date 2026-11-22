@@ -26,8 +26,8 @@ These are choices the brief left open, and the places where the Mac app and the 
 | D4 | Window chrome on Linux | Client-side decorations: the same three buttons as Windows, in the Adwaita order and look (close on the right), the same 48 px drag region through `startDragging`, and edge resizing through `startResizeDragging`. | The brief asks for client-side decorations that follow the same layout. |
 | D5 | Sidebar top inset | It stays 48, as on the Mac, on both systems, so pictures compare and the Windows caption buttons have room. | Parity. |
 | D6 | Menu bar | There is no native menu bar on Windows or Linux. Every Mac menu item is a palette command (Ctrl+K), and the frequent ones keep their shortcuts (K-lines). | The rules say every action has a menu item and that ⌘K opens a palette of all of them. A Windows or GTK menu bar inside a hidden-title-bar layout would be the only native-looking strip in the window. |
-| D7 | Name of the `--notify` binary | On Windows the app binary is `Fyke.App.exe` (Tauri's `mainBinaryName`), so `src/notify.zig` needs no change there. On Linux the binary is `fyke-app` beside `fyke`, and `notify.zig` gains a `.linux` case that looks for it. | It keeps the daemon's contract. Only an app installed with the daemon is started. |
-| D8 | Socket on Windows | AF_UNIX at `<data folder>\fyked.sock` through `windows-sys` (Windows 10 1803 and later), the same path the daemon serves. | The brief asks for this, and the daemon already listens there. |
+| D7 | Name of the `--notify` binary | On Windows the app binary is `Fyke.App.exe` (`mainBinaryName` in `src-tauri/tauri.windows.conf.json`), so `src/notify.zig` needs no change there. On Linux the binary is `fyke-app` beside `fyke`, and `notify.zig` gains a `.linux` case that looks for it. | It keeps the daemon's contract. Only an app installed with the daemon is started. |
+| D8 | Socket on Windows | AF_UNIX at `<data folder>\fyked.sock` through the `uds_windows` crate (Windows 10 1803 and later), the same path the daemon serves. | The brief asks for this, and the daemon already listens there. |
 | D9 | Data folder | `FYKE_HOME` first. Otherwise Windows uses `%LOCALAPPDATA%\Fyke`, following the `location` pointer file when present, and Linux uses `$HOME/.fyke`. This is the same order as `src/main.zig`'s `homeDirectory`. The app never migrates legacy folders; the daemon does that. | One source of truth. |
 | D10 | Single instance | `tauri-plugin-single-instance`. A second launch focuses the first window and passes on `--notify` or a screen request. | It is the documented Tauri 2 way, and it is small. |
 | D11 | Text rendering | Fonts are bundled as variable TTFs with their `opsz` and `wght` axes, loaded through `@font-face`, and used with `font-optical-sizing: auto`. The weight ladder (−2..2 steps) maps to the CSS weights 100…900, the same ladder as `Font.Weight.shifted`. | It matches `Theme.swift`. |
@@ -36,6 +36,9 @@ These are choices the brief left open, and the places where the Mac app and the 
 | D14 | Modifier click in the reader | Ctrl+click on Windows and Linux opens a link in the browser, where the Mac uses ⌘-click. The setting's detail text changes with it (C6). | Platform convention. |
 | D15 | Notifications | Windows uses toast notifications through the `tauri-plugin-notification` plugin. Linux uses the freedesktop notification service through the same plugin. Title and body are the Mac's ("Fyke", "A routine has something for you"). | Same words on every system. |
 | D16 | Background updating | "Keep updating in the background" runs `fyke service status`, `fyke service install` and `fyke service uninstall`. That is a Startup entry on Windows and a systemd user unit on Linux, both already in the daemon. | The brief asks for this. The Mac uses a login agent instead. |
+| D17 | Color profile of the Mac's pictures | The Mac saves each picture in the color space of the display it ran on, as an embedded ICC profile, so its raw values differ from the tokens (`#111111` is stored as `#121212` on an LG UltraFine). `desktop/tools/parity.ts` converts each Mac picture to sRGB with `sips` before comparing; after that the tokens match exactly. The desktop pictures are sRGB already. | Comparing raw values would measure the monitor, not the app. |
+| D18 | Theme in test mode | The desktop app takes `FYKE_THEME` (`light` or `dark`) where the Mac takes the launch arguments `-theme light -followSystem NO`. In a browser the page's address can carry any `FYKE_` variable (`?FYKE_SCREEN=all&FYKE_THEME=dark`), and it wins over the bridge's environment. | A Tauri app has no `UserDefaults` argument domain. One variable per setting keeps test mode in one place. |
+| D19 | Where the Playwright suite runs | On macOS (WebKit, compared with the Mac's pictures) and on Linux CI (WebKit and Chromium). Windows CI runs the unit tests, the Rust tests and a build. | The bridge reaches the daemon's AF_UNIX socket through Node's `net` module, which on Windows connects to named pipes only. The app itself uses Rust on Windows, so this limits the test bridge, not the app. |
 
 ## F: Swift files and the TS or Rust module that takes each job
 
@@ -43,25 +46,25 @@ UI modules live in `desktop/src`, Rust in `desktop/src-tauri/src`. Logic ported 
 
 | Id | Swift file | Job | Desktop module | Status | Evidence |
 |---|---|---|---|---|---|
-| F1 | ReaderLogic/Logic.swift `SidebarIndent` | Row indent from depth | `src/logic/SidebarIndent.ts` | planned | |
-| F2 | ReaderLogic/Logic.swift `UndoStack` | Bounded undo, limit 100 | `src/logic/UndoStack.ts` | planned | |
-| F3 | ReaderLogic/Logic.swift `Fuzzy` | Palette matching and ranking | `src/logic/Fuzzy.ts` | planned | |
-| F4 | ReaderLogic/Logic.swift `CatchUpSession` | Catch-up queue, history, undo | `src/logic/CatchUpSession.ts` | planned | |
-| F5 | ReaderLogic/Logic.swift `Schedule` | Routine schedule words | `src/logic/Schedule.ts` | planned | |
-| F6 | ReaderLogic/Logic.swift `DryRunWords`, `Plural`, `SourcesNote` | Sentences about counts | `src/logic/DryRunWords.ts`, `Plural.ts`, `SourcesNote.ts` | planned | |
-| F7 | ReaderLogic/Rule.swift `Rule`, `Clause` | View rule editing | `src/logic/Rule.ts` | planned | |
-| F8 | ReaderLogic/Rule.swift `RuleSentence`, `SentencePart`, `ViewName` | A rule as a sentence; view names | `src/logic/RuleSentence.ts`, `ViewName.ts` | planned | |
-| F9 | Tests/ReaderLogicTests/LogicTests.swift | 7 suites, 29 tests | `desktop/tests/unit/*.test.ts` (`bun test`) | planned | |
-| F10 | Tokens.swift (generated) | Token values | `gui/tokens.css`, imported as-is by `src/styles/tokens.css` | planned | |
-| F11 | Theme.swift | Palettes (Newsprint and Terminal derived by mixing), hex, contrast, font resolving, weight ladder | `src/theme/palette.ts`, `src/theme/fonts.ts` | planned | |
+| F1 | ReaderLogic/Logic.swift `SidebarIndent` | Row indent from depth | `src/logic/SidebarIndent.ts` | done | `tests/unit/logic.test.ts` |
+| F2 | ReaderLogic/Logic.swift `UndoStack` | Bounded undo, limit 100 | `src/logic/UndoStack.ts` | done | `tests/unit/logic.test.ts` |
+| F3 | ReaderLogic/Logic.swift `Fuzzy` | Palette matching and ranking | `src/logic/Fuzzy.ts` | done | `tests/unit/logic.test.ts` |
+| F4 | ReaderLogic/Logic.swift `CatchUpSession` | Catch-up queue, history, undo | `src/logic/CatchUpSession.ts` | done | `tests/unit/logic.test.ts` |
+| F5 | ReaderLogic/Logic.swift `Schedule` | Routine schedule words | `src/logic/Schedule.ts` | done | `tests/unit/logic.test.ts` |
+| F6 | ReaderLogic/Logic.swift `DryRunWords`, `Plural`, `SourcesNote` | Sentences about counts | `src/logic/DryRunWords.ts`, `Plural.ts`, `SourcesNote.ts` | done | `tests/unit/logic.test.ts` |
+| F7 | ReaderLogic/Rule.swift `Rule`, `Clause` | View rule editing | `src/logic/Rule.ts` | done | `tests/unit/logic.test.ts` |
+| F8 | ReaderLogic/Rule.swift `RuleSentence`, `SentencePart`, `ViewName` | A rule as a sentence; view names | `src/logic/RuleSentence.ts`, `ViewName.ts` | done | `tests/unit/logic.test.ts` |
+| F9 | Tests/ReaderLogicTests/LogicTests.swift | 7 suites, 22 tests | `desktop/tests/unit/logic.test.ts` (`bun test`) | done | every Swift case ported, case for case, plus one more |
+| F10 | Tokens.swift (generated) | Token values | `src/theme/palette.ts` (`tokens`), checked value for value against `gui/tokens.css` | done | `theme.test.ts` › the light and dark tokens are gui/tokens.css |
+| F11 | Theme.swift | Palettes (Newsprint and Terminal derived by mixing), hex, contrast, font resolving, weight ladder | `src/theme/color.ts`, `src/theme/palette.ts`, `src/theme/fonts.ts` | built | palettes and mixing: `theme.test.ts` (OKLab mix equals SwiftUI's printed values). Font resolving and the weight ladder are planned. |
 | F12 | Prefs.swift | `ui` settings in config.json, themes, temporary fonts, a debounced save of 300 ms, reload on change | `src/model/prefs.ts`; Rust `config_watch.rs` (file watch that emits an event) | planned | |
-| F13 | Daemon.swift | Socket client, starting the daemon, timeouts, the event thread | Rust `daemon.rs`, `socket.rs`, `events.rs`, `paths.rs`; UI `src/transport/{index,tauri,bridge}.ts` | planned | |
+| F13 | Daemon.swift | Socket client, starting the daemon, timeouts, the event thread | Rust `rpc.rs`, `socket.rs`, `events.rs`, `paths.rs`; UI `src/transport/{index,tauri,bridge}.ts` | done | `cargo test` (rpc, events, paths); Playwright `harness.spec.ts` |
 | F14 | Models.swift | Wire types and their tolerant decoding | `src/model/types.ts`, `src/model/decode.ts` | planned | |
 | F15 | AppModel.swift | Places, selection, entries, marks, reload, events, data move | `src/model/app.ts` | planned | |
 | F16 | Library.swift | Views, recipes, briefs, routines, jobs, writers | `src/model/library.ts` | planned | |
 | F17 | Features.swift | View save and undo, briefs, catch-up start, test screens, notifier | `src/model/features.ts`, `src/testmode/screens.ts` | planned | |
 | F18 | Undo.swift | Undo center and toast | `src/model/undo.ts`, `src/ui/Toast.tsx` | planned | |
-| F19 | TestMode.swift | FYKE_SCREEN / KEYS / SNAPSHOT / HEADLESS | `src/testmode/index.ts`; Rust `testmode.rs` (env, snapshot, headless window) | planned | |
+| F19 | TestMode.swift | FYKE_SCREEN / KEYS / SNAPSHOT / HEADLESS | `src/testmode/index.ts`; Rust `testmode.rs` (env, snapshot, headless window) | built | `testmode.rs` passes every `FYKE_` variable to the UI and keeps a headless window hidden. Screens, keys and snapshots are planned. |
 | F20 | ReaderApp.swift | Window, menu commands, undo routing | Rust `main.rs` (window 1440 × 900, minimum 960 × 600); `src/commands.ts` | planned | |
 | F21 | RootView.swift | Layout, keys, problem banner, panes and divider, list, timeline, first run | `src/ui/Root.tsx`, `Panes.tsx`, `EntryList.tsx`, `Timeline.tsx`, `FirstRun.tsx`, `src/keys.ts` | planned | |
 | F22 | Kit.swift | Metrics, motion, buttons, chips, tabs, inline state, spinner, key hints, fields | `src/ui/kit/*.tsx`, `src/styles/kit.css` | planned | |
@@ -199,22 +202,22 @@ All of these come from one module, `src/platform.ts`, which reads the system fro
 
 | Id | Item | Status | Evidence |
 |---|---|---|---|
-| X1 | Rust: one `call(method, params)` command; a 1 MiB request limit; 35 s timeout (120 s for slow calls); a lost reply to a changing call is reported as "outcome unknown" and is never retried | planned | |
-| X2 | Rust: the event channel on a second connection, resuming from `since_seq`, reconnecting after 1 s | planned | |
-| X3 | Rust: start the bundled `fyke daemon --log` when the daemon is absent (`FYKE_BIN` overrides it), and retry 300 × 10 ms | planned | |
+| X1 | Rust: one `call(method, params)` command; a 1 MiB request limit; 35 s timeout (120 s for slow calls); a lost reply to a changing call is reported as "outcome unknown" and is never retried | done | `cargo test`: `rpc::tests::a_lost_reply_to_a_change_is_outcome_unknown_and_not_sent_again`, `a_lost_reply_to_a_read_is_sent_once_more`, `a_closed_connection_is_reopened_before_a_change_is_sent`, `a_request_over_one_mebibyte_is_refused_before_sending`, `a_slow_call_has_its_own_connection` |
+| X2 | Rust: the event channel on a second connection, resuming from `since_seq`, reconnecting after 1 s | done | `cargo test`: `events::tests::events_flow_and_resume_from_the_last_seq_after_a_drop` |
+| X3 | Rust: start the bundled `fyke daemon --log` when the daemon is absent (`FYKE_BIN` overrides it), and retry 300 × 10 ms | built | the refusals are tested (`no_daemon_and_no_program_says_where_it_looked`, `a_paused_client_does_not_start_the_daemon`); starting a real daemon is covered once the app's own e2e runs |
 | X4 | Rust: outdated daemon (`api_version` ≠ 2) stopped and replaced | planned | |
 | X5 | Web viewer: http and https only on every navigation; private and local addresses refused after DNS; incognito; no IPC; new windows open in the pane; downloads, camera and microphone refused | planned | |
-| X6 | Strict CSP; feed content never becomes HTML | planned | |
-| X7 | `cargo test`: socket, paths, URL guard, single instance, notify arguments | planned | |
-| X8 | `bun test`: the ReaderLogic ports and the models | planned | |
-| X9 | Shared fixtures moved out of `tools/e2e_gui.py`, which keeps passing | planned | |
+| X6 | Strict CSP; feed content never becomes HTML | built | the CSP is in `tauri.conf.json`; no feed content is drawn yet |
+| X7 | `cargo test`: socket, paths, URL guard, single instance, notify arguments | built | socket and paths tested; URL guard, single instance and notify are planned |
+| X8 | `bun test`: the ReaderLogic ports and the models | built | ReaderLogic ports and palettes: `bun test` (29 tests); models are planned |
+| X9 | Shared fixtures moved out of `tools/e2e_gui.py`, which keeps passing | done | `tools/gui_fixtures.py`; `e2e_gui.py --only discussion,shot:all,themes` passes, and Playwright uses the same module |
 | X10 | Playwright scenarios: keys, themes, divider, move, settings-route, mark-all, rename, font-weight, view-save, catchup-keys, palette-keys, brief, answer, routine-save, discussion, every `shot:` | planned | |
-| X11 | Comparison tool writing to `zig-out/parity/`; 99.99 % of pixels and every box within 1 px | planned | |
+| X11 | Comparison tool writing to `zig-out/parity/`; 99.99 % of pixels and every box within 1 px | built | `desktop/tools/parity.ts` writes `zig-out/parity/report.md` and a red diff picture per screen. Pixel share only; the 1 px box check is planned and needs the Mac to export its layout |
 | X12 | `tauri-driver` smoke test on Windows and Linux CI | planned | |
-| X13 | New suites in `tools/check.py` with rules | planned | |
+| X13 | New suites in `tools/check.py` with rules | done | `desktop-unit`, `desktop-rust`, `desktop-e2e` and the parity report in `tools/check.py`, with rules for `desktop/**` and `tools/gui_fixtures.py` |
 | X14 | Windows NSIS installer, per user, keeping the WinUI installer's behaviour; its end-to-end test | planned | |
 | X15 | Linux AppImage and `.deb`, with `fyke` bundled | planned | |
-| X16 | Icons from `tools/gen_icon.swift` through `tauri icon` | planned | |
+| X16 | Icons from `tools/gen_icon.swift` through `tauri icon` | done | `desktop/tools/icons.sh` (`bun run icons`); the sizes are committed in `src-tauri/icons` |
 | X17 | Size and speed measured in CI, with budgets | planned | |
 | X18 | `release.yml` and `tools/release.py` publish the installers with checksums | planned | |
 | X19 | `docs/desktop.md`, README, CHANGELOG | planned | |
