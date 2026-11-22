@@ -39,7 +39,7 @@ SUITES = {
     # zig-out/parity; the report is for reading and does not fail the run.
     "desktop-unit": ["cd desktop && bun run check && bun test tests/unit"],
     # The Rust side embeds the built UI, so the UI is built first.
-    "desktop-rust": ["cd desktop && bun run build && cd src-tauri && cargo test"],
+    "desktop-rust": ["cd desktop && bun run build && cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test"],
     "desktop-e2e": ["cd desktop && bunx playwright test", "cd desktop && bun tools/parity.ts"],
     "diagrams":    ["python3 tools/render_diagrams.py"],
     "site":        ["cd site && pnpm build"],

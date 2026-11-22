@@ -22,8 +22,13 @@ fn launch(url: &str) -> Result<(), String> {
     let wide = |text: &str| std::ffi::OsStr::new(text).encode_wide().chain(Some(0)).collect::<Vec<u16>>();
     let (verb, target) = (wide("open"), wide(url));
     // ShellExecute hands the address to the default browser; no shell parses it.
-    let result = unsafe { ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), target.as_ptr(), std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL) };
-    if result as isize > 32 { Ok(()) } else { Err("The browser could not be opened".into()) }
+    let result =
+        unsafe { ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), target.as_ptr(), std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL) };
+    if result as isize > 32 {
+        Ok(())
+    } else {
+        Err("The browser could not be opened".into())
+    }
 }
 
 #[cfg(not(windows))]
