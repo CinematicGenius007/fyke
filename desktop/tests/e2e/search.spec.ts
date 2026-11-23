@@ -43,7 +43,8 @@ for (const [name, keys, expected] of scenarios) {
     await play(page, keys);
     if (expected.length) await expect(page.locator(".article-title")).toHaveText(expected[0]);
     else await page.waitForTimeout(300);
-    expect(await readTitles(daemon)).toEqual(expected);
+    // Opening marks the article read through the daemon, a moment after it shows.
+    await expect.poll(() => readTitles(daemon)).toEqual(expected);
   });
 }
 
