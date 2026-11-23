@@ -1,0 +1,3 @@
+# `bun test` runs the unit tests; Playwright runs tests/e2e.
+[test]
+root = "tests/unit"

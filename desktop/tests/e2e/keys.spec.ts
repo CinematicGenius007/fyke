@@ -79,3 +79,18 @@ test("key hints say Ctrl and Shift, never the Mac's symbols", async ({ app }) =>
   await expect(page.getByText("Ctrl+Shift+A")).toBeVisible();
   for (const symbol of ["⌘", "⇧", "⌥", "⌃"]) expect(await page.locator("body").innerText()).not.toContain(symbol);
 });
+
+// A browser here never reloads on a synthetic key, so the check is that the app cancels
+// the keys the webview would reload on; WebView2 and WebKitGTK honor that.
+test("F5 and Ctrl+Shift+R are kept from the webview (K11)", async ({ app }) => {
+  const page = await app.open();
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as unknown as { seen: string[] }).seen = seen;
+    window.addEventListener("keydown", (event) => seen.push(`${event.key}:${event.defaultPrevented}`));
+  });
+  await page.keyboard.press("F5");
+  await page.keyboard.press("Control+Shift+R");
+  const seen = await page.evaluate(() => (window as unknown as { seen: string[] }).seen);
+  expect(seen.filter((key) => !["Control:false", "Shift:false"].includes(key))).toEqual(["F5:true", "R:true"]);
+});
