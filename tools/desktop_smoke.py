@@ -122,7 +122,8 @@ try:
 
     try:
         field = element_id(find(".first-run input"))
-        request("POST", f"/session/{session}/element/{field}/value", {"text": "example.org\n"})
+        # WebDriver's Enter key: WebKitWebDriver types a bare "\n" as text, not as Return.
+        request("POST", f"/session/{session}/element/{field}/value", {"text": "example.org\ue007"})
         dialog = wait_for(lambda: find("dialog.add-feed[open] input"), 15)
         value = request("GET", f"/session/{session}/element/{element_id(dialog)}/property/value")
         if value == "example.org":
