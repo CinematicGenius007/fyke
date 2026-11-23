@@ -72,6 +72,19 @@ def wait_for(probe, seconds=30):
     raise RuntimeError(f"timed out{f' ({last})' if last else ''}")
 
 
+def windows_diagnostics():
+    """What msedgedriver could not see: the WebView2 processes' command lines and every
+    DevToolsActivePort file, to show where the debugging port went."""
+    script = ("Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'Fyke|msedgewebview2|msedgedriver' } | "
+              "ForEach-Object { \"$($_.Name) $($_.ProcessId): $($_.CommandLine)\" } | Select-Object -First 12")
+    shown = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True, timeout=60)
+    print("processes:\n" + (shown.stdout or shown.stderr)[:6000])
+    for root in {home, os.environ.get("LOCALAPPDATA", ""), os.environ.get("TEMP", "")}:
+        for folder, _, files in os.walk(root) if root else []:
+            if "DevToolsActivePort" in files:
+                print("DevToolsActivePort in", folder)
+
+
 home = tempfile.mkdtemp(prefix="fyke-smoke-")
 env = dict(os.environ, FYKE_HOME=home)
 if sys.platform == "win32":
@@ -88,7 +101,12 @@ try:
     ok("tauri-driver is listening")
 
     capabilities = {"capabilities": {"alwaysMatch": {"browserName": "wry", "tauri:options": {"application": os.path.abspath(args.app)}}}}
-    session = request("POST", "/session", capabilities, timeout=120)["sessionId"]
+    try:
+        session = request("POST", "/session", capabilities, timeout=120)["sessionId"]
+    except RuntimeError:
+        if sys.platform == "win32":
+            windows_diagnostics()
+        raise
     ok("the app opens in a WebDriver session")
 
     def find(css):
