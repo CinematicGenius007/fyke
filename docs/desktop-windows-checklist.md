@@ -126,4 +126,4 @@ CI's Windows smoke test (`tools/desktop_smoke.py`) fails when the session starts
    ```
 
    Expected: "all checks passed". If it fails, record the whole output, including the "processes:" lines and any "DevToolsActivePort in" lines.
-3. If it failed, run it again with `$env:WEBVIEW2_USER_DATA_FOLDER` unset and say whether the result changed.
+3. If it failed, comment out the line that sets `WEBVIEW2_USER_DATA_FOLDER` in `tools/desktop_smoke.py`, run step 2 again, and say whether the result changed.
