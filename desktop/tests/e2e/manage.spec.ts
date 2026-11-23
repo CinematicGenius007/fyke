@@ -84,6 +84,8 @@ test("Esc keeps the name and gives the keys back to the list", async ({ app, dae
   await expect(page.locator(".rename-field")).toHaveCount(0);
   expect(await viewNames(daemon)).toEqual(["Needle"]);
   // The reader's keys work again: Down selects the first article and Return opens it.
+  // The saved view's list reloads after Ctrl+S; wait for its rows first.
+  await expect(page.locator(".entry-row")).toHaveCount(3);
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("Enter");
   await expect(page.locator(".article-title")).toHaveText("Needle one");
