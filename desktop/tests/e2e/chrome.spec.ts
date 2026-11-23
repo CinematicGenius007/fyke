@@ -50,6 +50,51 @@ for (const kind of ["windows", "linux"] as const) {
   });
 }
 
+// Nothing a screen draws may sit under the caption buttons: every screen in test mode,
+// in both chromes, checked for controls and words that meet the buttons' corner.
+const screens = ["all", "view", "feed", "starred", "folder", "view-empty", "today", "briefing", "recipe", "settings", "web", "ask", "routines", "toast", "activity", "health", "catchup", "add", "shortcuts", "delete-folder", "rename-folder", "rename-feed", "palette", "search"];
+for (const kind of ["windows", "linux"] as const) {
+  test(`${kind}: no screen puts anything under the window buttons`, async ({ app, daemon }) => {
+    test.setTimeout(120_000);
+    await afterRoutineSave(daemon);
+    const problems: string[] = [];
+    for (const screen of screens) {
+      const page = await app.open({ FYKE_SCREEN: screen, FYKE_CHROME: kind });
+      await page.waitForTimeout(400);
+      const hits = await page.evaluate(() => {
+        const group = document.querySelector(".window-buttons");
+        if (!group) return ["no window buttons"];
+        const box = group.getBoundingClientRect();
+        // A margin of 8 around the buttons, as the reader's actions keep.
+        const zone = { left: box.left - 8, right: box.right, top: box.top, bottom: box.bottom + 4 };
+        const found: string[] = [];
+        for (const el of document.querySelectorAll<HTMLElement>("body *")) {
+          if (group.contains(el)) continue;
+          const own = [...el.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && n.textContent!.trim());
+          const control = el.matches("button, a[href], input, textarea, select, [role=tab], [role=button], svg");
+          if (!own && !control) continue;
+          const style = getComputedStyle(el);
+          if (style.visibility === "hidden" || Number(style.opacity) === 0) continue;
+          // Words count where they are drawn, not across the whole box that holds them.
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          const r = control ? el.getBoundingClientRect() : range.getBoundingClientRect();
+          if (!r.width || !r.height) continue;
+          if (r.left < zone.right && r.right > zone.left && r.top < zone.bottom && r.bottom > zone.top) {
+            // Only what is on top at that point counts; something under a sheet's scrim does not.
+            const x = Math.max(r.left, zone.left) + 1, y = Math.max(r.top, zone.top) + 1;
+            const top = document.elementFromPoint(Math.min(x, r.right - 1), Math.min(y, r.bottom - 1));
+            if (top && (el.contains(top) || top.contains(el))) found.push(`${el.tagName.toLowerCase()}.${el.className || ""} "${(el.textContent ?? "").trim().slice(0, 20)}"`);
+          }
+        }
+        return found;
+      });
+      for (const hit of hits) problems.push(`${screen}: ${hit}`);
+    }
+    expect(problems).toEqual([]);
+  });
+}
+
 test("a press in the strip while a menu is open only closes the menu", async ({ app }) => {
   const page = await app.open({ FYKE_SCREEN: "all", FYKE_CHROME: "windows" });
   await page.getByRole("button", { name: "Local", exact: true }).click({ button: "right" });

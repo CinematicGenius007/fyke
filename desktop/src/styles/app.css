@@ -2912,8 +2912,11 @@ svg.icon .dots circle {
 :root[data-chrome] .reader-actions {
   right: calc(16px + var(--chrome-width));
 }
-:root[data-chrome] .web-bar {
+:root[data-chrome] :is(.web-bar, .recipe-bar) {
   padding-right: calc(16px + var(--chrome-width));
+}
+:root[data-chrome] .catchup-header > .action {
+  right: calc(16px + var(--chrome-width));
 }
 .window-buttons {
   position: absolute;
