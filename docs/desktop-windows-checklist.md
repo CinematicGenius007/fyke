@@ -105,3 +105,25 @@ CI installs, upgrades and uninstalls the installer silently (`tools/e2e_installe
 6. Run it once more and tick both boxes again. Then sign out and back in. Expected: `fyke status` answers before you open Fyke.
 7. Open Fyke, then uninstall it from Settings > Apps > Installed apps. Expected: Fyke closes, the Start menu entry goes, `%LOCALAPPDATA%\Programs\Fyke` is empty or gone, a new PowerShell window no longer finds `fyke`, and `FYKE_HOME` still holds `fyke.db` and your feeds.
 8. Reinstall it. Expected: Fyke opens with the same feeds and articles as before.
+
+## WebDriver smoke test
+
+CI's Windows smoke test (`tools/desktop_smoke.py`) fails when the session starts: msedgedriver waits 60 seconds and reports "DevToolsActivePort file doesn't exist". The Linux one passes. These steps find out why on a real machine. Build the app as in "Build the phase 4 app" first, and close every Fyke window.
+
+1. Install the driver and the matching Edge driver:
+
+   ```powershell
+   cargo install tauri-driver --locked --version 2.1.0
+   $webview = (Get-ItemProperty "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}").pv
+   Invoke-WebRequest "https://msedgedriver.microsoft.com/$webview/edgedriver_win64.zip" -OutFile "$env:TEMP\edgedriver.zip"
+   Expand-Archive "$env:TEMP\edgedriver.zip" "$env:TEMP\edgedriver" -Force
+   ```
+
+2. Run the smoke test from the repository root:
+
+   ```powershell
+   python tools/desktop_smoke.py --app desktop\src-tauri\target\release\Fyke.App.exe --native-driver "$env:TEMP\edgedriver\msedgedriver.exe" --fyke zig-out\bin\fyke.exe
+   ```
+
+   Expected: "all checks passed". If it fails, record the whole output, including the "processes:" lines and any "DevToolsActivePort in" lines.
+3. If it failed, run it again with `$env:WEBVIEW2_USER_DATA_FOLDER` unset and say whether the result changed.
