@@ -2915,7 +2915,7 @@ svg.icon .dots circle {
 :root[data-chrome] :is(.web-bar, .recipe-bar) {
   padding-right: calc(16px + var(--chrome-width));
 }
-:root[data-chrome] .catchup-header > .action {
+:root[data-chrome] :is(.catchup-header > .action, .routine-remove) {
   right: calc(16px + var(--chrome-width));
 }
 .window-buttons {
