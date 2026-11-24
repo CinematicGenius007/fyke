@@ -97,3 +97,199 @@ jobs:
       - name: e2e_tui
         if: ${{ !cancelled() }}
         run: python3 tools/e2e_tui.py zig-out/bin/fyke
+
+  # The Windows and Linux app (desktop/, Tauri 2). Both systems run the unit tests and
+  # the Rust tests; desktop-package below builds it. Linux also runs the Playwright suite against a real daemon:
+  # its bridge reaches the daemon's AF_UNIX socket through Node's net module, which on
+  # Windows speaks named pipes only.
+  desktop:
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+
+      - name: Install
+        working-directory: desktop
+        run: bun install --frozen-lockfile
+
+      - name: Types and unit tests
+        working-directory: desktop
+        run: bun run check && bun test tests/unit
+
+      - name: Build the UI
+        working-directory: desktop
+        run: bun run build
+
+      - name: Rust tests
+        working-directory: desktop/src-tauri
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+
+      - name: Install Zig
+        if: runner.os == 'Linux'
+        run: |
+          curl -fsSL "https://ziglang.org/download/$ZIG_VERSION/zig-x86_64-linux-$ZIG_VERSION.tar.xz" -o "$RUNNER_TEMP/zig.tar.xz"
+          echo "3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a  $RUNNER_TEMP/zig.tar.xz" | sha256sum -c -
+          mkdir "$RUNNER_TEMP/zig"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+          echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
+
+      - name: Playwright
+        if: runner.os == 'Linux'
+        run: |
+          zig build -Drelease
+          cd desktop
+          bunx playwright install --with-deps webkit chromium
+          bunx playwright test
+
+  # The desktop app's installer (Windows) and packages (Linux), their end-to-end tests,
+  # and its size and speed budgets (desktop/budgets.json). A release publishes these
+  # packages. The Linux packages are built on the oldest supported Ubuntu, so the
+  # AppImage runs on as many systems as it can.
+  desktop-package:
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Zig (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $zip = Join-Path $env:RUNNER_TEMP "zig.zip"
+          Invoke-WebRequest "https://ziglang.org/download/$env:ZIG_VERSION/zig-x86_64-windows-$env:ZIG_VERSION.zip" -OutFile $zip
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne "b03f477a1943673e02aca0f570e8030dffd536ce1f45cbc4d3326ec31159562e") { throw "Zig checksum mismatch: $hash" }
+          $target = Join-Path $env:RUNNER_TEMP "zig"
+          Expand-Archive $zip -DestinationPath $target
+          Add-Content $env:GITHUB_PATH (Get-ChildItem $target -Directory | Select-Object -First 1).FullName
+
+      - name: Install Zig (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          curl -fsSL "https://ziglang.org/download/$ZIG_VERSION/zig-x86_64-linux-$ZIG_VERSION.tar.xz" -o "$RUNNER_TEMP/zig.tar.xz"
+          echo "3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a  $RUNNER_TEMP/zig.tar.xz" | sha256sum -c -
+          mkdir "$RUNNER_TEMP/zig"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+          echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
+
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev patchelf libfuse2 xvfb dbus webkit2gtk-driver
+
+      - name: Install
+        working-directory: desktop
+        run: bun install --frozen-lockfile
+
+      - name: Measuring dependencies
+        run: python -m pip install psutil
+
+      - name: The daemon
+        run: zig build -Drelease
+
+      # The upgrade test needs an older installer, so this builds one first: the build
+      # after it leaves the current app in target/release for the budgets.
+      - name: Older installer
+        if: runner.os == 'Windows'
+        run: python tools/desktop_package.py --fyke zig-out/bin/fyke.exe --version 0.0.1 --out dist-old
+
+      - name: Installer
+        if: runner.os == 'Windows'
+        run: python tools/desktop_package.py --fyke zig-out/bin/fyke.exe --out dist
+
+      - name: Packages
+        if: runner.os == 'Linux'
+        run: python3 tools/desktop_package.py --fyke zig-out/bin/fyke --out dist
+
+      - name: e2e_installer
+        if: runner.os == 'Windows'
+        run: python tools/e2e_installer_windows.py dist-old/*-setup-x64.exe dist/*-setup-x64.exe
+
+      - name: e2e_packages
+        if: runner.os == 'Linux'
+        run: dbus-run-session -- xvfb-run -a python3 tools/e2e_packages_linux.py dist/*.deb dist/*.AppImage
+
+      - name: Budgets (Windows)
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
+        run: python tools/desktop_budget.py --app desktop/src-tauri/target/release/Fyke.App.exe --fyke desktop/src-tauri/binaries/fyke-x86_64-pc-windows-msvc.exe --package dist/*-setup-x64.exe --out budget-windows.json
+
+      - name: Budgets (Linux)
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        run: dbus-run-session -- xvfb-run -a python3 tools/desktop_budget.py --app desktop/src-tauri/target/release/fyke-app --fyke desktop/src-tauri/binaries/fyke-x86_64-unknown-linux-gnu --package dist/*.deb --package dist/*.AppImage --out budget-linux.json
+
+      # X12: the built app through tauri-driver, with a data folder of its own.
+      - name: tauri-driver
+        if: ${{ !cancelled() }}
+        run: cargo install tauri-driver --locked --version 2.1.0
+
+      - name: Smoke test (Windows)
+        if: ${{ !cancelled() && runner.os == 'Windows' }}
+        shell: pwsh
+        run: |
+          # The Edge driver must match the WebView2 runtime the app runs on.
+          $key = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          $driver = Join-Path $env:EdgeWebDriver "msedgedriver.exe"
+          try {
+            $version = (Get-ItemProperty $key).pv
+            $zip = Join-Path $env:RUNNER_TEMP "edgedriver.zip"
+            Invoke-WebRequest "https://msedgedriver.microsoft.com/$version/edgedriver_win64.zip" -OutFile $zip
+            Expand-Archive $zip -DestinationPath (Join-Path $env:RUNNER_TEMP "edgedriver") -Force
+            $driver = Join-Path $env:RUNNER_TEMP "edgedriver\msedgedriver.exe"
+            Write-Host "Edge driver $version for WebView2 $version"
+          } catch {
+            Write-Host "Using the runner's Edge driver: $_"
+          }
+          # Earlier steps launch the app; one left running takes the launch over.
+          Get-Process Fyke.App, fyke, msedgewebview2 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "stopping $($_.Name) $($_.Id)"; Stop-Process $_ -Force }
+          python tools/desktop_smoke.py --app desktop/src-tauri/target/release/Fyke.App.exe --native-driver $driver --fyke desktop/src-tauri/binaries/fyke-x86_64-pc-windows-msvc.exe
+
+      - name: Smoke test (Linux)
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        run: dbus-run-session -- xvfb-run -a python3 tools/desktop_smoke.py --app desktop/src-tauri/target/release/fyke-app --native-driver "$(command -v WebKitWebDriver)" --fyke desktop/src-tauri/binaries/fyke-x86_64-unknown-linux-gnu
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ runner.os }}
+          path: |
+            dist/*-setup-x64.exe
+            dist/*.deb
+            dist/*.AppImage
+          if-no-files-found: error

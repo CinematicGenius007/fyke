@@ -136,7 +136,7 @@ struct Panes: View {
     @State private var hovering = false
     @Environment(\.palette) private var p
 
-    private static let standard = 375.0
+    private static let standard = 368.0
     private static let smallest = 280.0
     /// The reader needs room to be read in.
     private static let readerMinimum = 400.0

@@ -1,0 +1,3077 @@
+/* The main window's screens. Numbers are the Mac's points (gui/Sources/Reader), which
+ * are CSS pixels at the same zoom. Single lines use the font's natural height
+ * (`line-height: normal`), as SwiftUI does; text with SwiftUI's `lineSpacing` adds it as
+ * leading and takes half back above and below (src/theme/metrics.ts). */
+
+/* MARK: Kit */
+
+.rule {
+  flex: none;
+  height: 1px;
+  background: var(--hairline);
+}
+.rule.vertical {
+  width: 1px;
+  height: auto;
+  align-self: stretch;
+}
+.rule.strong {
+  background: var(--ink);
+}
+
+svg.icon {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  overflow: visible;
+}
+svg.icon.filled > path,
+svg.icon.filled > circle {
+  fill: currentColor;
+}
+svg.icon .dots circle {
+  fill: currentColor;
+  stroke: none;
+}
+
+.spinner {
+  flex: none;
+  fill: none;
+  stroke: var(--unread);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  animation: turn 0.9s linear infinite;
+}
+@keyframes turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+.dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.count {
+  font-size: 13px;
+  font-weight: var(--ui-500);
+  color: var(--unread);
+}
+.count.quiet {
+  font-weight: var(--ui-400);
+  color: var(--muted);
+}
+
+.section-label {
+  font-size: 11px;
+  font-weight: var(--ui-600);
+  letter-spacing: 0.66px;
+  color: var(--muted);
+}
+
+.symbol-button {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--ink-soft);
+  border-radius: var(--radius-control);
+  transition: background-color 0.12s;
+}
+.symbol-button:not(:disabled):hover {
+  background: var(--selected);
+}
+.symbol-button:disabled {
+  color: var(--control);
+}
+.symbol-button:not(:disabled):active,
+.symbol-button.selected {
+  background: var(--selected-strong);
+}
+.symbol-button.selected {
+  color: var(--ink);
+}
+.symbol-button.selected:active {
+  background: color-mix(in srgb, var(--control) 60%, transparent);
+}
+
+.icon-button {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-soft);
+  border-radius: var(--radius-control);
+  transition: background-color 0.12s;
+}
+/* Controls.swift IconButton draws with SymbolStyle. */
+.icon-button:not(:disabled):hover {
+  background: var(--selected);
+}
+.icon-button:not(:disabled):active {
+  background: var(--selected-strong);
+}
+
+.chip {
+  height: 24px;
+  margin: 2px 0;
+  padding: 0 8px;
+  border-radius: var(--radius-control);
+  background: var(--selected);
+  color: var(--ink);
+  font-size: 13px;
+  white-space: nowrap;
+  transition: background-color 0.12s;
+}
+.chip:hover {
+  background: var(--selected-strong);
+}
+.chip:active {
+  background: color-mix(in srgb, var(--control) 60%, transparent);
+}
+.chip.muted {
+  color: var(--muted);
+}
+.chip.selected {
+  background: var(--unread);
+  color: var(--on-accent);
+  font-weight: var(--ui-500);
+}
+.chip.selected:active {
+  background: color-mix(in srgb, var(--unread), black 15%);
+}
+
+.one-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.scroll {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.scroll:hover {
+  scrollbar-color: var(--control) transparent;
+}
+
+/* MARK: Sidebar (Sidebar.swift) */
+
+.sidebar {
+  flex: none;
+  width: 231px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 48px 12px 8px;
+  background: var(--surface);
+  min-height: 0;
+}
+
+.sidebar-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 32px;
+  padding-right: 8px;
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  transition: background-color 0.12s;
+}
+.sidebar-row:hover {
+  background: var(--selected);
+}
+.sidebar-row:active,
+.sidebar-row.selected {
+  background: var(--selected-strong);
+}
+
+.drag-target {
+  background: var(--selected);
+  border-radius: var(--radius-control);
+}
+
+.row-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--ink-soft);
+}
+.row-icon.centered {
+  display: grid;
+  place-items: center;
+}
+
+.row-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row-title.medium {
+  font-weight: var(--ui-500);
+}
+.sidebar-row.selected .row-title {
+  font-weight: var(--ui-600);
+}
+.row-title.muted {
+  color: var(--muted);
+}
+
+.row-trailing {
+  flex: none;
+  display: flex;
+  align-items: center;
+  margin-left: 16px;
+}
+.row-trailing:empty {
+  display: none;
+}
+
+.row-note {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.row-warning {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+}
+
+.section-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 4px 4px 10px;
+}
+
+.sidebar-note {
+  flex: none;
+  height: 24px;
+  line-height: 24px;
+  padding-left: 32px;
+  font-size: 12px;
+  color: var(--muted);
+  /* One line in a 24 point frame: SwiftUI truncates the rest. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+}
+.sidebar-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 12px;
+}
+
+.folder-row {
+  position: relative;
+}
+/* A row being renamed (Sidebar.swift RenameField): a 24 high field with a centred
+   1 point stroke in the unread color. */
+.sidebar-rename {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding-right: 8px;
+}
+.rename-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 24px;
+  padding: 0 4px;
+  border: 0;
+  outline: 0;
+  border-radius: var(--radius-control);
+  background: var(--ground);
+  box-shadow:
+    0 0 0 0.5px var(--unread),
+    inset 0 0 0 0.5px var(--unread);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+}
+.rename-note {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.chevron {
+  position: absolute;
+  top: 4px;
+  width: 14px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.status-line {
+  flex: none;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+.status-rule {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+.sidebar-row.status {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-left: 10px;
+}
+.status-words {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: 12px;
+}
+.status-words.attention {
+  color: var(--ink);
+}
+
+/* MARK: Content and panes (RootView.swift) */
+
+.content {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  position: relative;
+  background: var(--ground);
+}
+
+.panes {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  height: 100%;
+}
+.pane-list {
+  flex: none;
+  display: flex;
+  height: 100%;
+}
+.pane-reader {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  position: relative;
+}
+
+.divider {
+  flex: none;
+  width: 9px;
+  position: relative;
+  cursor: col-resize;
+  z-index: 1;
+}
+.divider-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+  background: var(--hairline);
+  transition: background-color 0.12s;
+}
+.divider:hover .divider-line,
+.divider.dragging .divider-line {
+  background: var(--control);
+}
+
+/* MARK: Entry list */
+
+.entry-list {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--ground);
+}
+
+.list-header {
+  flex: none;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 48px 24px 16px;
+}
+.list-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+/* SwiftUI's .firstTextBaseline sets the 24 pt button 2 pt below the row's top, so it
+   hangs past the title and the row is 2 pt taller (measured in the Mac's pictures). */
+.list-heading .symbol-button {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+.list-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 20px;
+  font-weight: var(--ui-600);
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.list-unread {
+  flex: none;
+  font-size: 13px;
+  color: var(--muted);
+}
+.meets-divider {
+  position: absolute;
+  left: 0;
+  right: -4px;
+  bottom: 0;
+}
+
+.sentence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 4px;
+  max-width: 520px;
+}
+.sentence .joiner {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 28px;
+}
+
+.list-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+}
+.list-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px 12px;
+}
+
+.entry-row {
+  position: relative;
+  border-radius: 8px;
+}
+.entry-row.selected {
+  background: var(--selected);
+}
+.entry-button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 12px;
+}
+.entry-title {
+  font-family: var(--font-title), serif;
+  font-size: 18px;
+  font-weight: var(--title-500);
+  color: var(--unread);
+  /* .line(23, size: 18): 1.4 between lines */
+  line-height: calc(var(--lh-title, 1.2) * 18px + 1.4px);
+  margin: -0.7px 0;
+}
+.entry-title.read,
+.timeline-row-title.read {
+  color: var(--read);
+}
+.entry-preview {
+  font-size: 13px;
+  color: var(--muted);
+  /* .line(18, size: 13): 2.4 between lines */
+  line-height: calc(var(--lh-ui, 1.21) * 13px + 2.4px);
+  margin: -1.2px 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.entry-row.selected .entry-preview {
+  color: var(--ink-soft);
+}
+.entry-date {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.star-toggle {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  /* Out of the layout until it shows, as SwiftUI's `if row.starred || showing` leaves it. */
+  display: none;
+}
+.star-toggle.on {
+  color: var(--unread);
+}
+.star-toggle.on,
+.star-toggle.showing,
+.entry-row:hover .star-toggle,
+.timeline-line:hover .star-toggle {
+  display: grid;
+}
+.entry-star {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+}
+
+/* The Mac's InlineState (Kit.swift): a label, a title in the title face and the
+   detail in the reading face, at most 520 wide. */
+.inline-empty {
+  padding: 20px 12px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 520px;
+}
+.brief-state.inline-empty {
+  max-width: none;
+}
+.inline-empty > * {
+  max-width: 520px;
+}
+.inline-label {
+  font-size: 11px;
+  font-weight: var(--ui-600);
+  letter-spacing: 0.66px;
+  color: var(--muted);
+  text-transform: uppercase;
+  line-height: calc(var(--lh-ui, 1.21) * 11px);
+  margin: 0 0 12px;
+}
+.inline-label:has(> svg, > .dot) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.inline-label.active {
+  color: var(--unread);
+}
+.inline-title {
+  font-family: var(--font-title), serif;
+  font-size: 26px;
+  font-weight: var(--title-600);
+  letter-spacing: -0.26px;
+  line-height: calc(var(--lh-title, 1.2) * 26px);
+  color: var(--ink);
+  margin: 0 0 12px;
+}
+.inline-detail {
+  font-family: var(--font-reading), serif;
+  font-size: 17px;
+  font-weight: var(--reading-400);
+  /* .line(26, size: 17): the font's own height plus 26 − 17 × 1.2 between lines. */
+  line-height: calc(var(--lh-reading, 1.2) * 17px + 5.6px);
+  color: var(--ink-soft);
+  margin: -2.8px 0;
+}
+
+/* MARK: Timeline */
+
+.timeline {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.timeline-column {
+  width: 760px;
+  margin: 0 auto;
+  padding: 72px 0 48px;
+}
+.timeline-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 36px;
+}
+.timeline-title {
+  font-family: var(--font-title), serif;
+  font-size: 48px;
+  font-weight: var(--title-600);
+  letter-spacing: -0.72px;
+  line-height: normal;
+}
+.timeline-filter {
+  font-size: 14px;
+  font-weight: var(--ui-500);
+  color: var(--ink-soft);
+}
+.timeline-group {
+  font-size: 11px;
+  font-weight: var(--ui-600);
+  letter-spacing: 0.66px;
+  color: var(--muted);
+  padding-bottom: 8px;
+}
+.timeline-group.later {
+  padding-top: 30px;
+}
+.timeline-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  padding: 16px 0;
+}
+.timeline-line.selected {
+  padding: 16px 8px;
+  background: var(--selected);
+}
+.timeline-button {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+}
+.timeline-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.timeline-row-title {
+  font-family: var(--font-title), serif;
+  font-size: 21px;
+  font-weight: var(--title-500);
+  color: var(--unread);
+}
+.timeline-preview {
+  font-size: 14px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.timeline-meta {
+  flex: none;
+  width: 120px;
+  padding-top: 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: right;
+}
+.timeline-star {
+  margin-top: 2px;
+}
+.timeline-empty {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* MARK: Reader (ReaderPane.swift) */
+
+.reader-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  background: var(--ground);
+}
+.reader-empty {
+  flex: 1 1 auto;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  color: var(--muted);
+}
+.reader-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.reading-column {
+  --lead: max(0px, var(--text-size) * var(--line-spacing) - var(--text-size) * 1.2);
+  max-width: calc(var(--column) + 96px);
+  margin: 0 auto;
+  padding: 72px 48px 96px;
+  font-family: var(--font-reading), serif;
+  font-size: var(--text-size);
+  font-weight: var(--reading-400);
+  color: var(--ink);
+}
+.article-meta {
+  font-family: var(--font-ui), sans-serif;
+  font-size: 13px;
+  font-weight: var(--ui-400);
+  color: var(--muted);
+  padding-bottom: 20px;
+}
+.article-title {
+  font-family: var(--font-title), serif;
+  font-size: 48px;
+  font-weight: var(--title-600);
+  letter-spacing: -0.72px;
+  line-height: normal;
+  padding-bottom: 32px;
+}
+.article-status {
+  font-family: var(--font-ui), sans-serif;
+  font-size: 13px;
+  color: var(--muted);
+  padding-bottom: 16px;
+}
+.article-empty-actions {
+  display: flex;
+  gap: 8px;
+}
+.plain-button {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-control);
+  background: var(--selected);
+  font-family: var(--font-ui), sans-serif;
+  font-size: 13px;
+  font-weight: var(--ui-500);
+}
+.plain-button:hover {
+  background: var(--selected-strong);
+}
+
+.blocks a {
+  color: var(--unread);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.b-p {
+  line-height: calc(var(--lh-reading, 1.2) * var(--text-size) + var(--lead));
+  margin: calc(var(--lead) / -2) 0 calc(20px - var(--lead) / 2);
+}
+.b-p.soft {
+  color: var(--ink-soft);
+}
+.b-h {
+  font-family: var(--font-title), serif;
+  font-weight: var(--title-600);
+  letter-spacing: -0.27px;
+  padding: 12px 0;
+}
+.b-h > * {
+  line-height: inherit;
+}
+.b-h.level-2 {
+  font-size: 27px;
+  line-height: calc(var(--lh-title, 1.2) * 27px + 6px);
+  margin: -3px 0;
+}
+.b-h.level-3 {
+  font-size: 23px;
+  line-height: calc(var(--lh-title, 1.2) * 23px + 6px);
+  margin: -3px 0;
+}
+.b-h.level-4 {
+  font-size: 20px;
+  line-height: calc(var(--lh-title, 1.2) * 20px + 6px);
+  margin: -3px 0;
+}
+.b-code {
+  margin-bottom: 24px;
+  padding: 16px 20px;
+  border-radius: 8px;
+  background: var(--surface);
+  font-family: var(--font-code), monospace;
+  font-size: 14px;
+  font-weight: var(--code-400);
+  line-height: calc(var(--lh-code, 1.32) * 14px + 5px);
+  overflow-x: auto;
+  scrollbar-width: none;
+  white-space: pre;
+}
+.inline-code {
+  font-family: var(--font-code), monospace;
+  font-size: 0.85em;
+}
+.b-quote {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
+  color: var(--ink-soft);
+}
+.b-quote-bar {
+  flex: none;
+  width: 2px;
+  background: var(--control);
+}
+.b-quote-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.b-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+.b-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.b-marker {
+  flex: none;
+  color: var(--muted);
+}
+.b-item-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.b-table {
+  display: grid;
+  justify-content: start;
+  column-gap: 16px;
+  row-gap: 8px;
+  margin-bottom: 20px;
+  font-size: calc(var(--text-size) * 0.85);
+}
+.b-hr {
+  padding: 20px 0;
+}
+.b-img {
+  margin-bottom: 20px;
+}
+.b-img img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+.b-img-load {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--surface);
+  font-family: var(--font-ui), sans-serif;
+  font-size: 13px;
+  color: var(--muted);
+}
+.b-img-alt {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.b-img-action {
+  color: var(--unread);
+}
+.b-embed {
+  display: block;
+  margin-bottom: 20px;
+  font-family: var(--font-ui), sans-serif;
+  font-size: 14px;
+}
+
+.reader-actions {
+  position: absolute;
+  top: 10px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.type-button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: var(--ui-500);
+  color: var(--ink-soft);
+}
+.open-page {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px 0 8px;
+  border-radius: var(--radius-control);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  font-size: 13px;
+  font-weight: var(--ui-500);
+  color: var(--ink);
+}
+.open-page svg.icon {
+  color: var(--ink-soft);
+}
+
+/* MARK: Problem banner and undo toast */
+
+.bottom-layer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 10;
+}
+.bottom-layer > * {
+  pointer-events: auto;
+}
+.problem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: var(--radius-control);
+  background: var(--ink);
+  color: var(--ground);
+  font-size: 13px;
+}
+.problem-close {
+  display: grid;
+  place-items: center;
+  color: var(--ground);
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 360px;
+  max-width: 480px;
+  height: 44px;
+  padding: 0 8px 0 16px;
+  border-radius: var(--radius-panel);
+  background: var(--ink);
+  color: var(--ground);
+  font-size: 14px;
+  box-shadow: 0 12px 16px rgb(0 0 0 / 12%);
+}
+.toast > span {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.toast-undo {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-control);
+  font-weight: var(--ui-500);
+  color: var(--ground);
+}
+.toast-undo:hover {
+  background: rgb(255 255 255 / 12%);
+}
+
+/* Worded buttons (Kit.swift ActionStyle). */
+.action {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-control);
+  font-size: 14px;
+  font-weight: var(--ui-500);
+  white-space: nowrap;
+  color: var(--ink);
+  transition: background-color 0.12s;
+}
+.action.compact {
+  height: 28px;
+  font-size: 13px;
+}
+.action.quiet,
+.action.link {
+  padding: 0 10px;
+}
+.action.secondary {
+  background: var(--ground);
+  box-shadow: inset 0 0 0 1px var(--control);
+}
+.action.secondary:hover,
+.action.quiet:hover,
+.action.link:hover {
+  background: var(--selected);
+}
+.action.secondary:active,
+.action.quiet:active,
+.action.link:active,
+.action.selected {
+  background: var(--selected-strong);
+}
+.action.link {
+  color: var(--unread);
+}
+.action.primary {
+  background: var(--unread);
+  color: var(--on-accent);
+}
+.action.primary:hover {
+  background: color-mix(in srgb, var(--unread), black 8%);
+}
+.action.primary:active {
+  background: color-mix(in srgb, var(--unread), black 18%);
+}
+.action.inverse {
+  background: var(--ink);
+  color: var(--ground);
+}
+.action.inverse:hover {
+  background: color-mix(in srgb, var(--ink) 88%, transparent);
+}
+.action:disabled {
+  color: var(--muted);
+}
+.action.secondary:disabled {
+  background: var(--ground);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+}
+.action.primary:disabled {
+  background: var(--selected-strong);
+}
+.action.quiet:disabled,
+.action.link:disabled {
+  background: none;
+}
+
+.key-hint {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--selected);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: var(--ui-500);
+}
+.key-hint.on-dark {
+  background: color-mix(in srgb, var(--ground) 12%, transparent);
+  color: color-mix(in srgb, var(--ground) 70%, transparent);
+}
+
+/* Over the window: a scrim that closes what it holds when clicked. */
+.scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--scrim);
+}
+
+/* Search (Search.swift SearchPanel). */
+.search-panel {
+  --sheet-ground: var(--ground);
+  width: 640px;
+  /* 96 below the Mac's 28 point title bar strip, which SwiftUI's overlay keeps clear of. */
+  margin-top: 124px;
+  display: flex;
+  flex-direction: column;
+  background: var(--sheet-ground);
+  border-radius: var(--radius-sheet);
+  box-shadow: inset 0 0 0 1px var(--control);
+}
+:root[data-dark="1"] .search-panel {
+  --sheet-ground: var(--surface);
+}
+.search-query {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px;
+}
+.search-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 20px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.search-field::placeholder {
+  color: var(--muted);
+}
+.search-count {
+  flex: none;
+  font-size: 13px;
+  color: var(--muted);
+}
+.search-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 20px 20px 22px;
+}
+.search-note-main {
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.search-note-main.muted,
+.search-note-detail {
+  color: var(--muted);
+}
+.search-note-detail {
+  font-size: 13px;
+}
+.search-none {
+  font-family: var(--font-title), serif;
+  font-size: 21px;
+  font-weight: var(--title-500);
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  overflow-y: auto;
+}
+/* SwiftUI's .frame(height: 64) centres the HStack, whose columns are top aligned. */
+.search-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 64px;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  text-align: left;
+}
+.search-row-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+.search-row.selected {
+  background: var(--selected);
+}
+.search-row-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.search-row-title {
+  font-family: var(--font-title), serif;
+  font-size: 18px;
+  font-weight: var(--title-500);
+  color: var(--unread);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-row-title.read {
+  color: var(--read);
+}
+.search-row-preview {
+  font-size: 13px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-mark {
+  color: var(--ink);
+  font-weight: var(--ui-600);
+}
+.search-row-meta {
+  flex: none;
+  width: 104px;
+  padding-top: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.search-row-meta > span {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-footer {
+  display: flex;
+  align-items: center;
+  padding: 12px 20px;
+}
+.search-scope {
+  font-size: 13px;
+  font-weight: var(--ui-500);
+  color: var(--ink-soft);
+}
+.search-keys {
+  margin-left: auto;
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.search-footer .action {
+  margin-left: 8px;
+}
+
+/* The command palette (CommandPalette.swift), in the popover panel (Kit.swift PopoverPanel). */
+.scrim.quiet {
+  background: color-mix(in srgb, var(--scrim) 60%, transparent);
+}
+.palette {
+  --panel-ground: var(--ground);
+  width: 620px;
+  /* 120 below the Mac's 28 point title bar strip. */
+  margin-top: 148px;
+  max-height: calc(100% - 168px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--panel-ground);
+  border-radius: var(--radius-panel);
+  /* A CSS blur of 32 is SwiftUI's shadow radius of 16. */
+  box-shadow:
+    inset 0 0 0 1px var(--hairline),
+    0 12px 32px rgb(0 0 0 / 12.2%),
+    0 2px 6px rgb(0 0 0 / 7.8%);
+}
+:root[data-dark="1"] .palette {
+  --panel-ground: var(--surface);
+  box-shadow:
+    inset 0 0 0 1px var(--hairline),
+    0 12px 32px rgb(0 0 0 / 45%),
+    0 2px 6px rgb(0 0 0 / 30%);
+}
+.palette-query {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  padding: 0 20px;
+}
+.palette-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  font-size: 18px;
+  color: var(--ink);
+}
+.palette-field::placeholder {
+  color: var(--muted);
+}
+.palette-esc {
+  font-size: 12px;
+  color: var(--muted);
+}
+.palette-list {
+  max-height: 420px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 0 8px 8px;
+}
+.palette-section {
+  padding: 12px 20px 4px;
+}
+.palette-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-control);
+  text-align: left;
+  font-size: 14px;
+  color: var(--ink);
+}
+.palette-row.selected {
+  background: var(--selected);
+}
+.palette-row.article {
+  align-items: flex-start;
+  padding: 8px 12px;
+}
+.palette-icon {
+  flex: none;
+  width: 16px;
+  display: grid;
+  place-items: center;
+  color: var(--ink-soft);
+}
+.palette-dot {
+  padding-top: 8px;
+}
+.palette-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-right: 0;
+  white-space: nowrap;
+}
+.palette-mark {
+  font-weight: var(--ui-600);
+}
+.palette-detail {
+  flex: none;
+  max-width: 50%;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.palette-article {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.palette-article-title {
+  font-family: var(--font-title), serif;
+  font-size: 16px;
+  font-weight: var(--title-500);
+  color: var(--unread);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.palette-article-title.read {
+  color: var(--read);
+}
+.palette-article-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* The shortcuts sheet (Sidebar.swift ShortcutsPopup), centred below the title bar strip. */
+.scrim.centered {
+  justify-content: center;
+  padding-top: 28px;
+}
+/* A sheet over the scrim (the shortcuts popup, the confirmations): the ground, radius
+   sheet, a centred 1 point stroke, and SwiftUI's shadow radius of 25 as a CSS blur of 50.
+   The Mac draws that shadow's y of 18 upward (the shadow sits in a background inside a
+   ZStack), so it falls above the sheet here too (D23). 14 % in place of 15 % gives the
+   Mac's measured depth at the edge, 20 levels. */
+.sheet {
+  background: var(--ground);
+  border-radius: var(--radius-sheet);
+  box-shadow:
+    0 0 0 0.5px var(--hairline),
+    inset 0 0 0 0.5px var(--hairline),
+    0 -18px 50px rgb(0 0 0 / 14%);
+}
+:root[data-dark="1"] .sheet {
+  box-shadow:
+    0 0 0 0.5px var(--hairline),
+    inset 0 0 0 0.5px var(--hairline),
+    0 -18px 50px rgb(0 0 0 / 50%);
+}
+.shortcuts {
+  width: 640px;
+  padding: 28px 32px 20px;
+}
+.shortcuts-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 18px;
+}
+.shortcuts-title {
+  margin: 0;
+  font-family: var(--font-title), serif;
+  font-size: 26px;
+  font-weight: var(--title-600);
+  letter-spacing: -0.26px;
+  color: var(--ink);
+}
+.shortcuts-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.shortcuts-columns {
+  display: flex;
+  align-items: flex-start;
+  gap: 40px;
+}
+.shortcuts-column {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.shortcuts-label {
+  padding-bottom: 8px;
+}
+.shortcuts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 30px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.shortcuts-row kbd {
+  font-family: var(--font-code), monospace;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.shortcuts-rule {
+  margin-top: 8px;
+}
+.shortcuts-foot {
+  padding-top: 14px;
+}
+
+/* Floating panels (Controls.swift FloatLayer, FloatPanelStyle, MenuRow): the popover
+   look from the design rules, radius 10, a hairline and two shadows. */
+.float-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+}
+.float-panel {
+  --panel-ground: var(--ground);
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  padding: 6px;
+  background: var(--panel-ground);
+  border-radius: var(--radius-panel);
+  box-shadow:
+    inset 0 0 0 1px var(--hairline),
+    0 12px 32px rgb(0 0 0 / 12.2%),
+    0 2px 6px rgb(0 0 0 / 7.8%);
+}
+:root[data-dark="1"] .float-panel {
+  --panel-ground: var(--surface);
+  box-shadow:
+    inset 0 0 0 1px var(--hairline),
+    0 12px 32px rgb(0 0 0 / 45%),
+    0 2px 6px rgb(0 0 0 / 30%);
+}
+.float-rows {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.float-rule {
+  margin: 3px 0;
+}
+.menu-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  text-align: left;
+}
+.menu-row:hover {
+  background: var(--selected);
+}
+.menu-row:active {
+  background: var(--selected-strong);
+}
+.menu-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-right: 8px;
+}
+.menu-title {
+  font-size: 14px;
+}
+.menu-detail {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Confirmations (Sidebar.swift ConfirmationDialog), 460 wide with 24 around. */
+.confirm {
+  width: 460px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+}
+.confirm-title {
+  margin: 0 0 6px;
+  font-family: var(--font-title), serif;
+  font-size: 24px;
+  font-weight: var(--title-600);
+  letter-spacing: -0.24px;
+  color: var(--ink);
+}
+.confirm-text {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.confirm-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 0;
+}
+.confirm-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.confirm-option-title {
+  font-size: 14px;
+}
+.confirm-option-note {
+  font-size: 13px;
+  color: var(--muted);
+}
+.confirm-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 18px;
+}
+/* Kit buttons: Plain (RootView.swift), an outline in the control color, and Solid
+   (Sidebar.swift), ink filled, for the one action a dialog is about. */
+.outline-button {
+  padding: 5px 10px;
+  border-radius: var(--radius-control);
+  box-shadow:
+    0 0 0 0.5px var(--control),
+    inset 0 0 0 0.5px var(--control);
+  font-size: 14px;
+  color: var(--ink);
+}
+.outline-button:active {
+  opacity: 0.7;
+}
+.solid-button {
+  padding: 6px 12px;
+  border-radius: var(--radius-control);
+  background: var(--ink);
+  font-size: 14px;
+  font-weight: var(--ui-500);
+  color: var(--ground);
+}
+.solid-button:active {
+  opacity: 0.8;
+}
+/* Controls.swift Checkbox: 18 square, radius 4, the unread color when on. */
+.checkbox {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  background: var(--ground);
+  box-shadow:
+    0 0 0 0.5px var(--control),
+    inset 0 0 0 0.5px var(--control);
+  transition: box-shadow 0.12s;
+}
+.checkbox:hover {
+  box-shadow:
+    0 0 0 0.5px var(--muted),
+    inset 0 0 0 0.5px var(--muted);
+}
+.checkbox.on {
+  background: var(--unread);
+  box-shadow:
+    0 0 0 0.5px var(--unread),
+    inset 0 0 0 0.5px var(--unread);
+}
+
+/* AddFeed.swift: the feed preview shares the subscription sheet with discovery. */
+.add-feed {
+  width: 560px;
+  max-height: calc(100% - 48px);
+  overflow: auto;
+  border: 0;
+  padding: 28px;
+  color: var(--ink);
+}
+.add-feed::backdrop {
+  background: var(--scrim);
+}
+.add-feed h2 {
+  margin: 0 0 16px;
+  font-family: var(--font-title), serif;
+  font-size: 26px;
+  font-weight: var(--title-600);
+  letter-spacing: -0.26px;
+}
+.feed-address,
+.add-feed-row input,
+.add-feed-row select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--ground);
+  color: var(--ink);
+  border: 1px solid var(--control);
+  border-radius: var(--radius-control);
+  font: inherit;
+}
+.feed-address {
+  height: 38px;
+  padding: 0 12px;
+  border: 2px solid var(--unread);
+  border-radius: 7px;
+  font-size: 15px;
+}
+.feed-address:focus {
+  outline: none;
+}
+.feed-address:disabled {
+  border-color: var(--control);
+  color: var(--muted);
+}
+.add-feed-hint {
+  padding: 8px 0 20px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.add-feed-error {
+  margin-top: 20px;
+}
+.add-feed-error strong,
+.add-feed-preview strong {
+  font-weight: var(--ui-600);
+}
+.add-feed-error p {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.add-feed-preview {
+  padding-top: 16px;
+}
+.add-feed-preview strong {
+  font-size: 16px;
+}
+.add-feed-url,
+.add-feed-latest {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.add-feed-url {
+  font-size: 13px;
+  color: var(--muted);
+}
+.add-feed-preview .add-feed-url {
+  margin-bottom: 12px;
+}
+.add-feed-latest {
+  padding: 2px 0;
+  color: var(--unread);
+  font-family: var(--font-reading), serif;
+  font-size: 17px;
+  font-weight: var(--reading-400);
+}
+.add-feed-choice {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  cursor: pointer;
+}
+.add-feed-choice input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  appearance: none;
+  cursor: inherit;
+}
+.add-feed-check {
+  display: grid;
+  place-items: center;
+}
+.add-feed-check > * {
+  grid-area: 1 / 1;
+}
+.add-feed-check svg {
+  pointer-events: none;
+}
+.add-feed-check input:focus-visible,
+.add-feed-row :is(input, select):focus-visible {
+  outline: 2px solid var(--unread);
+  outline-offset: 2px;
+}
+@media (forced-colors: active) {
+  .add-feed-check input {
+    appearance: auto;
+  }
+  .add-feed-check svg {
+    display: none;
+  }
+  .feed-address {
+    border-color: Highlight;
+  }
+}
+.add-feed-details {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+.add-feed-row {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  color: var(--muted);
+}
+.add-feed-select {
+  position: relative;
+}
+.add-feed-select select {
+  appearance: none;
+  padding-right: 32px;
+  cursor: pointer;
+}
+.add-feed-select svg {
+  position: absolute;
+  right: 10px;
+  top: 9px;
+  pointer-events: none;
+}
+.add-feed-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 24px;
+}
+.add-feed-actions button,
+.add-primary,
+.first-run button {
+  cursor: pointer;
+  transition: opacity 120ms ease-out;
+}
+.add-feed-actions button:disabled,
+.add-feed-select select:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+.add-feed-actions .import-opml {
+  margin-right: auto;
+  font-size: 13px;
+  color: var(--muted);
+}
+.add-primary {
+  height: 32px;
+  padding: 0 14px;
+  background: var(--unread);
+  color: var(--on-accent);
+  border-radius: var(--radius-control);
+  font-weight: var(--ui-500);
+}
+.add-primary:enabled:hover {
+  opacity: 0.9;
+}
+.add-primary:enabled:active {
+  opacity: 0.8;
+}
+.add-primary:focus-visible {
+  outline-color: var(--on-accent);
+}
+.first-run {
+  width: min(560px, calc(100% - 64px));
+  margin: auto 32px auto min(168px, max(32px, 100% - 592px));
+  padding-bottom: 80px;
+}
+.content:has(.first-run) {
+  display: flex;
+}
+.first-run h1 {
+  font-family: var(--font-title), serif;
+  font-size: 52px;
+  font-weight: var(--title-600);
+  letter-spacing: -1px;
+}
+.first-run p {
+  margin: 14px 0 32px;
+  font: var(--reading-400) 21px var(--font-reading), serif;
+  color: var(--ink-soft);
+}
+.first-run form,
+.first-run-import {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.first-run .feed-address {
+  height: 40px;
+  padding-left: 10px;
+}
+.first-run .feed-address::placeholder {
+  color: color-mix(in srgb, var(--ink) 45%, transparent);
+}
+.first-run .add-primary {
+  height: 29px;
+  font-size: 14px;
+}
+.first-run-import {
+  gap: 4px;
+  margin-top: 16px;
+  color: var(--muted);
+}
+.first-run-import button {
+  color: var(--unread);
+}
+@media (prefers-reduced-motion: reduce) {
+  .add-feed-actions button, .add-primary, .first-run button {
+    transition: none;
+  }
+}
+
+/* Views.swift puts each rule editor in its own anchored panel. */
+.rule-text-editor {
+  display: grid;
+  gap: 12px;
+  padding: 8px;
+}
+.rule-text-editor > label:first-child {
+  display: grid;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: var(--ui-500);
+}
+.rule-text-editor input[type="text"] {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  background: var(--ground);
+  color: var(--ink);
+  border: 1px solid var(--control);
+  border-radius: var(--radius-control);
+  font: var(--ui-400) 14px var(--font-ui), sans-serif;
+}
+.rule-editor-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.rule-editor-toggle input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--unread);
+}
+.rule-editor-actions {
+  display: flex;
+  justify-content: space-between;
+}
+.rule-editor-actions .primary {
+  margin-left: auto;
+}
+.rule-scope-list {
+  max-height: 252px;
+  overflow-y: auto;
+}
+.rule-scope .rule-editor-actions {
+  padding: 4px;
+}
+.inline-empty > .action,
+.inline-actions {
+  margin-top: 24px;
+}
+.inline-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.catchup {
+  position: absolute;
+  inset: 0;
+  z-index: 16;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: auto;
+  background: var(--surface);
+}
+.catchup:focus {
+  outline: 0;
+}
+.catchup-header {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  padding: 38px 16px 0;
+}
+.catchup-header > .action {
+  position: absolute;
+  right: 16px;
+  top: 38px;
+  gap: 8px;
+}
+.catchup-progress {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+.catchup-progress h2 {
+  font-size: 13px;
+  font-weight: var(--ui-600);
+}
+.catchup-progress progress {
+  appearance: none;
+  width: 200px;
+  height: 3px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--hairline);
+  overflow: hidden;
+}
+.catchup-progress progress::-webkit-progress-bar { background: var(--hairline); }
+.catchup-progress progress::-webkit-progress-value { background: var(--unread); }
+.catchup-progress progress::-moz-progress-bar { background: var(--unread); }
+.catchup-esc {
+  color: var(--muted);
+}
+.catchup-center {
+  width: min(680px, calc(100% - 64px));
+  margin: auto;
+  padding: 24px 0;
+}
+/* As the Mac's InlineState there: 520 wide, centred, with no list padding. */
+.catchup-center > .inline-empty {
+  width: min(520px, 100%);
+  margin: 0 auto;
+  padding: 0;
+}
+.catchup-stack {
+  position: relative;
+  isolation: isolate;
+}
+.catchup-stack.stacked::before,
+.catchup-stack.stacked::after,
+.catchup-card {
+  border-radius: var(--radius-sheet);
+  outline: 1px solid var(--hairline);
+  background: var(--ground);
+}
+.catchup-stack.stacked::before,
+.catchup-stack.stacked::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  height: 40px;
+  inset: auto 32px -24px;
+}
+.catchup-stack.stacked::after {
+  inset: auto 16px -12px;
+}
+.catchup-card {
+  min-height: 396px;
+  padding: 48px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 8%);
+}
+.catchup-meta {
+  margin-bottom: 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.catchup-card h2 {
+  margin-bottom: 20px;
+  font: var(--title-600) 32px var(--font-title), serif;
+  letter-spacing: -0.4px;
+}
+.catchup-card p {
+  font: var(--reading-400) 17px/28px var(--font-reading), serif;
+  color: var(--ink-soft);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
+}
+.catchup-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 52px;
+}
+.catchup-actions .action {
+  flex: 1;
+  height: 56px;
+  justify-content: center;
+  gap: 8px;
+  font-size: 16px;
+}
+.catchup-footer {
+  min-height: 20px;
+  margin-top: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.catchup-undo {
+  color: var(--unread);
+  cursor: pointer;
+}
+
+.discussion {
+  margin-top: 16px;
+  scroll-margin-top: 24px;
+}
+.discussion > .rule {
+  margin-bottom: 24px;
+}
+.discussion-head,
+.discussion-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: var(--ui-400) 13px var(--font-ui), sans-serif;
+  color: var(--muted);
+}
+.discussion-head {
+  gap: 16px;
+}
+.discussion-head > div {
+  flex: 1;
+}
+.discussion-head h2 {
+  margin-bottom: 4px;
+  font-size: 15px;
+  font-weight: var(--ui-600);
+  color: var(--ink);
+}
+.discussion-head .action {
+  flex: none;
+}
+.discussion-replies {
+  margin-top: 20px;
+}
+.discussion-replies > p {
+  font: var(--ui-400) 13px var(--font-ui), sans-serif;
+  color: var(--muted);
+}
+.discussion-row {
+  display: flex;
+}
+.discussion-indent {
+  flex: none;
+  width: 16px;
+  border-left: 1px solid var(--hairline);
+}
+.discussion-comment {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 4px;
+}
+.discussion-row.folded .discussion-comment {
+  padding-bottom: 12px;
+}
+.discussion-author {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: var(--ui-400) 13px var(--font-ui), sans-serif;
+  color: var(--muted);
+  cursor: pointer;
+}
+.discussion-author strong {
+  font-weight: var(--ui-600);
+  color: var(--ink);
+}
+.discussion-author .deleted {
+  color: var(--muted);
+}
+.discussion-comment .blocks {
+  font-size: 0.85em;
+  margin-top: 6px;
+}
+
+.brief-list {
+  gap: 4px;
+}
+.brief-list > .section-label {
+  padding: 12px 12px 8px;
+}
+.brief-writing,
+.brief-row {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  align-items: center;
+}
+.brief-writing p,
+.brief-row-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+.brief-row {
+  gap: 4px;
+  align-items: flex-start;
+  flex-direction: column;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+.brief-row:hover,
+.brief-row.selected {
+  background: var(--selected);
+}
+.brief-row-detail,
+.brief-empty-list {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+.brief-empty-list {
+  padding: 8px 12px;
+  color: var(--muted);
+}
+.today-reader {
+  min-width: 0;
+}
+.today-reader > .reader-pane {
+  position: static;
+  width: 100%;
+}
+.brief-back {
+  position: absolute;
+  top: 10px;
+  left: 16px;
+  color: var(--unread);
+}
+.brief-state,
+.artifact-column,
+.recipe-column {
+  width: min(736px, 100%);
+  margin: 0 auto;
+  padding: 72px 48px 96px;
+}
+.brief-state {
+  padding-top: 96px;
+}
+.brief-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.generated-label {
+  display: inline-block;
+  padding: 3px 6px;
+  border-radius: var(--radius-control);
+  background: var(--selected);
+  color: var(--unread);
+  font-size: 11px;
+  font-weight: var(--ui-600);
+}
+.brief-title {
+  margin-bottom: 24px;
+  font: var(--title-600) 40px var(--font-title), serif;
+  letter-spacing: -0.6px;
+}
+.artifact-column {
+  position: relative;
+}
+.artifact-section h2 {
+  padding: 12px 0 8px;
+  font: var(--title-600) 22px var(--font-title), serif;
+}
+.artifact-section p {
+  padding-bottom: 24px;
+  font: var(--reading-400) var(--artifact-text)/var(--artifact-leading) var(--font-reading), serif;
+}
+.citation-mark {
+  padding: 0 2px;
+  border-radius: var(--radius-control);
+  vertical-align: super;
+  color: var(--unread);
+  font: var(--ui-600) 12px var(--font-ui), sans-serif;
+  cursor: pointer;
+}
+.citation-mark:hover,
+.citation-mark[aria-expanded="true"] {
+  background: var(--selected);
+}
+.artifact-sources {
+  padding: 8px 0 32px;
+}
+.artifact-sources > .section-label {
+  margin: 20px 0 8px;
+}
+.artifact-source {
+  display: flex;
+  align-items: baseline;
+  width: 100%;
+  min-height: 36px;
+  cursor: pointer;
+}
+.artifact-source span:first-child {
+  width: 28px;
+  color: var(--unread);
+  font-size: 13px;
+}
+.artifact-source span:nth-child(2) {
+  flex: 1;
+  color: var(--unread);
+  font: var(--title-500) 17px var(--font-title), serif;
+}
+.artifact-source span.read {
+  color: var(--read);
+}
+.artifact-source:hover span:nth-child(2) {
+  text-decoration: underline;
+}
+.artifact-source span:last-child {
+  margin-left: 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.artifact-source-note {
+  padding: 8px 0 0 28px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.artifact-made-with {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 8px 0 16px;
+  background: var(--surface);
+  border-radius: var(--radius-panel);
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+.artifact-made-with p {
+  flex: 1;
+}
+.artifact-made-with button {
+  flex: none;
+}
+.artifact-citation {
+  width: min(340px, 100%);
+  padding: 16px;
+  visibility: visible;
+  z-index: 1;
+}
+.citation-meta,
+.citation-action span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.artifact-citation h2 {
+  margin: 4px 0 8px;
+  font: var(--title-600) 17px var(--font-title), serif;
+}
+.artifact-citation blockquote {
+  padding-left: 12px;
+  border-left: 2px solid var(--unread);
+  color: var(--ink-soft);
+  font: var(--reading-400) 14px/21px var(--font-reading), serif;
+}
+.citation-action {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.recipe-pane {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+.recipe-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 16px;
+}
+.recipe-tabs {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.recipe-bar-title {
+  color: var(--muted);
+  font-size: 13px;
+}
+.recipe-column {
+  padding-top: 40px;
+}
+.recipe-column h1 {
+  font: var(--title-600) 34px var(--font-title), serif;
+  letter-spacing: -0.5px;
+}
+.recipe-subtitle {
+  margin: 8px 0 24px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.recipe-text {
+  display: block;
+  resize: vertical;
+  width: 100%;
+  min-height: 300px;
+  padding: 16px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+  background: var(--ground);
+  color: var(--ink);
+  font: var(--code-400) 13px/1.6 var(--font-code), monospace;
+}
+.recipe-text:focus {
+  outline: 1px solid var(--unread);
+  outline-offset: -1px;
+}
+.recipe-note,
+.recipe-trial-header p {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+.recipe-note {
+  margin-top: 12px;
+}
+.recipe-buttons,
+.recipe-trial-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.recipe-buttons {
+  margin-top: 24px;
+  flex-wrap: wrap;
+}
+.recipe-buttons span,
+.recipe-trial-header p {
+  flex: 1;
+}
+.recipe-buttons span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.recipe-trial-header {
+  margin-bottom: 28px;
+}
+.recipe-column .artifact-column {
+  padding: 24px 0;
+}
+.recipe-conflict {
+  margin-bottom: 16px;
+  padding: 16px;
+  background: var(--selected);
+  border-radius: var(--radius-panel);
+}
+.recipe-conflict p {
+  margin: 8px 0 12px;
+  font-size: 13px;
+}
+.recipe-history-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  gap: 12px;
+  cursor: pointer;
+}
+.recipe-history-row time {
+  margin-left: auto;
+}
+.recipe-history-row span,
+.recipe-history-row time {
+  color: var(--muted);
+  font-size: 12px;
+}
+.recipe-history pre {
+  white-space: pre-wrap;
+  margin-bottom: 12px;
+  padding: 16px;
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font: var(--code-400) 12px/1.6 var(--font-code), monospace;
+}
+.recipe-history .action {
+  margin-bottom: 12px;
+}
+
+.feed-row-wrap {
+  position: relative;
+}
+.feed-health-trigger {
+  position: absolute;
+  right: 8px;
+  top: 6px;
+}
+.activity-panel,
+.feed-health {
+  margin: -6px;
+  font-size: 13px;
+}
+.activity-panel > header,
+.activity-panel > footer,
+.feed-health > footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 8px 0 16px;
+}
+.activity-panel h2,
+.feed-health h2 {
+  font-size: 14px;
+  font-weight: var(--ui-600);
+}
+.activity-panel > header .action,
+.activity-panel > footer small,
+.feed-health > footer .primary {
+  margin-left: auto;
+}
+.activity-panel footer {
+  padding: 0 16px 0 8px;
+}
+.activity-groups {
+  max-height: 420px;
+  padding: 0 0 8px;
+}
+.activity-groups > .section-label {
+  padding: 12px 16px 4px;
+}
+.activity-groups > p,
+.activity-running,
+.activity-done {
+  padding: 4px 16px;
+}
+.activity-groups > p,
+.activity-panel small {
+  color: var(--muted);
+}
+.activity-job,
+.activity-failure {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.activity-job > span,
+.activity-panel footer small {
+  flex: 1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+.activity-panel footer small {
+  text-align: right;
+}
+.activity-running progress {
+  width: calc(100% - 20px);
+  margin-left: 20px;
+  height: 4px;
+  accent-color: var(--unread);
+}
+.activity-failure {
+  margin: 4px 8px;
+  padding: 12px;
+  align-items: flex-start;
+  background: var(--selected);
+  border-radius: var(--radius-control);
+}
+.activity-failure > div {
+  flex: 1;
+  min-width: 0;
+}
+.activity-failure strong {
+  font-weight: var(--ui-500);
+}
+.activity-failure p {
+  padding-top: 4px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.activity-failure .action {
+  flex: none;
+}
+.activity-failure.activity-feed {
+  background: transparent;
+}
+.activity-done {
+  min-height: 32px;
+}
+.feed-health > header {
+  padding: 16px;
+}
+.feed-health > header p {
+  margin-top: 8px;
+  color: var(--ink-soft);
+}
+.feed-health > footer {
+  padding: 12px;
+}
+.feed-health-error {
+  background: var(--surface);
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 16px;
+}
+.feed-health-error span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.feed-health-error code {
+  overflow-wrap: anywhere;
+  font: var(--code-400) 12px var(--font-code), monospace;
+}
+
+.routine-row {
+  position: relative;
+}
+.routine-row > button {
+  width: 100%;
+  padding-right: 48px;
+}
+.routine-switch {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 30px;
+  height: 16px;
+  appearance: none;
+  border-radius: 10px;
+  background: var(--hairline);
+  cursor: pointer;
+}
+.routine-switch::after {
+  content: "";
+  display: block;
+  width: 12px;
+  height: 12px;
+  margin: 2px;
+  border-radius: 50%;
+  background: var(--ground);
+}
+.routine-switch:checked {
+  background: var(--unread);
+}
+.routine-switch:checked::after {
+  transform: translateX(14px);
+}
+.routine-reader {
+  display: flex;
+  height: 100%;
+  position: relative;
+  min-width: 0;
+}
+.routine-editor {
+  padding-top: 64px;
+}
+.routine-remove {
+  position: absolute;
+  top: 10px;
+  right: 16px;
+  z-index: 1;
+}
+.routine-name {
+  cursor: pointer;
+}
+.routine-name-field {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--unread);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  background: var(--ground);
+  font: var(--title-600) 30px var(--font-title), serif;
+}
+.routine-sentence {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-panel);
+}
+.routine-line {
+  display: flex;
+  padding: 12px 16px;
+  gap: 4px;
+  align-items: baseline;
+  color: var(--muted);
+  font-size: 13px;
+}
+.routine-line > span:first-child {
+  flex: 0 0 80px;
+  font-weight: var(--ui-500);
+  color: var(--ink-soft);
+}
+.routine-line > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  flex: 1;
+  gap: 4px;
+}
+.routine-line > .routine-actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+.routine-action {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  gap: 8px;
+  padding: 0 4px 0 12px;
+  background: var(--surface);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  font-size: 14px;
+}
+.routine-action input {
+  width: min(120px, 50%);
+  background: var(--ground);
+  border: 1px solid var(--control);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+}
+.routine-action > .symbol-button {
+  margin-left: auto;
+}
+.routine-actions > .chip {
+  align-self: flex-start;
+  color: var(--unread);
+}
+.routine-preview {
+  display: flex;
+  align-items: end;
+  gap: 24px;
+  margin: 36px 0 24px;
+}
+.routine-preview > div:first-child {
+  flex: 1;
+}
+.routine-preview p {
+  margin: 8px 0;
+  font: var(--reading-400) 19px var(--font-reading), serif;
+}
+.routine-preview small {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+}
+.routine-bars,
+.routine-bars > div {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+.routine-bars > div {
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+.routine-bars i {
+  width: 20px;
+  border-radius: 4px;
+  background: var(--hairline);
+}
+.routine-bars i.positive {
+  background: var(--unread);
+}
+.routine-footer {
+  margin-top: 16px;
+}
+
+.ask-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+}
+.ask-column {
+  padding-top: 48px;
+}
+.ask-hint {
+  color: var(--ink-soft);
+  margin: 8px 0 24px;
+}
+.ask-question {
+  margin-bottom: 24px;
+  font: var(--title-600) 32px var(--font-title), serif;
+  letter-spacing: -0.4px;
+}
+.ask-earlier {
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.ask-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 16px;
+  height: 48px;
+  border: 1px solid var(--control);
+  border-radius: var(--radius-panel);
+}
+.ask-field:focus-within {
+  border-color: var(--unread);
+}
+.ask-field > input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  color: var(--ink);
+  background: var(--ground);
+  font: var(--ui-400) 15px var(--font-ui), sans-serif;
+}
+.ask-field > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.palette-ask {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 20px;
+  width: 100%;
+  color: var(--unread);
+  cursor: pointer;
+}
+.palette-ask span {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.palette-ask:hover {
+  background: var(--selected);
+}
+
+.web-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+}
+.web-bar,
+.web-address {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.web-bar {
+  flex: none;
+  gap: 6px;
+  height: 52px;
+  padding: 0 16px 0 12px;
+}
+.web-bar .action {
+  flex: none;
+  gap: 6px;
+}
+.web-address {
+  flex: 1;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+}
+.web-address svg {
+  margin-right: 7px;
+}
+.web-address strong {
+  color: var(--ink);
+  font-weight: var(--ui-400);
+}
+.web-address span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.web-slot {
+  flex: 1;
+  min-height: 0;
+}
+.web-progress {
+  height: 2px;
+  background: var(--unread);
+}
+.web-failure {
+  padding: 48px;
+}
+.web-failure h2 {
+  font-size: 20px;
+  font-weight: var(--ui-600);
+}
+.web-failure p {
+  margin: 12px 0;
+  color: var(--ink-soft);
+}
+.web-failure .action + .action {
+  margin-left: 8px;
+}
+
+.ask-follow-up {
+  margin-top: 20px;
+}
+
+/* Window chrome (src/ui/Chrome.tsx, docs/desktop-parity.md D3, D4). The buttons sit at
+   the top right of the content, and what the Mac puts in that corner moves left of them. */
+:root[data-chrome="windows"] {
+  --chrome-width: 138px;
+}
+:root[data-chrome="linux"] {
+  --chrome-width: 104px;
+}
+:root[data-chrome] .reader-actions {
+  right: calc(16px + var(--chrome-width));
+}
+:root[data-chrome] :is(.web-bar, .recipe-bar) {
+  padding-right: calc(16px + var(--chrome-width));
+}
+:root[data-chrome] :is(.catchup-header > .action, .routine-remove) {
+  right: calc(16px + var(--chrome-width));
+}
+.window-buttons {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+}
+.window-button {
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+/* Windows: 46 × 32 each, square, a tint on hover and red under Close. */
+.window-buttons.windows .window-button {
+  width: 46px;
+  height: 32px;
+}
+.window-buttons.windows .window-button:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+.window-buttons.windows .window-button:active {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+.window-buttons.windows .window-button.close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+.window-buttons.windows .window-button.close:active {
+  background: #c83c31;
+  color: #fff;
+}
+/* Linux: Adwaita's round 24-pixel buttons, 8 apart, inset from the corner. */
+.window-buttons.linux {
+  top: 12px;
+  right: 12px;
+  gap: 8px;
+}
+.window-buttons.linux .window-button {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+.window-buttons.linux .window-button:hover {
+  background: color-mix(in srgb, var(--ink) 15%, transparent);
+}
+.window-buttons.linux .window-button:active {
+  background: color-mix(in srgb, var(--ink) 25%, transparent);
+}
+@media (forced-colors: active) {
+  .window-button {
+    color: ButtonText;
+    forced-color-adjust: none;
+  }
+  .window-button:hover,
+  .window-buttons.windows .window-button.close:hover {
+    background: Highlight;
+    color: HighlightText;
+  }
+}
+
+/* Words for assistive technology only. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.palette-group {
+  display: contents;
+}
+/* Words read as part of the text before them, with no break between. */
+.sr-inline {
+  font-size: 0;
+}
+
+/* Windows contrast themes (and forced colours anywhere) drop backgrounds and shadows.
+   A selection drawn only by a tint, a dot, and a panel's edge would vanish, so they
+   take the system's own colours. */
+@media (forced-colors: active) {
+  :is(.sidebar-row, .entry-row, .palette-row, .search-row, .brief-row, .timeline-line, .chip, .symbol-button, .action).selected,
+  .sidebar-row[aria-current="page"],
+  .menu-row:is(:hover, :focus-visible) {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+  :is(:is(.sidebar-row, .entry-row, .palette-row, .search-row, .brief-row, .timeline-line, .chip, .symbol-button, .action).selected, .sidebar-row[aria-current="page"], .menu-row:is(:hover, :focus-visible)) * {
+    color: HighlightText !important;
+  }
+  .dot,
+  .palette-dot {
+    forced-color-adjust: none;
+  }
+  .dot:not([style*="transparent"]),
+  .palette-dot {
+    background: CanvasText !important;
+  }
+  .float-panel,
+  .sheet,
+  .search-panel,
+  .activity-panel,
+  .toast,
+  .catchup-card {
+    border: 1px solid CanvasText;
+  }
+  /* Filled buttons lose their fill; an edge keeps their shape. */
+  .action:is(.primary, .secondary, .inverse),
+  .chip {
+    outline: 1px solid ButtonText;
+    outline-offset: -1px;
+  }
+  .action:is(.primary, .secondary, .inverse):disabled {
+    outline-color: GrayText;
+  }
+  :focus-visible {
+    outline-color: Highlight !important;
+  }
+}
+
+/* S38's controls test page (src/ui/ControlsPage.tsx). */
+.controls-page {
+  height: 100%;
+  overflow: auto;
+  padding: 32px;
+  background: var(--ground);
+  color: var(--ink);
+}
+.controls-page h1 {
+  font: var(--title-600) 26px var(--font-title), serif;
+  margin-bottom: 24px;
+}
+.controls-group {
+  margin-bottom: 20px;
+}
+.controls-group h2 {
+  font-size: 11px;
+  font-weight: var(--ui-600);
+  letter-spacing: 0.66px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.controls-row .feed-address {
+  width: 280px;
+}

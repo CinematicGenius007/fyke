@@ -16,7 +16,9 @@ icon, and its windows are transparent and let clicks through, so checks can run 
 someone works at the Mac. gui/Sources/Reader/TestMode.swift explains how. The app exits
 with status 3 if it ever becomes active anyway, and that fails the run.
 """
-import argparse, http.server, json, os, pathlib, shutil, socket, socketserver, subprocess, sys, tempfile, threading, time
+import argparse, json, os, pathlib, shutil, socket, subprocess, sys, tempfile, time
+
+import gui_fixtures as fixtures
 
 # Unix socket paths are short, so macOS and Linux use /tmp. Windows has no /tmp.
 TMP = tempfile.gettempdir() if os.name == "nt" else "/tmp"
@@ -28,7 +30,11 @@ SETTINGS_TABS = ["General", "Reading", "Tokens", "Agents", "Data"]
 # Screens saved as pictures in both themes. `citation` is Today with source 1 pinned
 # open, as a click on its number leaves it. `view` and `all` have their first article
 # selected, which shows the list's top inset against the header.
-SCREENS = ["today", "view", "all", "recipe", "routines", "catchup", "palette", "ask", "activity", "health", "toast", "search"]
+SCREENS = ["today", "view", "all", "recipe", "routines", "catchup", "palette", "ask", "activity", "health", "toast", "search", "shortcuts"]
+# Pictures of the feed tree with a folder in it.
+TREE_SCREENS = ["rename-folder", "rename-feed", "delete-folder"]
+# Headless runs never attach a sheet, so these pictures hold the sheet alone.
+ADD_SCREENS = {"add": "news", "add-found": "/thread.xml", "add-none": "/missing", "add-multiple": "/feed-list"}
 
 parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument("--only", help="comma-separated names from --list; what they depend on runs first")
@@ -42,6 +48,11 @@ CHECKS = {}
 
 
 def check(name, needs=(), tags=()):
+    # Every picture has the Needle view and its routine in the sidebar, as a full run leaves
+    # them, so a picture looks the same however few checks run before it. The desktop's
+    # pictures start from the same (desktop/tests/e2e/fixtures.ts `afterRoutineSave`).
+    if name.startswith("shot:") and "routine-save" not in needs:
+        needs = [*needs, "routine-save"]
     def register(run):
         CHECKS[name] = {"run": run, "needs": list(needs), "tags": set(tags) | {name}}
         return run
@@ -49,53 +60,12 @@ def check(name, needs=(), tags=()):
 
 
 home = tempfile.mkdtemp(prefix="fyke-g-", dir=TMP)
-# Writes a brief or an answer that cites the first sources it is given, as the writer
-# contract in docs/reader-features.md asks, without calling any model.
-WRITER = pathlib.Path(home) / "writer.py"
-WRITER.write_text("""import json, re, sys
-text = sys.stdin.read()
-found = re.search(r"UNTRUSTED SOURCES JSON:\\n(.*)\\nEND SOURCES", text, re.S)
-ids = [s["id"] for s in json.loads(found.group(1))] if found else []
-print(json.dumps({"title": "Needles, briefly", "sections": [{"heading": "", "claims": [
-    {"text": "Three needles arrived this week.", "sources": ids[:2] or ids},
-    {"text": "The first one is the newest.", "sources": ids[:1]}]}]}))
-""")
-env = dict(os.environ, FYKE_HOME=home, FYKE_BIN=str(app / "fyke"), FYKE_WRITER_CMD=f"{sys.executable} {WRITER}")
+# The feed server starts now, because the daemon reads its address when it starts.
+base = fixtures.serve()
+env = dict(os.environ, **fixtures.environment(home, app / "fyke", base))
 if not args.visible:
     env["FYKE_HEADLESS"] = "1"
 passed = 0
-
-ITEMS = "".join(f"<item><title>Needle {name}</title><guid>{name}</guid><pubDate>{day} Nov 2026 09:00:00 GMT</pubDate><description>needle text</description></item>"
-                for name, day in (("one", "05"), ("two", "04"), ("three", "03")))
-FEED = f'<rss version="2.0"><channel><title>Local</title>{ITEMS}</channel></rss>'.encode()
-
-
-# A Hacker News story, and its thread as the Algolia items API returns it. The
-# discussion check adds this feed, and removes it again so the others see three needles.
-THREAD_FEED = (b'<rss version="2.0"><channel><title>Hacker News</title><item><title>Unkernel in WASM</title>'
-               b'<link>https://example.org/unkernel</link><comments>https://news.ycombinator.com/item?id=41</comments>'
-               b'<description>&lt;a href="https://news.ycombinator.com/item?id=41"&gt;Comments&lt;/a&gt;</description></item></channel></rss>')
-THREAD = json.dumps({"id": 41, "type": "story", "children": [
-    {"id": 1, "type": "comment", "author": "ann", "created_at_i": int(time.time()) - 7200,
-     "text": "<p>This boots faster than I expected.<p>Has anyone tried it with <i>networking</i>?",
-     "children": [{"id": 2, "type": "comment", "author": "bo", "created_at_i": int(time.time()) - 3600,
-                   "text": "Yes, through a <a href=\"https://example.org/proxy\">WebSocket proxy</a>.", "children": []}]},
-    {"id": 3, "type": "comment", "author": None, "text": None, "children": [
-        {"id": 4, "type": "comment", "author": "cy", "created_at_i": int(time.time()) - 600, "text": "Still here.", "children": []}]}]}).encode()
-thread_requests = []
-
-
-class Handler(http.server.BaseHTTPRequestHandler):
-    def log_message(self, *args): pass
-    def do_GET(self):
-        body, kind = FEED, "application/rss+xml"
-        if self.path == "/thread.xml":
-            body = THREAD_FEED
-        elif self.path.startswith("/items/"):
-            thread_requests.append(self.path)
-            body, kind = THREAD, "application/json"
-        self.send_response(200); self.send_header("Content-Type", kind)
-        self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
 
 
 def rss(*args):
@@ -184,7 +154,7 @@ def keys():
 
 
 # Themes. Clicks use window coordinates, which hold at the default window size.
-DUSK = {"id": "dusk", "name": "Dusk", "base": "dark", "tokens": {"ground": "#1C1B29"}, "fonts": {"reading": "Georgia"}}
+DUSK = fixtures.DUSK
 BUILT_IN_SAVE, CUSTOM_SAVE, CUSTOM_BACK, LIGHT_TILE = "click:1206,196", "click:1188,248", "click:1290,248", "click:1170,80"
 
 
@@ -225,8 +195,8 @@ def divider():
     def config():
         return json.loads(config_path.read_text()) if config_path.exists() else {}
 
-    before_width = config().get("ui", {}).get("list_width", 375)
-    launch({"FYKE_SCREEN": "feed", "FYKE_FEED": "0", "FYKE_KEYS": "wait drag:611,500,691,500 wait wait"}, timeout=60)
+    before_width = config().get("ui", {}).get("list_width", 368)
+    launch({"FYKE_SCREEN": "feed", "FYKE_FEED": "0", "FYKE_KEYS": "wait drag:604,500,684,500 wait wait"}, timeout=60)
     width = config().get("ui", {}).get("list_width")
     if width is None or abs(width - (before_width + 80)) > 2:
         fail("the divider drags", f"{before_width} to {width}")
@@ -376,22 +346,21 @@ def routine_save():
 def discussion():
     """The Comments link in a Hacker News story, and the c key, load its thread under
     the article. Opening the story alone does not ask for the thread."""
-    port = server.server_address[1]
-    feed = call("feeds.add", {"url": f"http://127.0.0.1:{port}/thread.xml", "allow_private_network": True})["id"]
+    feed = call("feeds.add", {"url": f"{base}/thread.xml", "allow_private_network": True})["id"]
     try:
-        thread_requests.clear()
+        fixtures.thread_requests.clear()
         launch({"FYKE_KEYS": "cmd+f unkernel return wait wait"}, "-theme", "light", "-followSystem", "NO")
-        if thread_requests:
-            fail("discussion", f"opening the story asked for its thread: {thread_requests}")
+        if fixtures.thread_requests:
+            fail("discussion", f"opening the story asked for its thread: {fixtures.thread_requests}")
         ok("opening a story leaves its comments unasked")
         for theme in ["light", "dark"]:
             target = snapshots / f"comments-{theme}.png"
             target.unlink(missing_ok=True)
-            thread_requests.clear()
+            fixtures.thread_requests.clear()
             launch({"FYKE_KEYS": "cmd+f unkernel return wait c wait wait", "FYKE_SNAPSHOT": str(target), "FYKE_SNAPSHOT_DELAY": "1"},
                    "-theme", theme, "-followSystem", "NO")
-            if thread_requests != ["/items/41"]:
-                fail("discussion", f"c should load the thread once, asked {thread_requests}")
+            if fixtures.thread_requests != ["/items/41"]:
+                fail("discussion", f"c should load the thread once, asked {fixtures.thread_requests}")
             if not target.exists() or target.stat().st_size < 10000:
                 fail(f"snapshot comments {theme}", "no picture")
         ok(f"c loads the thread under the article, in {snapshots.relative_to(root)}")
@@ -404,7 +373,7 @@ def snapshot(name, extra):
         target = snapshots / f"{name}-{theme}.png"
         target.unlink(missing_ok=True)
         # The delay counts from the moment the app has loaded, so it covers animation only.
-        launch(dict(FYKE_QUERY="needle", FYKE_SNAPSHOT=str(target), FYKE_SNAPSHOT_DELAY="2", **extra), "-theme", theme, "-followSystem", "NO")
+        launch({"FYKE_QUERY": "needle", "FYKE_SNAPSHOT": str(target), "FYKE_SNAPSHOT_DELAY": "2", **extra}, "-theme", theme, "-followSystem", "NO")
         if not target.exists() or target.stat().st_size < 10000:
             fail(f"snapshot {name} {theme}", "no picture")
     ok(f"snapshot {name} in {snapshots.relative_to(root)}")
@@ -413,15 +382,174 @@ def snapshot(name, extra):
 # What each picture needs in the database before it means anything.
 SCREEN_NEEDS = {"today": ["brief"], "citation": ["brief"], "recipe": ["brief"], "view": ["view-save"],
                 "routines": ["routine-save"], "ask": ["answer"]}
+def screen_snapshot(screen):
+    extra = {"FYKE_SCREEN": screen}
+    if screen == "citation":
+        extra = {"FYKE_SCREEN": "today", "FYKE_PIN_CITATION": "1"}
+    elif screen == "catchup":
+        entries = call("entries.list", {"limit": 500})["items"]
+        call("entries.mark_many", {"ids": [entry["id"] for entry in entries], "read": False, "later": False})
+    snapshot(screen, extra)
+
+
 for screen in SCREENS + ["citation"]:
-    extra = {"FYKE_SCREEN": "today", "FYKE_PIN_CITATION": "1"} if screen == "citation" else {"FYKE_SCREEN": screen}
     check(f"shot:{screen}", needs=SCREEN_NEEDS.get(screen, []), tags=[screen, "snapshots"])(
-        lambda screen=screen, extra=extra: snapshot(screen, extra))
+        lambda screen=screen: screen_snapshot(screen))
+
+
+def tree_snapshot(name):
+    """A picture with Local inside a folder named Reading. The folder goes again after,
+    with Local back at the top level, so later pictures see the usual tree."""
+    folder = call("folders.add", {"name": "Reading"})["id"]
+    local = call("feeds.list")["items"][0]["id"]
+    call("feeds.update", {"id": local, "folder_id": folder})
+    entries = call("entries.list", {"limit": 500})["items"]
+    call("entries.mark_many", {"ids": [entry["id"] for entry in entries], "read": False})
+    try:
+        snapshot(name, {"FYKE_SCREEN": name})
+    finally:
+        call("folders.remove", {"id": folder})
+
+
+for screen in TREE_SCREENS:
+    check(f"shot:{screen}", tags=[screen, "snapshots"])(lambda screen=screen: tree_snapshot(screen))
+for name, address in ADD_SCREENS.items():
+    check(f"shot:{name}", tags=[name, "snapshots"])(lambda name=name, address=address: snapshot(
+        name, {"FYKE_SCREEN": "add", "FYKE_SNAPSHOT_SHEET": "1", "FYKE_ADDRESS": base + address if address.startswith("/") else address}))
 for tab in SETTINGS_TABS:
     name = f"settings-{tab.lower()}"
     check(f"shot:{name}", tags=[name, "settings", "snapshots"])(
         # Settings is in the main window, beside the sidebar.
         lambda name=name, tab=tab: snapshot(name, {"FYKE_SCREEN": "settings", "FYKE_TAB": tab}))
+
+
+def starred_snapshot(name):
+    """Starred with the newest article starred, or with none."""
+    entries = call("entries.list", {"limit": 500})["items"]
+    ids = [entry["id"] for entry in entries]
+    call("entries.mark_many", {"ids": ids, "starred": False, "read": False})
+    if name == "starred":
+        call("entries.mark_many", {"ids": ids[:1], "starred": True})
+    try:
+        snapshot(name, {"FYKE_SCREEN": "starred"})
+    finally:
+        call("entries.mark_many", {"ids": ids, "starred": False})
+
+
+def empty_view_snapshot():
+    """A view that matches nothing, with its "Include read articles" way out."""
+    view = call("views.put", {"name": "Nothing yet", "rule": {"words": "zzqxv"}})["id"]
+    try:
+        unread_snapshot("view-empty", "view-empty")
+    finally:
+        call("views.remove", {"id": view, "detach": True})
+
+
+def theme_snapshot(theme, screen="all"):
+    """All or a feed, in one of the built-in themes that are neither light nor dark."""
+    name = f"{screen}-{theme}"
+    target = snapshots / f"{name}.png"
+    target.unlink(missing_ok=True)
+    entries = call("entries.list", {"limit": 500})["items"]
+    call("entries.mark_many", {"ids": [entry["id"] for entry in entries], "read": False})
+    launch(dict(FYKE_SCREEN=screen, FYKE_SNAPSHOT=str(target), FYKE_SNAPSHOT_DELAY="2"), "-theme", theme, "-followSystem", "NO")
+    if not target.exists() or target.stat().st_size < 10000:
+        fail(f"snapshot {name}", "no picture")
+    ok(f"snapshot {name} in {snapshots.relative_to(root)}")
+
+
+for name in ["starred", "starred-empty"]:
+    check(f"shot:{name}", tags=[name, "snapshots"])(lambda name=name: starred_snapshot(name))
+check("shot:folder", tags=["folder", "snapshots"])(lambda: tree_snapshot("folder"))
+def unread_snapshot(name, screen):
+    """A picture with every article unread, whatever earlier checks opened."""
+    entries = call("entries.list", {"limit": 500})["items"]
+    call("entries.mark_many", {"ids": [entry["id"] for entry in entries], "read": False})
+    snapshot(name, {"FYKE_SCREEN": screen})
+
+
+check("shot:feed", tags=["feed", "snapshots"])(lambda: unread_snapshot("feed", "feed"))
+check("shot:view-empty", tags=["view-empty", "snapshots"])(empty_view_snapshot)
+
+
+def caught_up_snapshot():
+    """S13: catch-up with nothing unread, finished before it starts."""
+    entries = call("entries.list", {"limit": 500})["items"]
+    ids = [entry["id"] for entry in entries]
+    call("entries.mark_many", {"ids": ids, "read": True})
+    try:
+        snapshot("catchup-done", {"FYKE_SCREEN": "catchup"})
+    finally:
+        call("entries.mark_many", {"ids": ids, "read": False})
+
+
+check("shot:catchup-done", tags=["catchup-done", "snapshots"])(caught_up_snapshot)
+check("shot:search-none", tags=["search-none", "snapshots"])(
+    lambda: snapshot("search-none", {"FYKE_SCREEN": "search", "FYKE_QUERY": "qqzzxx"}))
+def own_home_snapshot(name, prepare=lambda home: {}):
+    """A picture with a data folder of its own, which `prepare` may change and whose
+    daemon stops again after. With nothing prepared it is the first run: no feeds."""
+    own = tempfile.mkdtemp(prefix="fyke-f-", dir=TMP)
+    try:
+        snapshot(name, {"FYKE_HOME": own, **prepare(pathlib.Path(own))})
+    finally:
+        subprocess.run([str(app / "fyke"), "daemon", "stop"], env=dict(env, FYKE_HOME=own), capture_output=True, timeout=60)
+        shutil.rmtree(own, ignore_errors=True)
+
+
+def silent_service(home):
+    """S30: a stand-in for fyke that exits at once, so the service never answers."""
+    program = home / "fyke-silent"
+    program.write_text("#!/bin/sh\nexit 0\n")
+    program.chmod(0o755)
+    return {"FYKE_BIN": str(program)}
+
+
+def config_mistake(home):
+    """S30: config.json that cannot be parsed."""
+    (home / "config.json").write_text('{"ui": {"theme": "light",, }')
+    return {}
+
+
+def write_brief(fails):
+    """Runs a brief to its end with the stand-in writer, told to fail or not."""
+    flag = pathlib.Path(home) / "writer-fails"
+    if fails:
+        flag.write_text("")
+    try:
+        last = max((job["id"] for job in call("jobs.list", {"limit": 50})["items"]), default=0)
+        call("briefs.run", {"rule": {"state": "unread"}})
+        deadline = time.monotonic() + 60
+        while True:
+            jobs = [job for job in call("jobs.list", {"limit": 50})["items"] if job["id"] > last]
+            if jobs and all(job.get("status", job.get("state")) in ("done", "failed", "cancelled") for job in jobs):
+                return jobs
+            if time.monotonic() > deadline:
+                fail("write a brief", f"jobs did not finish: {jobs}")
+            time.sleep(0.2)
+    finally:
+        flag.unlink(missing_ok=True)
+
+
+def brief_failed_snapshot():
+    """S3: Today after the writer failed, then a brief that succeeds so the failure no
+    longer needs anyone."""
+    jobs = write_brief(fails=True)
+    if not any(job.get("status", job.get("state")) == "failed" for job in jobs):
+        fail("the stand-in writer fails", f"jobs: {jobs}")
+    try:
+        snapshot("today-failed", {"FYKE_SCREEN": "today"})
+    finally:
+        write_brief(fails=False)
+
+
+check("shot:today-failed", tags=["today-failed", "snapshots"], needs=["brief"])(brief_failed_snapshot)
+check("shot:first-run", tags=["first-run", "snapshots"])(lambda: own_home_snapshot("first-run"))
+check("shot:unavailable", tags=["unavailable", "snapshots"])(lambda: own_home_snapshot("unavailable", silent_service))
+check("shot:config-mistake", tags=["config-mistake", "snapshots"])(lambda: own_home_snapshot("config-mistake", config_mistake))
+for theme in ["newsprint", "terminal"]:
+    for screen in ["all", "feed"]:
+        check(f"shot:{screen}-{theme}", tags=[f"{screen}-{theme}", "themes", "snapshots"])(lambda theme=theme, screen=screen: theme_snapshot(theme, screen))
 
 
 def select(names):
@@ -447,19 +575,9 @@ if args.list:
 
 chosen = select({name.strip() for name in args.only.split(",") if name.strip()}) if args.only else list(CHECKS)
 
-server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), Handler)
-server.daemon_threads = True
-threading.Thread(target=server.serve_forever, daemon=True).start()
-# The daemon starts with the first command, and reads Hacker News threads from here.
-env["FYKE_HN_ITEMS_URL"] = f"http://127.0.0.1:{server.server_address[1]}/items/"
-rss("add", f"http://127.0.0.1:{server.server_address[1]}/feed.xml", "--allow-private")
-# The daemon fetches a new feed in the background. The checks start once it holds all
-# three articles, not after a fixed pause, because a cold start after a rebuild is slow.
-deadline = time.monotonic() + 60
-while len(json.loads(rss("list", "--json"))["items"]) < 3:
-    if time.monotonic() > deadline:
-        fail("setup", "the feed was not fetched within 60 s")
-    time.sleep(0.1)
+problem = fixtures.prepare(app / "fyke", env, base)
+if problem:
+    fail("setup", problem)
 
 snapshots.mkdir(parents=True, exist_ok=True)
 print(f"{'visible' if args.visible else 'headless'}: {', '.join(chosen)}")

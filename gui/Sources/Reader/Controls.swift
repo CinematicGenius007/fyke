@@ -120,7 +120,7 @@ struct IconButton: View {
                 .frame(width: 30, height: 30)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.bare)
+        .buttonStyle(SymbolStyle())
         .disabled(!enabled)
         .help(help)
     }

@@ -8,12 +8,16 @@ import UniformTypeIdentifiers
     var address = ""
 }
 
-private struct PreviewParams: Encodable, Sendable { let url: String }
+private struct PreviewParams: Encodable, Sendable {
+    let url: String
+    var allowPrivateNetwork: Bool? = TestMode.localFeeds ? true : nil
+}
 
 private struct AddParams: Encodable, Sendable {
     let url: String
     var title: String?
     var folder: String?
+    var allowPrivateNetwork: Bool? = TestMode.localFeeds ? true : nil
 }
 
 struct AddFeedSheet: View {
@@ -102,8 +106,8 @@ struct AddFeedSheet: View {
             let picked = candidates.filter { chosen.contains($0.url) }
             do {
                 for candidate in picked {
-                    // A chosen name only makes sense when adding one feed.
-                    let title = picked.count == 1 && name != candidate.title && !name.isEmpty ? name : nil
+                    // The name field is only shown for a single candidate.
+                    let title = candidates.count == 1 && name != candidate.title && !name.isEmpty ? name : nil
                     let added: AddResult = try await Daemon.shared.callSlow("feeds.add", AddParams(url: candidate.url, title: title))
                     if let folder { model.moveFeed(added.id, to: folder) }
                 }
@@ -228,7 +232,8 @@ private struct SheetBody: View {
                 selection: $folder,
                 options: [SelectOption(value: nil, label: "None")]
                     + folders.map { SelectOption(value: $0.folder.id, label: $0.folder.name, indent: CGFloat($0.depth) * 16) },
-                width: 448, height: 32,
+                // The sheet holds 504 inside its padding: 64 for the label, 12 between.
+                width: 428, height: 32,
                 action: ("New folder", newFolder))
             .floatFrame($folderFrame)
         }

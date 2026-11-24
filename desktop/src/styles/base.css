@@ -1,0 +1,84 @@
+/* What every screen shares. Colors come from src/theme/apply.ts; sizes are the Mac's
+ * points, which are CSS pixels at the same zoom. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-ui), sans-serif;
+  font-size: 14px;
+  font-weight: var(--ui-400);
+  -webkit-font-smoothing: auto; /* macOS darkens stems as AppKit does; no effect elsewhere */
+  text-rendering: optimizeLegibility;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+.shell {
+  display: flex;
+  height: 100%;
+  position: relative;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  cursor: default;
+  text-align: inherit;
+}
+
+/* A hand over what acts on a click, the arrow over what is disabled (Kit.swift
+   interactiveCursor). Text fields keep the I-beam. */
+:is(button, select, summary, [role="switch"], [role="tab"]):not(:disabled, [aria-disabled="true"]) {
+  cursor: pointer;
+}
+:is(button, select, input):disabled {
+  cursor: default;
+}
+
+/* Motion stops when the system asks for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0s !important;
+    animation: none !important;
+  }
+}
+
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--unread);
+  outline-offset: -2px;
+}
+
+h1,
+h2,
+p,
+blockquote,
+pre {
+  margin: 0;
+}
+
+.selectable {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}

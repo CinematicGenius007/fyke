@@ -226,6 +226,11 @@ check("position is shown", "100%" in t.screen.display[-1], t.screen.display[-1])
 t.keys("1", 0.5)
 print("     status:", t.screen.display[-1].strip())
 if OPENER:
+    # The opener runs as its own process; give it a moment on a busy machine.
+    for _ in range(50):
+        if os.path.exists(opened) and open(opened).read().strip():
+            break
+        time.sleep(0.1)
     check("a number opens that link", os.path.exists(opened) and open(opened).read().strip() == "1:https://example.com/link", t.screen.display[-1])
     os.remove(opened)
     t.keys("o", 0.3)

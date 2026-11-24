@@ -35,6 +35,15 @@ SUITES = {
     "tokens":      ["python3 tools/gen_tokens.py --check"],
     "bundle":      ["python3 tools/bundle_app.py"],
     "gui":         [],  # filled with the e2e_gui.py names below
+    # The Windows and Linux app (desktop/). Its pictures compare with the Mac's in
+    # zig-out/parity; the report is for reading and does not fail the run.
+    "desktop-unit": ["cd desktop && bun run check && bun test tests/unit"],
+    # The Rust side embeds the built UI, so the UI is built first.
+    "desktop-rust": ["cd desktop && bun run build && cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test"],
+    "desktop-e2e": ["cd desktop && bunx playwright test", "cd desktop && bun tools/parity.ts"],
+    # The packaging tools run on Windows and Linux CI only (desktop-package); here they
+    # are compiled, so a slip shows before CI.
+    "desktop-tools": ["python3 -m py_compile tools/desktop_package.py tools/desktop_budget.py tools/e2e_installer_windows.py tools/e2e_packages_linux.py tools/release.py"],
     "diagrams":    ["python3 tools/render_diagrams.py"],
     "site":        ["cd site && pnpm build"],
 }
@@ -61,9 +70,16 @@ RULES = [
     (["tools/e2e_features.py"], ["e2e-features"], []), (["tools/e2e_service.py"], ["e2e-service"], []),
     (["tools/e2e_tui.py"], ["e2e-tui"], []), (["tools/bundle_app.py"], ["bundle"], ["keys"]),
     (["tools/e2e_gui.py"], [], ["snapshots", "keys"]),
+    (["tools/gui_fixtures.py"], ["desktop-e2e"], ["snapshots", "keys", "themes", "discussion"]),
+    # The desktop app. The Rust side has cargo tests; the UI has unit tests and Playwright.
+    (["desktop/src-tauri/*"], ["desktop-rust"], []),
+    (["tools/desktop_package.py", "tools/desktop_budget.py", "tools/e2e_installer_windows.py", "tools/e2e_packages_linux.py",
+      "tools/release.py", "desktop/budgets.json"], ["desktop-tools"], []),
+    (["desktop/src/*", "desktop/tests/*", "desktop/tools/*", "desktop/*.ts", "desktop/package.json", "desktop/bun.lock",
+      "desktop/tsconfig.json", "desktop/index.html"], ["desktop-unit", "desktop-e2e"], []),
     # The app. Pure logic has unit tests; each view file names the screens it draws.
     (["gui/Sources/ReaderLogic/*", "gui/Tests/*"], ["swift-test"], []),
-    (["gui/tokens.css", "tools/gen_tokens.py", "gui/Fonts/*"], ["tokens"], ["snapshots"]),
+    (["gui/tokens.css", "tools/gen_tokens.py", "gui/Fonts/*"], ["tokens", "desktop-unit"], ["snapshots"]),
     (["gui/Package.swift"], ["swift-test"], ["snapshots"]),
     (["gui/Sources/Reader/Activity.swift"], [], ["activity"]),
     (["gui/Sources/Reader/AddFeed.swift"], [], ["all"]),
@@ -129,7 +145,7 @@ def plan(files):
     if screens:
         # The app has to be built and bundled before its checks can open it.
         suites.update(["swift-build", "bundle", "gui"])
-    if suites & {"e2e", "e2e-daemon", "e2e-mcp", "e2e-features", "e2e-service", "e2e-tui"}:
+    if suites & {"e2e", "e2e-daemon", "e2e-mcp", "e2e-features", "e2e-service", "e2e-tui", "desktop-e2e"}:
         suites.add("zig-build")
     return suites, screens, why
 
@@ -167,6 +183,13 @@ def main():
             continue
         if suite == "e2e-tui" and not (root / ".venv/bin/python").exists():
             print("  e2e-tui skipped: no .venv; see the Python test dependencies in AGENTS.md")
+            continue
+        missing = [tool for tool in (["bun", "cargo"] if suite == "desktop-rust" else ["bun"]) if not shutil.which(tool)]
+        if suite.startswith("desktop") and missing:
+            print(f"  {suite} skipped: {' and '.join(missing)} not installed")
+            continue
+        if suite.startswith("desktop") and not (root / "desktop/node_modules").exists():
+            print(f"  {suite} skipped: run `bun install` in desktop/ first")
             continue
         if suite == "site" and not shutil.which("pnpm"):
             print("  site skipped: pnpm is not installed")

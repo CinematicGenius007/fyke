@@ -21,15 +21,32 @@ There are no releases yet. Everything below is built from source and is unreleas
 - **macOS app.** A SwiftUI reader with folders, search, themes, a bundled reading font, its own controls and a page viewer that loads addresses only and never feed content. `python3 tools/bundle_app.py --install` builds and installs it.
 - **Data folder.** Data lives in `~/.fyke`. `fyke data move`, and Settings > General, move it to another folder or volume, verify the copy, and undo the steps already done if one fails.
 - **Website.** The project site in `site/` renders the documents in `docs/`.
+- **Desktop app for Windows and Linux (in progress).** A Tauri 2 app in `desktop/` that matches the macOS app. So far: the sidebar with places, views and the feed tree, the timeline for All and Starred, a feed, folder or view beside the reader with a divider that resizes and resets, the reader with its actions, the Mac's keys for moving, opening, starring and marking, and links that open in the default browser, and search (Ctrl+F or /) with its arrow keys, unread-only scope and Ctrl+S to keep a search as a view, with undo, and the command palette (Ctrl+K or the sidebar's Search row) with places, views, feeds, articles and the commands built so far, the shortcuts sheet (?), and managing feeds: rename in place, right-click menus for views, folders and feeds, new folders, Move to, and delete and remove with a confirmation that keeps data by default, and its own window buttons and title strip on Windows and Linux, with Ctrl+Q to quit on Linux and the webview's print, reload, zoom and developer keys turned off. Routines that notify post a system notification, from the open app or, when it is closed, from a copy the daemon starts that opens no window; a second launch brings the open window forward. Screen readers get a name for every control, sidebar rows read their counts after their names, and Windows contrast themes keep selections, unread dots and panel edges visible. A per-user Windows installer, a `.deb` and an AppImage each bring the daemon along. The installer can put `fyke` on PATH and start the background service at sign-in, and uninstalling keeps your data. [desktop.md](docs/desktop.md) says how to build them, and [desktop-parity.md](docs/desktop-parity.md) tracks each line.
+
+- **Desktop subscriptions.** Preview feeds before subscribing, choose or create a folder, drag feeds and folders in the sidebar, and import or export subscriptions with OPML.
+
+- **Desktop reading.** Edit saved views from their sentence and undo rule changes. Use Ctrl+J to catch up on unread articles and press C from a Hacker News story to expand its discussion. Empty places, such as a view with nothing matching or an empty Starred, say so in the same type and spacing as on the Mac. A closed folder stays closed the next time the app opens.
+
+- **Desktop briefs and questions.** Write a brief in Today, open its cited articles, edit and try recipes, ask follow-up questions, and schedule a routine from a saved view. Activity shows running jobs and feeds that need attention. Open public pages in the app on Windows and Linux; the web bar names your default browser, as in "Open in Firefox".
+
+- **Desktop Settings.** Use General for fetching and opening links, Reading and Tokens for appearance (a font changed from the text menu or Reading can be saved to its theme, dropped, or saved as a new theme), Agents for writer and MCP settings, and Data for storage and the data folder.
 
 ### Changed
 
 - **The project is named Fyke.** The command is `fyke`, the data folder is `~/.fyke` (set `FYKE_HOME` to use another), the app is `Fyke.app`, and the background service is `local.fyke.daemon`. Data in `~/.rss_`, from builds before the name, moves to `~/.fyke` the first time any `fyke` command runs, including a folder moved elsewhere with `data move`. Quit an earlier build's daemon first: while it runs, `fyke` stops with `EarlierDaemonRunning` and changes nothing. `fyke service install` and `uninstall` also remove a launch agent installed under the old label, and `bundle_app.py --install` removes `/Applications/rss_.app`.
 - Search matches feed names and hosts as well as entry text.
 - Settings follow `config.json` alone, and a half-applied change is refused instead of kept.
+- The desktop app's Today says how long a brief has been writing and offers Read the articles instead, and a brief that was not written offers Choose a writer, as on the Mac. It names the writer as the Mac does.
+- Buttons in both apps show their states as the design rules set: icon buttons fill on hover and press, a selected chip or symbol button darkens when pressed, and a disabled switch dims. In the desktop app a hand shows over everything that acts on a click, the arrow over disabled controls, all motion stops when the system asks for reduced motion, and filled buttons keep an edge with high-contrast colors.
+- The macOS app's article list starts 368 points wide, as the design rules set, instead of 375. Double-click the divider to return to it.
 
 ### Fixed
 
+- Desktop app: inline states (empty, working, failed) match the macOS app: full-size buttons side by side, a spinner or dot in the accent before the label, and catch-up's finished state centred.
+- macOS and desktop apps: when the background service does not start, the window says so at once instead of trying to replace it for about two and a half minutes, and a failed settings read is no longer called a config.json mistake. A theme chosen at launch holds even then.
+- macOS app: picking one feed from several advertised by a site keeps that feed’s own name.
+
+- macOS app: a folder name that is already taken now shows why it was refused.
 - Every HTTPS fetch no longer crashes.
 - A buffer overflow while canonicalizing addresses, and invalid UTF-8 that corrupted stored JSON, found by fuzzing.
 - Fetch deadlines now hold on stalled reads.

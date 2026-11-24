@@ -4,8 +4,8 @@
 //! subscribes with `notifies: true` posts the notification itself, and the daemon notes
 //! each such event it delivered to one. If none took the event within a short wait, the
 //! daemon starts the app in a mode that posts one notification and exits:
-//! `Fyke.App.exe --notify` beside `fyke.exe` on Windows, and the bundle that holds the
-//! daemon, through `open`, on macOS. Clicking the notification opens Fyke.
+//! `Fyke.App.exe --notify` beside `fyke.exe` on Windows, `fyke-app --notify` beside
+//! `fyke` on Linux, and the bundle that holds the daemon, through `open`, on macOS. Clicking the notification opens Fyke.
 //!
 //! Only an app that is installed with the daemon is started, so a daemon built for
 //! development or run by a test starts nothing. `FYKE_HEADLESS` turns this off, and
@@ -25,7 +25,7 @@ const claim_wait_ms = 2_000;
 /// Events this close together post once, as `RoutineNotices` does in the app.
 const quiet_ms = 10_000;
 
-pub const Os = enum { windows, macos, other };
+pub const Os = enum { windows, macos, linux, other };
 
 /// The command that posts one notification for the daemon at `self`, or null when no
 /// app is installed with it. `exists` answers whether a file is there.
@@ -45,6 +45,12 @@ pub fn command(
         .windows => {
             const dir = std.fs.path.dirnameWindows(self) orelse return null;
             const app = try std.fmt.allocPrint(arena, "{s}\\Fyke.App.exe", .{dir});
+            if (!exists(context, app)) return null;
+            return try arena.dupe([]const u8, &.{ app, "--notify" });
+        },
+        .linux => {
+            const dir = std.fs.path.dirnamePosix(self) orelse return null;
+            const app = try std.fmt.allocPrint(arena, "{s}/fyke-app", .{dir});
             if (!exists(context, app)) return null;
             return try arena.dupe([]const u8, &.{ app, "--notify" });
         },
@@ -101,6 +107,7 @@ fn start(s: *service.Service, arena: std.mem.Allocator) !void {
     const os: Os = switch (builtin.os.tag) {
         .windows => .windows,
         .macos => .macos,
+        .linux => .linux,
         else => .other,
     };
     const argv = try command(arena, os, self, override, s.io, fileExists) orelse return;
@@ -111,7 +118,8 @@ fn start(s: *service.Service, arena: std.mem.Allocator) !void {
         .stdout = .ignore,
         .stderr = .ignore,
     });
-    // `open` returns at once, and the Windows app posts and exits; neither is left as
+    // `open` returns at once, and the Windows and Linux apps hand over to a copy of
+    // themselves and exit (desktop/src-tauri/src/notify.rs); neither is left as
     // a zombie for long, and waiting keeps it from becoming one at all.
     _ = child.wait(s.io) catch {};
 }
@@ -147,6 +155,15 @@ test "Windows posts through the app beside the daemon, when it is there" {
     try std.testing.expectEqualStrings("C:\\Program Files\\Fyke\\Fyke.App.exe", argv[0]);
     try std.testing.expectEqualStrings("--notify", argv[1]);
     try std.testing.expectEqual(@as(?[]const []const u8, null), try command(arena.allocator(), .windows, "C:\\dev\\fyke.exe", null, {}, absent));
+}
+
+test "Linux posts through the desktop app beside the daemon, when it is there" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const argv = (try command(arena.allocator(), .linux, "/usr/bin/fyke", null, {}, present)).?;
+    try std.testing.expectEqualStrings("/usr/bin/fyke-app", argv[0]);
+    try std.testing.expectEqualStrings("--notify", argv[1]);
+    try std.testing.expectEqual(@as(?[]const []const u8, null), try command(arena.allocator(), .linux, "/home/me/src/zig-out/bin/fyke", null, {}, absent));
 }
 
 test "an override wins, and an empty one turns posting off" {

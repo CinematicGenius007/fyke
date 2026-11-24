@@ -195,13 +195,21 @@ final class AppModel {
     }
 
     /// The daemon outlives the app, so after an update it can be an older one, and
-    /// nothing else would replace it. Stopping it is safe: the next call starts ours.
+    /// nothing else would replace it. Stopping it is safe: the next call starts ours. A
+    /// service that does not answer at all is not replaced: `start` says it did not start.
     private func replaceOutdatedDaemon() async {
         func current() async -> Bool {
             let stats: Stats? = try? await Daemon.shared.call("stats.get")
             return (stats?.apiVersion ?? 0) >= Daemon.apiVersion
         }
-        guard await !current() else { return }
+        do {
+            let stats: Stats = try await Daemon.shared.call("stats.get")
+            guard (stats.apiVersion ?? 0) < Daemon.apiVersion else { return }
+        } catch let failure as RPCFailure where failure.code != nil {
+            // An older service answered with a refusal, such as an unknown method.
+        } catch {
+            return
+        }
         let _: Ok? = try? await Daemon.shared.call("daemon.stop")
         for _ in 0..<50 {
             try? await Task.sleep(for: .milliseconds(100))
@@ -637,16 +645,19 @@ final class AppModel {
     private struct MarkAllParams: Encodable, Sendable { var feedId: Int64?; var folderId: Int64? }
 
     /// Runs a change to subscriptions, then shows the result. The daemon names its
-    /// refusals, and only the one a person can cause needs words.
+    /// refusals, and only the one a person can cause needs words. The refusal shows
+    /// after the reload, which would otherwise clear it.
     private func change(_ work: @escaping () async throws -> Void) {
         Task {
+            var refusal: String?
             do {
                 try await work()
             } catch {
                 let text = error.localizedDescription
-                problem = text.contains("FolderExists") ? "A folder with that name is already there" : text
+                refusal = text.contains("FolderExists") ? "A folder with that name is already there" : text
             }
             await reload()
+            if let refusal { problem = refusal }
         }
     }
 

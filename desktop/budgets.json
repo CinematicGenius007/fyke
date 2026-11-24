@@ -1,0 +1,15 @@
+{
+  "windows": {
+    "installed_mb": 12,
+    "package_mb.setup": 6,
+    "cold_start_ms": 1000,
+    "idle_memory_mb": 175
+  },
+  "linux": {
+    "installed_mb": 14,
+    "package_mb.deb": 8,
+    "package_mb.appimage": 90,
+    "cold_start_ms": 1000,
+    "idle_memory_mb": 160
+  }
+}

@@ -203,6 +203,19 @@ extension AppModel {
             go(to: .all)
             try? await Task.sleep(for: .milliseconds(300))
             if let row = entries.first { await open(row.id) }
+        case "starred":
+            go(to: .starred)
+            try? await Task.sleep(for: .milliseconds(300))
+            if let row = entries.first { await open(row.id) }
+        case "folder":
+            if let folder = folders.first {
+                go(to: .folder(folder.id))
+                try? await Task.sleep(for: .milliseconds(300))
+                if let row = entries.first { await open(row.id) }
+            }
+        case "view-empty":
+            // The newest view, which the check makes to match nothing.
+            if let view = library.views.last { go(to: .view(view.id)) }
         case "routines":
             go(to: .routines)
             if library.routines.isEmpty { newRoutine() }
@@ -219,6 +232,8 @@ extension AppModel {
             ask.start(question: environment["FYKE_QUERY"] ?? "", view: place.viewId, model: self)
         case "activity":
             showingActivity = true
+        case "shortcuts":
+            showingShortcuts = true
         case "health":
             if let feed = failingFeeds.first ?? feeds.first { healthFeed = feed.id }
         case "toast":

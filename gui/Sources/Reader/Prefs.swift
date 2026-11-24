@@ -76,7 +76,7 @@ struct UISettings: Codable, Equatable, Sendable {
     var lineSpacing = 1.6
     var columnWidth = 640.0
     /// Width of the article list beside the reader. The divider between them drags.
-    var listWidth = 375.0
+    var listWidth = 368.0
     var loadImages = false
     /// `app` or `browser`.
     var openLinks = "app"
@@ -210,6 +210,7 @@ final class Prefs {
             fileProblem = reply.configError
             guard reply.configError == nil else {
                 readFile = false
+                apply(withLaunchArguments(ui))
                 return
             }
             // A change waiting to be saved is newer than what the file held.
@@ -223,8 +224,12 @@ final class Prefs {
             }
             readFile = true
         } catch {
-            fileProblem = error.localizedDescription
+            // The file was not read, so nothing is known to be wrong with it. The window's
+            // banner says why the call failed.
+            fileProblem = nil
             readFile = false
+            // A theme asked for at launch holds even so; it is never saved.
+            apply(withLaunchArguments(ui))
         }
     }
 

@@ -10,6 +10,8 @@ Build and install the macOS app. It needs Zig 0.17.1 and Xcode's command line to
 python3 tools/bundle_app.py --install
 ```
 
+The Windows and Linux app is in progress in `desktop/`. [docs/desktop.md](docs/desktop.md) says how to build, run and package it.
+
 Or use the terminal:
 
 ```bash
@@ -34,6 +36,7 @@ zig build -Drelease
 | [docs/architecture.md](docs/architecture.md) | Core design: processes, modules, ingest, content model, security, budgets |
 | [schema/](schema/) | Data model |
 | [docs/api.md](docs/api.md) | Operations, CLI, MCP, ACP |
+| [docs/desktop.md](docs/desktop.md) | The Windows and Linux app: build, test, package, release |
 | [docs/aggregator.md](docs/aggregator.md) | AI stages, lenses, runners |
 | [docs/rss-primer.md](docs/rss-primer.md) | How RSS really works |
 | [docs/decisions/0001-language.md](docs/decisions/0001-language.md) | Language choice |
