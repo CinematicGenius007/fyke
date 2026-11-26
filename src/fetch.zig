@@ -311,6 +311,9 @@ test "a false content-encoding is masked, and a real one kept" {
 
 /// How old `client.now` may get before a handshake refreshes it.
 const clock_refresh_seconds = 60;
+/// Until the clock is this old, a refresh happens only if no connect is under way,
+/// since a writer waiting for the lock holds back every new connect behind it.
+const clock_wait_seconds = 10 * 60;
 /// How often the system's root certificates are read again.
 const roots_refresh_seconds = 24 * 60 * 60;
 
@@ -335,14 +338,24 @@ fn fresh(then: Io.Timestamp, now: Io.Timestamp, max_seconds: i64) bool {
 /// itself, but connecting first, which the address check needs, skips that.
 fn refreshClock(client: *http.Client) !void {
     const io = client.io;
-    const now = Io.Clock.real.now(io);
+    var overdue = true;
     {
         try clock_lock.lockShared(io);
         defer clock_lock.unlockShared(io);
-        if (client.now) |then| if (fresh(then, now, clock_refresh_seconds)) return;
+        if (client.now) |then| {
+            const now = Io.Clock.real.now(io);
+            if (fresh(then, now, clock_refresh_seconds)) return;
+            overdue = !fresh(then, now, clock_wait_seconds);
+        }
     }
-    try clock_lock.lock(io);
+    if (overdue) {
+        try clock_lock.lock(io);
+    } else if (!clock_lock.tryLock(io)) {
+        return; // A connect is under way; a later one renews the clock.
+    }
     defer clock_lock.unlock(io);
+    // Read after the wait, which can last as long as a connect.
+    const now = Io.Clock.real.now(io);
     if (client.now) |then| if (fresh(then, now, clock_refresh_seconds)) return;
 
     const roots_due = if (roots_loaded_at) |then| !fresh(then, now, roots_refresh_seconds) else true;
@@ -398,6 +411,28 @@ test "a stale handshake clock moves to now without reading the roots again" {
     const renewed = client.now.?;
     try refreshClock(&client);
     try std.testing.expectEqual(renewed.nanoseconds, client.now.?.nanoseconds);
+}
+
+test "a clock a few minutes old waits for no connect under way" {
+    const io = std.testing.io;
+    var client: http.Client = .{ .allocator = std.testing.allocator, .io = io };
+    defer client.deinit();
+    const start = Io.Clock.real.now(io);
+    const saved = roots_loaded_at;
+    defer roots_loaded_at = saved;
+    roots_loaded_at = start;
+    const two_minutes_ago = start.subDuration(Io.Duration.fromSeconds(2 * 60));
+    client.now = two_minutes_ago;
+
+    // A connect holds the lock shared; the refresh leaves the clock for later.
+    try clock_lock.lockShared(io);
+    try refreshClock(&client);
+    clock_lock.unlockShared(io);
+    try std.testing.expectEqual(two_minutes_ago.nanoseconds, client.now.?.nanoseconds);
+
+    // With nothing under way, it renews.
+    try refreshClock(&client);
+    try std.testing.expect(fresh(client.now.?, Io.Clock.real.now(io), clock_refresh_seconds));
 }
 
 /// The address the connection was made to. Both connects above report it in the
