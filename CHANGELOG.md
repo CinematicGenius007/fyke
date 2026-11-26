@@ -43,6 +43,7 @@ There are no releases yet. Everything below is built from source and is unreleas
 ### Fixed
 
 - Daemon: a site that renews its certificate no longer fails with `TlsInitializationFailed`. The daemon took the time once, at its first HTTPS fetch, and checked every certificate against it for as long as it ran. A site that renewed its certificate after that, such as `planetscale.com/blog/feed.atom`, could not be added or refreshed until the daemon restarted, and a certificate that expired after that was still accepted. The daemon now checks certificates against a clock at most a minute old and reads the system's root certificates again each day.
+- macOS and desktop apps: a row's star keeps its place when hidden, so hovering an article no longer shifts the row. Its target is 28 points square, with a 16-point star.
 - Desktop app: inline states (empty, working, failed) match the macOS app: full-size buttons side by side, a spinner or dot in the accent before the label, and catch-up's finished state centred.
 - macOS and desktop apps: when the background service does not start, the window says so at once instead of trying to replace it for about two and a half minutes, and a failed settings read is no longer called a config.json mistake. A theme chosen at launch holds even then.
 - macOS app: picking one feed from several advertised by a site keeps that feed’s own name.

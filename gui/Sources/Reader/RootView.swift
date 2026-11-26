@@ -323,8 +323,9 @@ struct EntryList: View {
     }
 }
 
-/// Filled once starred. Until then it appears only on the row in use, so a long list
-/// stays quiet.
+/// Filled once starred. Until then it shows only on the row in use, so a long list
+/// stays quiet. It keeps its place while hidden, so the row never moves and the
+/// pointer never meets a button that has just appeared.
 struct StarToggle: View {
     let row: EntrySummary
     let showing: Bool
@@ -332,15 +333,17 @@ struct StarToggle: View {
     @Environment(\.palette) private var p
 
     var body: some View {
-        if row.starred || showing {
-            Button { model.toggleStar(row.id) } label: {
-                Icon(glyph: .star, size: 14, color: row.starred ? p.unread : p.muted, filled: row.starred)
-                    .frame(width: 26, height: 26)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.bare)
-            .help(row.starred ? "Remove star" : "Star")
+        let visible = row.starred || showing
+        Button { model.toggleStar(row.id) } label: {
+            Icon(glyph: .star, size: 16, color: row.starred ? p.unread : p.muted, filled: row.starred)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.bare)
+        .help(row.starred ? "Remove star" : "Star")
+        .opacity(visible ? 1 : 0)
+        .allowsHitTesting(visible)
+        .accessibilityHidden(!visible)
     }
 }
 
@@ -426,7 +429,7 @@ struct TimelineView: View {
                     .frame(width: 120, alignment: .trailing)
                     .padding(.top, 5)
                     StarToggle(row: row, showing: model.selectedId == row.id || hovered == row.id)
-                        .frame(width: 26).padding(.top, 2)
+                        .padding(.top, 1)
                 }
                 .padding(.vertical, 16)
                 .padding(.horizontal, model.selectedId == row.id ? 8 : 0)
