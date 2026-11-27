@@ -70,6 +70,7 @@ export interface ViewerUpdate {
   token: number;
   url: string;
   loading: boolean;
+  /** A failure kind from `web.rs` (`Failure`), such as "dns" or "crashed". */
   error: string | null;
   canGoBack: boolean;
   canGoForward: boolean;

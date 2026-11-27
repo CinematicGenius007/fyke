@@ -6,10 +6,17 @@
 //! (event streams, beacons, idle keep-alive) cannot hold every slot. When every
 //! slot is taken, a new request is answered with a refusal at once rather than
 //! left waiting in the listen backlog, so the page fails fast instead of stalling.
+//!
+//! A webview reports a failed tunnel only as a generic proxy error, so the proxy
+//! keeps the latest cause for each host it could not reach (`Failures`), and the
+//! viewer names that cause when the page fails.
 
+use serde::Serialize;
+use std::collections::HashMap;
 use std::io::{self, ErrorKind};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::async_runtime::{self, JoinHandle};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -18,12 +25,14 @@ use tokio::task::JoinSet;
 use tokio::time::{sleep, timeout};
 use url::{Host, Url};
 
-pub const PRIVATE: &str = "This page is on a private address, so it stays out of the app.";
+const PRIVATE: &str = "This page is on a private address, so it stays out of the app.";
 const HANDSHAKE: Duration = Duration::from_secs(12);
 /// How long after one address the next is tried, as in RFC 8305 (Happy Eyeballs).
 const STAGGER: Duration = Duration::from_millis(250);
 /// Idle connections are probed, so a peer that vanished is noticed and its tunnel freed.
 const KEEPALIVE: Duration = Duration::from_secs(30);
+/// Hosts whose last failure is kept. Past this the record starts again.
+const MAX_FAILURES: usize = 64;
 /// Requests answered with a refusal while every slot is busy. Beyond this the
 /// connection is closed unanswered, which the page also sees as a failure.
 const MAX_REFUSING: usize = 32;
@@ -71,12 +80,53 @@ fn public_host(host: &Host<&str>) -> bool {
     }
 }
 
-pub fn allowed_url(url: &Url) -> Result<(), &'static str> {
+/// Why a page did not open. The window shows one plain sentence for each.
+// Some kinds come only from the webview handlers, which the Mac's tests do not build.
+#[cfg_attr(not(any(windows, target_os = "linux")), allow(dead_code))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Failure {
+    /// The name did not resolve.
+    Dns,
+    /// The site's certificate was refused.
+    Tls,
+    /// The address, or what its name resolved to, is not public.
+    Private,
+    /// The site refused the connection.
+    Refused,
+    /// The site did not answer in time.
+    Timeout,
+    /// The page's process ended.
+    Crashed,
+    /// The address is a download.
+    Download,
+    /// The address is not an http or https page Fyke opens.
+    Blocked,
+    /// A WebView2 environment variable would replace the page's profile or route.
+    Isolation,
+    /// The viewer itself could not start.
+    Setup,
+    Unknown,
+}
+
+impl From<&io::Error> for Failure {
+    fn from(error: &io::Error) -> Self {
+        match error.kind() {
+            ErrorKind::PermissionDenied => Self::Private,
+            ErrorKind::NotFound => Self::Dns,
+            ErrorKind::ConnectionRefused => Self::Refused,
+            ErrorKind::TimedOut => Self::Timeout,
+            _ => Self::Unknown,
+        }
+    }
+}
+
+pub fn allowed_url(url: &Url) -> Result<(), Failure> {
     if !matches!(url.scheme(), "http" | "https") || !url.username().is_empty() || url.password().is_some() {
-        return Err("Only public web addresses can open in Fyke.");
+        return Err(Failure::Blocked);
     }
     if url.host().is_none_or(|host| !public_host(&host)) {
-        return Err(PRIVATE);
+        return Err(Failure::Private);
     }
     Ok(())
 }
@@ -107,13 +157,39 @@ async fn addresses(host: Host<&str>, port: u16, public_only: bool) -> io::Result
     Ok(resolved)
 }
 
-pub async fn check_destination(url: &Url) -> Result<(), String> {
+pub async fn check_destination(url: &Url) -> Result<(), Failure> {
     allowed_url(url)?;
     timeout(HANDSHAKE, addresses(url.host().expect("URL guard checks this"), url.port_or_known_default().unwrap_or(0), true))
         .await
-        .map_err(|_| "The lookup timed out.".to_string())?
+        .map_err(|_| Failure::Timeout)?
         .map(|_| ())
-        .map_err(|error| error.to_string())
+        .map_err(|error| Failure::from(&error))
+}
+
+/// The latest reason the proxy could not reach each host, keyed as `url::Host`
+/// prints it. A later tunnel that opens clears the host's entry.
+#[derive(Clone, Default)]
+pub struct Failures(Arc<Mutex<HashMap<String, Failure>>>);
+
+impl Failures {
+    pub fn of(&self, host: &str) -> Option<Failure> {
+        self.0.lock().unwrap_or_else(|error| error.into_inner()).get(host).copied()
+    }
+
+    fn record(&self, host: &str, failure: Option<Failure>) {
+        let mut hosts = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        match failure {
+            Some(failure) => {
+                if hosts.len() >= MAX_FAILURES && !hosts.contains_key(host) {
+                    hosts.clear();
+                }
+                hosts.insert(host.to_owned(), failure);
+            }
+            None => {
+                hosts.remove(host);
+            }
+        }
+    }
 }
 
 /// How many tunnels the proxy holds open, and when a quiet one is closed.
@@ -139,6 +215,7 @@ impl Default for Limits {
 
 pub struct Proxy {
     pub url: Url,
+    pub failures: Failures,
     task: JoinHandle<()>,
 }
 
@@ -150,6 +227,8 @@ impl Proxy {
     pub async fn with(limits: Limits) -> io::Result<Self> {
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await?;
         let url = Url::parse(&format!("socks5://{}", listener.local_addr()?)).expect("valid local SOCKS address");
+        let failures = Failures::default();
+        let record = failures.clone();
         let task = async_runtime::spawn(async move {
             let mut active = JoinSet::new();
             let mut refusing = JoinSet::new();
@@ -158,7 +237,8 @@ impl Proxy {
                     ready = listener.accept() => {
                         let Ok((socket, _)) = ready else { break };
                         if active.len() < limits.connections {
-                            active.spawn(async move { let _ = forward(socket, limits).await; });
+                            let record = record.clone();
+                            active.spawn(async move { let _ = forward(socket, limits, record).await; });
                         } else if refusing.len() < MAX_REFUSING {
                             refusing.spawn(async move { let _ = refuse(socket).await; });
                         }
@@ -169,7 +249,7 @@ impl Proxy {
                 }
             }
         });
-        Ok(Self { url, task })
+        Ok(Self { url, failures, task })
     }
 }
 
@@ -206,12 +286,26 @@ async fn reply(to: &mut TcpStream, code: u8) -> io::Result<()> {
     to.write_all(&[5, code, 0, 1, 0, 0, 0, 0, 0, 0]).await
 }
 
-async fn forward(mut from: TcpStream, limits: Limits) -> io::Result<()> {
-    let target = match timeout(HANDSHAKE, handshake(&mut from, limits)).await {
-        Ok(Ok(target)) => target,
+async fn forward(mut from: TcpStream, limits: Limits, failures: Failures) -> io::Result<()> {
+    let (host, port) = match timeout(HANDSHAKE, request(&mut from)).await {
+        Ok(Ok(destination)) => destination,
         Ok(Err(error)) => return reply(&mut from, Refusal::from(&error) as u8).await,
         Err(_) => return reply(&mut from, Refusal::TimedOut as u8).await,
     };
+    let name = host.to_string();
+    // The cause is recorded before the reply, so it is there when the page reports the failure.
+    let target = match timeout(HANDSHAKE, connect(host, port, limits)).await {
+        Ok(Ok(target)) => target,
+        Ok(Err(error)) => {
+            failures.record(&name, Some(Failure::from(&error)));
+            return reply(&mut from, Refusal::from(&error) as u8).await;
+        }
+        Err(_) => {
+            failures.record(&name, Some(Failure::Timeout));
+            return reply(&mut from, Refusal::TimedOut as u8).await;
+        }
+    };
+    failures.record(&name, None);
     reply(&mut from, 0).await?;
     relay(from, target, limits.idle).await
 }
@@ -300,8 +394,8 @@ async fn request(from: &mut TcpStream) -> io::Result<(Host, u16)> {
     Ok((host, from.read_u16().await?))
 }
 
-async fn handshake(from: &mut TcpStream, limits: Limits) -> io::Result<TcpStream> {
-    let (host, port) = request(from).await?;
+/// Resolves the destination and opens a connection to its first address that answers.
+async fn connect(host: Host, port: u16, limits: Limits) -> io::Result<TcpStream> {
     #[cfg(test)]
     let public_only = !limits.local;
     #[cfg(not(test))]
@@ -512,5 +606,43 @@ mod tests {
         assert_eq!(Refusal::from(&io::Error::from(ErrorKind::NotFound)), Refusal::HostUnreachable);
         assert_eq!(Refusal::from(&io::Error::from(ErrorKind::TimedOut)), Refusal::TimedOut);
         assert_eq!(Refusal::from(&io::Error::other("other")), Refusal::General);
+        assert_eq!(Failure::from(&denied()), Failure::Private);
+        assert_eq!(Failure::from(&io::Error::from(ErrorKind::ConnectionRefused)), Failure::Refused);
+        assert_eq!(Failure::from(&io::Error::from(ErrorKind::NotFound)), Failure::Dns);
+        assert_eq!(Failure::from(&io::Error::from(ErrorKind::TimedOut)), Failure::Timeout);
+        assert_eq!(Failure::from(&io::Error::other("other")), Failure::Unknown);
+        assert_eq!(allowed_url(&Url::parse("ftp://example.com/").unwrap()), Err(Failure::Blocked));
+        assert_eq!(allowed_url(&Url::parse("http://192.168.1.4/").unwrap()), Err(Failure::Private));
+    }
+
+    #[test]
+    fn the_proxy_keeps_why_a_host_failed_until_it_opens() {
+        async_runtime::block_on(async {
+            let closed = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+            let closed_port = closed.local_addr().unwrap().port();
+            drop(closed);
+            let target = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+            let proxy = Proxy::with(local(4, Duration::from_secs(5))).await.unwrap();
+            assert_eq!(proxy.failures.of("127.0.0.1"), None);
+
+            let (_refused, code) = tunnel(&proxy, closed_port).await;
+            assert_eq!(code, Refusal::ConnectionRefused as u8);
+            assert_eq!(proxy.failures.of("127.0.0.1"), Some(Failure::Refused));
+
+            let (_open, code) = tunnel(&proxy, target.local_addr().unwrap().port()).await;
+            assert_eq!(code, 0);
+            assert_eq!(proxy.failures.of("127.0.0.1"), None);
+        });
+    }
+
+    #[test]
+    fn the_failure_record_stays_bounded() {
+        let failures = Failures::default();
+        for host in 0..MAX_FAILURES + 1 {
+            failures.record(&format!("host{host}.example"), Some(Failure::Dns));
+        }
+        assert_eq!(failures.of(&format!("host{MAX_FAILURES}.example")), Some(Failure::Dns));
+        assert_eq!(failures.of("host0.example"), None);
+        assert!(failures.0.lock().unwrap().len() <= MAX_FAILURES);
     }
 }

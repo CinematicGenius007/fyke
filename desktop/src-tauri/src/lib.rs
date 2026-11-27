@@ -16,6 +16,8 @@ pub mod testmode;
 mod web;
 #[cfg(any(windows, target_os = "linux", test))]
 mod web_guard;
+#[cfg(any(windows, test))]
+mod web_profile;
 
 use rpc::{Client, RpcError};
 use serde_json::Value;

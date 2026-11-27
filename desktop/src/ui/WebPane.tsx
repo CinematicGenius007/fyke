@@ -8,6 +8,26 @@ import { Action, IconButton, Rule } from "./kit/Controls";
 import { Icon } from "./kit/Icon";
 import { isSafeLink } from "./links";
 
+/** One sentence for each way a page can fail. `web.rs` names the kind (`Failure`). */
+const failures: Record<string, string> = {
+  dns: "Fyke could not find this site. Check the address and your connection.",
+  tls: "The site's security certificate is not valid, so the page stayed closed.",
+  private: "This page is on a private address, so it stays out of the app.",
+  refused: "The site refused the connection.",
+  timeout: "The site took too long to answer.",
+  crashed: "The page stopped working.",
+  download: "This address is a download, not a page.",
+  blocked: "Only public web addresses can open in Fyke.",
+  isolation: "Fyke could not isolate the page from this WebView2 configuration.",
+  setup: "Fyke could not start the page viewer.",
+  unknown: "The page could not be reached.",
+};
+
+/** The sentence for a failure kind, or the text of any other error. */
+function failureText(error: string): string {
+  return Object.hasOwn(failures, error) ? failures[error] : error;
+}
+
 let nextToken = 0;
 /** The default browser's name, asked once per run as the Mac reads it each time. */
 let browserName: Promise<string | null> | undefined;
@@ -46,7 +66,8 @@ export function WebPane(props: { address: string }) {
 
   function update(update: ViewerUpdate) {
     if (!mounted || update.token !== token) return;
-    setPage(update);
+    // A crash can arrive without an address; the bar keeps the last one.
+    setPage({ ...update, url: isSafeLink(update.url) ? update.url : page().url });
     if (isSafeLink(update.url)) model.set("webBrowserAddress", update.url);
     position();
   }
@@ -141,7 +162,7 @@ export function WebPane(props: { address: string }) {
         <Show when={page().error}>{(error) => (
           <div class="web-failure" role="status">
             <h2>This page did not open</h2>
-            <p>{error()}</p>
+            <p>{failureText(error())}</p>
             <div><Action onClick={() => navigate("reload")}>Try again</Action><Action onClick={model.openInBrowser}>Open in browser</Action></div>
           </div>
         )}</Show>

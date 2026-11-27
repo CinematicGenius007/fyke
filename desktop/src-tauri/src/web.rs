@@ -1,8 +1,15 @@
 //! The remote webview is a child of the main window, with its own profile and no
 //! capability. Its network route is installed before the first address loads.
+//!
+//! Every way a page can fail ends in a `fyke://page` update or a command error
+//! that names a `Failure`. The window then hides the native webview and shows the
+//! failure in its place, so a webview is never left on screen blank.
 
-use crate::web_guard::{self, Proxy};
+use crate::web_guard::{self, Failure, Failures, Proxy};
+#[cfg(windows)]
+use crate::web_profile;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 use std::sync::Mutex;
 use tauri::webview::{DownloadEvent, NewWindowResponse, WebviewBuilder};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, State, Webview, WebviewUrl, WebviewWindow};
@@ -19,9 +26,9 @@ pub(crate) struct Bounds {
 }
 
 impl Bounds {
-    fn parts(self) -> Result<(LogicalPosition<f64>, LogicalSize<f64>), String> {
+    fn parts(self) -> Result<(LogicalPosition<f64>, LogicalSize<f64>), Failure> {
         if ![self.x, self.y, self.width, self.height].into_iter().all(|value| value.is_finite() && value >= 0.0) {
-            return Err("The page area is invalid.".into());
+            return Err(setup("the page area is invalid"));
         }
         Ok((LogicalPosition::new(self.x, self.y), LogicalSize::new(self.width.max(1.0), self.height.max(1.0))))
     }
@@ -33,25 +40,40 @@ struct Update<'a> {
     token: u64,
     url: &'a str,
     loading: bool,
-    error: Option<&'a str>,
+    error: Option<Failure>,
     can_go_back: bool,
     can_go_forward: bool,
 }
 
-fn update(app: &AppHandle, token: u64, url: &str, loading: bool, error: Option<&str>, history: (bool, bool)) {
+fn update(app: &AppHandle, token: u64, url: &str, loading: bool, error: Option<Failure>, history: (bool, bool)) {
     let _ = app.emit_to("main", PAGE_EVENT, Update { token, url, loading, error, can_go_back: history.0, can_go_forward: history.1 });
+}
+
+/// The viewer could not start. The detail goes to the log; the window names the kind.
+fn setup(error: impl Display) -> Failure {
+    eprintln!("fyke-app: page viewer: {error}");
+    Failure::Setup
+}
+
+/// Why the proxy could not reach `url`'s host, when it could not.
+#[cfg_attr(not(any(windows, target_os = "linux")), allow(dead_code))]
+fn cause(failures: &Failures, url: &str) -> Option<Failure> {
+    let url = Url::parse(url).ok()?;
+    failures.of(&url.host()?.to_string())
 }
 
 struct Session {
     webview: Webview,
     _proxy: Proxy,
     #[cfg(windows)]
-    _directory: tempfile::TempDir,
+    profile: std::path::PathBuf,
 }
 
 impl Drop for Session {
     fn drop(&mut self) {
         let _ = self.webview.close();
+        #[cfg(windows)]
+        web_profile::discard(self.profile.clone());
     }
 }
 
@@ -85,9 +107,9 @@ pub(crate) async fn open_viewer(
     token: u64,
     url: String,
     bounds: Bounds,
-) -> Result<(), String> {
+) -> Result<(), Failure> {
     let (position, size) = bounds.parts()?;
-    let address = Url::parse(&url).map_err(|error| error.to_string())?;
+    let address = Url::parse(&url).map_err(|_| Failure::Blocked)?;
     let existing = {
         let mut slot = viewer.slot();
         slot.token = Some(token);
@@ -95,7 +117,8 @@ pub(crate) async fn open_viewer(
     };
     drop(existing);
     web_guard::check_destination(&address).await?;
-    let proxy = Proxy::start().await.map_err(|error| error.to_string())?;
+    let proxy = Proxy::start().await.map_err(setup)?;
+    let failures = proxy.failures.clone();
     if viewer.slot().token != Some(token) {
         return Ok(());
     }
@@ -144,7 +167,7 @@ pub(crate) async fn open_viewer(
         })
         .on_download(move |_webview, event| {
             if let DownloadEvent::Requested { url, .. } = event {
-                update(&for_download, token, url.as_str(), false, Some("This address is a download, not a page."), (false, false));
+                update(&for_download, token, url.as_str(), false, Some(Failure::Download), (false, false));
             }
             false
         });
@@ -154,26 +177,37 @@ pub(crate) async fn open_viewer(
         // Environment overrides could replace WebView2's profile or proxy.
         for key in ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "WEBVIEW2_USER_DATA_FOLDER", "WEBVIEW2_BROWSER_EXECUTABLE_FOLDER"] {
             if std::env::var_os(key).is_some() {
-                return Err("Fyke could not isolate the page from this WebView2 configuration.".into());
+                return Err(Failure::Isolation);
             }
         }
-        let directory = tempfile::tempdir().map_err(|error| error.to_string())?;
+        static SWEEP: std::sync::Once = std::sync::Once::new();
+        SWEEP.call_once(|| {
+            std::thread::spawn(|| web_profile::sweep(&std::env::temp_dir(), std::time::SystemTime::now() - web_profile::STALE));
+        });
+        let directory = web_profile::create(&std::env::temp_dir()).map_err(setup)?;
         let args = format!(
             "--proxy-server={} --proxy-bypass-list=<-loopback> --disable-quic --force-webrtc-ip-handling-policy=disable_non_proxied_udp --disable-features=msWebOOUI,msPdfOOUI",
             proxy.url
         );
-        (builder.data_directory(directory.path().to_path_buf()).additional_browser_args(&args), directory)
+        (builder.data_directory(directory.clone()).additional_browser_args(&args), directory)
     };
     #[cfg(target_os = "linux")]
     let builder = builder.proxy_url(proxy.url.clone());
 
-    let parent = app.get_window(window.label()).ok_or_else(|| "The reader window closed.".to_string())?;
-    let webview = parent.add_child(builder, position, size).map_err(|error| error.to_string())?;
+    let parent = app.get_window(window.label()).ok_or_else(|| setup("the reader window closed"))?;
+    let webview = match parent.add_child(builder, position, size) {
+        Ok(webview) => webview,
+        Err(error) => {
+            #[cfg(windows)]
+            web_profile::discard(directory);
+            return Err(setup(error));
+        }
+    };
     let session = Session {
         webview: webview.clone(),
         _proxy: proxy,
         #[cfg(windows)]
-        _directory: directory,
+        profile: directory,
     };
     {
         let mut slot = viewer.slot();
@@ -183,16 +217,16 @@ pub(crate) async fn open_viewer(
         slot.session = Some(session);
     }
 
-    if let Err(error) = configure(&webview, app, token).await {
+    if let Err(error) = configure(&webview, app, token, failures).await {
         close_viewer(viewer, token);
-        return Err(error);
+        return Err(setup(error));
     }
     if viewer.using(token).is_none() {
         return Ok(());
     }
     if let Err(error) = webview.navigate(address) {
         close_viewer(viewer, token);
-        return Err(error.to_string());
+        return Err(setup(error));
     }
     Ok(())
 }
@@ -211,28 +245,28 @@ pub(crate) fn close_viewer(viewer: State<'_, Viewer>, token: u64) {
 }
 
 #[tauri::command]
-pub(crate) fn position_viewer(viewer: State<'_, Viewer>, token: u64, bounds: Bounds, visible: bool) -> Result<(), String> {
+pub(crate) fn position_viewer(viewer: State<'_, Viewer>, token: u64, bounds: Bounds, visible: bool) -> Result<(), Failure> {
     let Some(webview) = viewer.using(token) else { return Ok(()) };
     let (position, size) = bounds.parts()?;
-    webview.set_bounds(tauri::Rect { position: position.into(), size: size.into() }).map_err(|error| error.to_string())?;
-    if visible { webview.show() } else { webview.hide() }.map_err(|error| error.to_string())
+    webview.set_bounds(tauri::Rect { position: position.into(), size: size.into() }).map_err(setup)?;
+    if visible { webview.show() } else { webview.hide() }.map_err(setup)
 }
 
 #[tauri::command]
-pub(crate) fn navigate_viewer(viewer: State<'_, Viewer>, token: u64, action: &str) -> Result<(), String> {
+pub(crate) fn navigate_viewer(viewer: State<'_, Viewer>, token: u64, action: &str) -> Result<(), Failure> {
     let Some(webview) = viewer.using(token) else { return Ok(()) };
     let script = match action {
         "back" => "history.back()",
         "forward" => "history.forward()",
         "reload" => "location.reload()",
-        _ => return Err("Unknown page action.".into()),
+        _ => return Err(setup(format!("unknown page action {action:?}"))),
     };
-    webview.eval(script).map_err(|error| error.to_string())
+    webview.eval(script).map_err(setup)
 }
 
 #[cfg(target_os = "linux")]
-async fn configure(view: &Webview, app: AppHandle, token: u64) -> Result<(), String> {
-    use webkit2gtk::{LoadEvent, PermissionRequestExt, SettingsExt, WebViewExt};
+async fn configure(view: &Webview, app: AppHandle, token: u64, failures: Failures) -> Result<(), String> {
+    use webkit2gtk::{LoadEvent, NetworkError, PermissionRequestExt, PolicyError, SettingsExt, WebProcessTerminationReason, WebViewExt};
     let (send, receive) = tokio::sync::oneshot::channel();
     view.with_webview(move |native| {
         let page = native.inner();
@@ -245,11 +279,31 @@ async fn configure(view: &Webview, app: AppHandle, token: u64) -> Result<(), Str
         });
         let started = std::rc::Rc::new(std::cell::Cell::new(false));
         let failed = started.clone();
+        let refused = started.clone();
         let for_failure = app.clone();
-        page.connect_load_failed(move |page, _, uri, _| {
+        let for_tls = app.clone();
+        let for_crash = app.clone();
+        page.connect_load_failed(move |page, _, uri, error| {
+            // A load replaced by another, or stopped by the navigation and download
+            // handlers (which report it themselves), is not a failure of the page.
+            if error.matches(NetworkError::Cancelled) || error.matches(PolicyError::FrameLoadInterruptedByPolicyChange) {
+                return false;
+            }
             failed.set(true);
-            update(&for_failure, token, uri, false, Some("The page could not be reached."), (page.can_go_back(), page.can_go_forward()));
+            let failure = cause(&failures, uri).unwrap_or(Failure::Unknown);
+            update(&for_failure, token, uri, false, Some(failure), (page.can_go_back(), page.can_go_forward()));
             true
+        });
+        page.connect_load_failed_with_tls_errors(move |page, uri, _, _| {
+            refused.set(true);
+            update(&for_tls, token, uri, false, Some(Failure::Tls), (page.can_go_back(), page.can_go_forward()));
+            true
+        });
+        page.connect_web_process_terminated(move |page, reason| {
+            if reason != WebProcessTerminationReason::TerminatedByApi {
+                let uri = page.uri().unwrap_or_default();
+                update(&for_crash, token, uri.as_str(), false, Some(Failure::Crashed), (false, false));
+            }
         });
         page.connect_load_changed(move |page, event| {
             if event == LoadEvent::Started {
@@ -268,9 +322,32 @@ async fn configure(view: &Webview, app: AppHandle, token: u64) -> Result<(), Str
 }
 
 #[cfg(windows)]
-async fn configure(view: &Webview, app: AppHandle, token: u64) -> Result<(), String> {
-    use webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_PERMISSION_STATE_DENY;
-    use webview2_com::{take_pwstr, NavigationCompletedEventHandler, PermissionRequestedEventHandler};
+async fn configure(view: &Webview, app: AppHandle, token: u64, failures: Failures) -> Result<(), String> {
+    use webview2_com::Microsoft::Web::WebView2::Win32::*;
+    use webview2_com::{take_pwstr, NavigationCompletedEventHandler, PermissionRequestedEventHandler, ProcessFailedEventHandler};
+
+    /// Names a failed navigation. Certificate errors reach the webview as they are;
+    /// a failed tunnel reaches it only as a proxy error, so the proxy's record of the
+    /// host comes before the webview's own status.
+    fn failure(status: COREWEBVIEW2_WEB_ERROR_STATUS, failures: &Failures, url: &str) -> Failure {
+        let certificate = [
+            COREWEBVIEW2_WEB_ERROR_STATUS_CERTIFICATE_COMMON_NAME_IS_INCORRECT,
+            COREWEBVIEW2_WEB_ERROR_STATUS_CERTIFICATE_EXPIRED,
+            COREWEBVIEW2_WEB_ERROR_STATUS_CLIENT_CERTIFICATE_CONTAINS_ERRORS,
+            COREWEBVIEW2_WEB_ERROR_STATUS_CERTIFICATE_REVOKED,
+            COREWEBVIEW2_WEB_ERROR_STATUS_CERTIFICATE_IS_INVALID,
+        ];
+        if certificate.contains(&status) {
+            return Failure::Tls;
+        }
+        cause(failures, url).unwrap_or(if status == COREWEBVIEW2_WEB_ERROR_STATUS_HOST_NAME_NOT_RESOLVED {
+            Failure::Dns
+        } else if status == COREWEBVIEW2_WEB_ERROR_STATUS_TIMEOUT {
+            Failure::Timeout
+        } else {
+            Failure::Unknown
+        })
+    }
 
     let (send, receive) = tokio::sync::oneshot::channel();
     view.with_webview(move |native| {
@@ -287,11 +364,43 @@ async fn configure(view: &Webview, app: AppHandle, token: u64) -> Result<(), Str
                     })),
                     &mut event_token,
                 )?;
+                let for_crash = app.clone();
+                page.add_ProcessFailed(
+                    &ProcessFailedEventHandler::create(Box::new(move |page, details| {
+                        let Some(details) = details else { return Ok(()) };
+                        let mut kind = COREWEBVIEW2_PROCESS_FAILED_KIND::default();
+                        details.ProcessFailedKind(&mut kind)?;
+                        // Other processes (GPU, utilities, a subframe's renderer) restart on their own.
+                        let fatal = [
+                            COREWEBVIEW2_PROCESS_FAILED_KIND_BROWSER_PROCESS_EXITED,
+                            COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_EXITED,
+                            COREWEBVIEW2_PROCESS_FAILED_KIND_RENDER_PROCESS_UNRESPONSIVE,
+                        ];
+                        if !fatal.contains(&kind) {
+                            return Ok(());
+                        }
+                        let mut source = Default::default();
+                        let url = match page.map(|page| page.Source(&mut source)) {
+                            Some(Ok(())) => take_pwstr(source),
+                            _ => String::new(),
+                        };
+                        update(&for_crash, token, &url, false, Some(Failure::Crashed), (false, false));
+                        Ok(())
+                    })),
+                    &mut event_token,
+                )?;
                 page.add_NavigationCompleted(
                     &NavigationCompletedEventHandler::create(Box::new(move |page, details| {
                         let (Some(page), Some(details)) = (page, details) else { return Ok(()) };
                         let mut success = Default::default();
                         details.IsSuccess(&mut success)?;
+                        let mut status = COREWEBVIEW2_WEB_ERROR_STATUS::default();
+                        details.WebErrorStatus(&mut status)?;
+                        // A navigation replaced by another, or stopped by the navigation and
+                        // download handlers (which report it themselves), is not a failure.
+                        if !success.as_bool() && status == COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED {
+                            return Ok(());
+                        }
                         let mut source = Default::default();
                         page.Source(&mut source)?;
                         let url = take_pwstr(source);
@@ -307,7 +416,7 @@ async fn configure(view: &Webview, app: AppHandle, token: u64) -> Result<(), Str
                             token,
                             &url,
                             false,
-                            (!success.as_bool()).then_some("The page could not be reached."),
+                            (!success.as_bool()).then(|| failure(status, &failures, &url)),
                             (back.as_bool(), forward.as_bool()),
                         );
                         Ok(())

@@ -47,3 +47,23 @@ test("the web bar names the default browser, as the Mac's does (C8)", async ({ a
   // The failure's own button stays general, as on the Mac.
   await expect(web.locator(".web-failure").getByRole("button", { name: "Open in browser" })).toBeVisible();
 });
+
+test("a failed page names its cause in a plain sentence, with Try again and Open in browser", async ({ app }) => {
+  for (const [kind, sentence] of [
+    ["dns", "Fyke could not find this site. Check the address and your connection."],
+    ["crashed", "The page stopped working."],
+    ["isolation", "Fyke could not isolate the page from this WebView2 configuration."],
+  ]) {
+    const page = await app.open({ FYKE_PAGE_FAILURE: kind });
+    await page.getByRole("button", { name: /Unkernel in WASM/ }).click();
+    await page.getByRole("button", { name: "Open page", exact: true }).click();
+    const failure = page.getByRole("region", { name: "Web page" }).locator(".web-failure");
+    await expect(failure.getByRole("heading", { name: "This page did not open" })).toBeVisible();
+    await expect(failure.locator("p")).toHaveText(sentence);
+    await expect(failure.getByRole("button", { name: "Try again" })).toBeVisible();
+    await expect(failure.getByRole("button", { name: "Open in browser" })).toBeVisible();
+    // Try again starts the page afresh, and an unchanged cause shows the same sentence.
+    await failure.getByRole("button", { name: "Try again" }).click();
+    await expect(failure.locator("p")).toHaveText(sentence);
+  }
+});
