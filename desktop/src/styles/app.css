@@ -543,6 +543,8 @@ svg.icon .dots circle {
 .star-toggle {
   width: 28px;
   height: 28px;
+  /* A long title or preview beside it must not squeeze the target. */
+  flex: none;
   display: grid;
   place-items: center;
   color: var(--muted);

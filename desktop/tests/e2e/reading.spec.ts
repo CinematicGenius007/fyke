@@ -79,7 +79,7 @@ test("the star shows under the pointer and nothing in the row moves, in a list a
     await expect(target).toBeVisible();
     const star = target.locator(".star-toggle");
     await expect(star).toBeHidden();
-    const boxes = () => target.locator("button span, .star-toggle").evaluateAll((els) => els.map((e) => JSON.stringify(e.getBoundingClientRect())));
+    const boxes = () => target.evaluate((row) => [row, ...row.querySelectorAll("button span, .star-toggle")].map((e) => JSON.stringify(e.getBoundingClientRect())));
     const before = await boxes();
     await target.hover();
     await expect(star).toBeVisible();
@@ -87,8 +87,10 @@ test("the star shows under the pointer and nothing in the row moves, in a list a
     // The pointer can travel onto the star without it going away.
     await star.hover();
     await expect(star).toBeVisible();
-    const size = await star.boundingBox();
-    expect(size!.width).toBeGreaterThanOrEqual(28);
+    expect(await star.boundingBox()).toMatchObject({ width: 28, height: 28 });
+    // A preview far wider than the row leaves the star its full size.
+    await target.locator(".timeline-preview, .entry-title").first().evaluate((e) => { e.textContent = "a long preview ".repeat(40); });
+    expect(await star.boundingBox()).toMatchObject({ width: 28, height: 28 });
   }
 });
 

@@ -324,8 +324,8 @@ struct EntryList: View {
 }
 
 /// Filled once starred. Until then it shows only on the row in use, so a long list
-/// stays quiet. It keeps its place while hidden, so the row never moves and the
-/// pointer never meets a button that has just appeared.
+/// stays quiet. It keeps its place while hidden, so showing it never moves the row.
+/// Hidden, it is disabled as well, which keeps it out of the keyboard's Tab order.
 struct StarToggle: View {
     let row: EntrySummary
     let showing: Bool
@@ -343,6 +343,7 @@ struct StarToggle: View {
         .help(row.starred ? "Remove star" : "Star")
         .opacity(visible ? 1 : 0)
         .allowsHitTesting(visible)
+        .disabled(!visible)
         .accessibilityHidden(!visible)
     }
 }
