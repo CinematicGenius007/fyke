@@ -68,6 +68,32 @@ test("s stars the open article and the daemon keeps it; m marks it unread", asyn
   await expect(page.getByRole("button", { name: "Star", exact: true }).first()).toBeVisible();
 });
 
+test("the star shows under the pointer and nothing in the row moves, in a list and in the timeline", async ({ app }) => {
+  for (const [screen, row] of [["all", ".timeline-line"], ["feed", ".entry-row"]] as const) {
+    const page = await app.open({ FYKE_SCREEN: screen });
+    await expect(page.locator(".article-title")).toBeVisible();
+    // All opens on an article; Escape goes back to its timeline.
+    if (screen === "all") await page.keyboard.press("Escape");
+    // A row that is neither selected nor starred, so its star shows only on hover.
+    const target = page.locator(`${row}:not(.selected)`).nth(1);
+    await expect(target).toBeVisible();
+    const star = target.locator(".star-toggle");
+    await expect(star).toBeHidden();
+    const boxes = () => target.evaluate((row) => [row, ...row.querySelectorAll("button span, .star-toggle")].map((e) => JSON.stringify(e.getBoundingClientRect())));
+    const before = await boxes();
+    await target.hover();
+    await expect(star).toBeVisible();
+    expect(await boxes()).toEqual(before);
+    // The pointer can travel onto the star without it going away.
+    await star.hover();
+    await expect(star).toBeVisible();
+    expect(await star.boundingBox()).toMatchObject({ width: 28, height: 28 });
+    // A preview far wider than the row leaves the star its full size.
+    await target.locator(".timeline-preview, .entry-title").first().evaluate((e) => { e.textContent = "a long preview ".repeat(40); });
+    expect(await star.boundingBox()).toMatchObject({ width: 28, height: 28 });
+  }
+});
+
 test("a feed shows its list beside the reader, and the divider resizes it", async ({ app }) => {
   const page = await app.open({ FYKE_SCREEN: "feed" });
   await expect(page.locator(".list-title")).toHaveText("Local");

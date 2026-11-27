@@ -541,13 +541,16 @@ svg.icon .dots circle {
 }
 
 .star-toggle {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
+  /* A long title or preview beside it must not squeeze the target. */
+  flex: none;
   display: grid;
   place-items: center;
   color: var(--muted);
-  /* Out of the layout until it shows, as SwiftUI's `if row.starred || showing` leaves it. */
-  display: none;
+  /* Hidden, not taken out of the layout, so a row keeps its shape when the star shows
+     (StarToggle in RootView.swift). */
+  visibility: hidden;
 }
 .star-toggle.on {
   color: var(--unread);
@@ -556,7 +559,7 @@ svg.icon .dots circle {
 .star-toggle.showing,
 .entry-row:hover .star-toggle,
 .timeline-line:hover .star-toggle {
-  display: grid;
+  visibility: visible;
 }
 .entry-star {
   position: absolute;
@@ -704,7 +707,7 @@ svg.icon .dots circle {
   text-align: right;
 }
 .timeline-star {
-  margin-top: 2px;
+  margin-top: 1px;
 }
 .timeline-empty {
   font-size: 14px;
