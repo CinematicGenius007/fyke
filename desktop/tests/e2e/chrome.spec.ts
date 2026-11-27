@@ -51,14 +51,13 @@ for (const kind of ["windows", "linux"] as const) {
 }
 
 // Nothing a screen draws may sit under the caption buttons: every screen in test mode,
-// in both chromes, checked for controls and words that meet the buttons' corner.
+// in both chromes, checked for controls and words that meet the buttons' corner. One
+// test per screen, so each has its own time limit and they run in parallel.
 const screens = ["all", "view", "feed", "starred", "folder", "view-empty", "today", "briefing", "recipe", "settings", "web", "ask", "routines", "toast", "activity", "health", "catchup", "add", "shortcuts", "delete-folder", "rename-folder", "rename-feed", "palette", "search"];
 for (const kind of ["windows", "linux"] as const) {
-  test(`${kind}: no screen puts anything under the window buttons`, async ({ app, daemon }) => {
-    test.setTimeout(120_000);
-    await afterRoutineSave(daemon);
-    const problems: string[] = [];
-    for (const screen of screens) {
+  for (const screen of screens) {
+    test(`${kind}: ${screen} puts nothing under the window buttons`, async ({ app, daemon }) => {
+      await afterRoutineSave(daemon);
       const page = await app.open({ FYKE_SCREEN: screen, FYKE_CHROME: kind });
       await page.waitForTimeout(400);
       const hits = await page.evaluate(() => {
@@ -89,10 +88,9 @@ for (const kind of ["windows", "linux"] as const) {
         }
         return found;
       });
-      for (const hit of hits) problems.push(`${screen}: ${hit}`);
-    }
-    expect(problems).toEqual([]);
-  });
+      expect(hits).toEqual([]);
+    });
+  }
 }
 
 test("a press in the strip while a menu is open only closes the menu", async ({ app }) => {

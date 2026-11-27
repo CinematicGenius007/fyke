@@ -454,6 +454,7 @@ test {
     _ = @import("launchd.zig");
     _ = @import("systemd.zig");
     _ = data_move;
+    _ = @import("fetch.zig");
     _ = @import("pipeline.zig");
     _ = @import("store.zig");
     _ = @import("writer.zig");

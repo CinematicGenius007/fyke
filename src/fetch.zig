@@ -177,8 +177,14 @@ fn fetchHops(client: *http.Client, arena: std.mem.Allocator, request: Request) a
         var host_buffer: [Io.net.HostName.max_len]u8 = undefined;
         const host = try Io.net.HostName.fromUri(uri, &host_buffer);
         const port = uri.port orelse @as(u16, if (protocol == .tls) 443 else 80);
-        if (protocol == .tls) try loadCertificates(client);
-        const connection = try client.connect(host, port, protocol);
+        const connection = if (protocol == .tls) tls: {
+            // The handshake reads `client.now`, so it runs under the shared clock
+            // lock that `refreshClock` takes exclusively to change it.
+            try refreshClock(client);
+            try clock_lock.lockShared(client.io);
+            defer clock_lock.unlockShared(client.io);
+            break :tls try client.connect(host, port, protocol);
+        } else try client.connect(host, port, protocol);
 
         // Checking the connected socket, rather than a DNS answer, means a name
         // cannot resolve to something public for the check and private for the
@@ -303,17 +309,130 @@ test "a false content-encoding is masked, and a real one kept" {
     try std.testing.expectEqualStrings("HTTP/1.1 200 OK\r\ncontent-encoding: gzip", &real);
 }
 
-/// `client.request` loads the system's certificates itself, but connecting first,
-/// which the address check needs, skips that step. Certificates must be present
-/// before any TLS handshake.
-fn loadCertificates(client: *http.Client) !void {
+/// How old `client.now` may get before a handshake refreshes it.
+const clock_refresh_seconds = 60;
+/// Until the clock is this old, a refresh happens only if no connect is under way,
+/// since a writer waiting for the lock holds back every new connect behind it.
+const clock_wait_seconds = 10 * 60;
+/// How often the system's root certificates are read again.
+const roots_refresh_seconds = 24 * 60 * 60;
+
+/// Held shared during every TLS connect, and exclusively to change `client.now`.
+var clock_lock: Io.RwLock = .init;
+/// When the root certificates were last read. Guarded by `clock_lock`.
+var roots_loaded_at: ?Io.Timestamp = null;
+
+/// Whether a time read at `then` can still stand for `now`.
+fn fresh(then: Io.Timestamp, now: Io.Timestamp, max_seconds: i64) bool {
+    const age = then.durationTo(now).toSeconds();
+    return age >= 0 and age < max_seconds;
+}
+
+/// The TLS handshake checks the server's certificate against `client.now`, the
+/// time the standard library takes once, at the first HTTPS request, and then
+/// keeps. In a daemon that runs for days, that time falls behind: a site that
+/// renews its certificate afterwards fails with `TlsInitializationFailed`
+/// because its new certificate looks not yet valid, and a certificate that
+/// expires afterwards would still pass. So the time is renewed every minute and
+/// the root certificates every day. `client.request` would load the roots
+/// itself, but connecting first, which the address check needs, skips that.
+fn refreshClock(client: *http.Client) !void {
     const io = client.io;
+    var overdue = true;
+    {
+        try clock_lock.lockShared(io);
+        defer clock_lock.unlockShared(io);
+        if (client.now) |then| {
+            const now = Io.Clock.real.now(io);
+            if (fresh(then, now, clock_refresh_seconds)) return;
+            overdue = !fresh(then, now, clock_wait_seconds);
+        }
+    }
+    if (overdue) {
+        try clock_lock.lock(io);
+    } else if (!clock_lock.tryLock(io)) {
+        return; // A connect is under way; a later one renews the clock.
+    }
+    defer clock_lock.unlock(io);
+    // Read after the wait, which can last as long as a connect.
+    const now = Io.Clock.real.now(io);
+    if (client.now) |then| if (fresh(then, now, clock_refresh_seconds)) return;
+
+    const roots_due = if (roots_loaded_at) |then| !fresh(then, now, roots_refresh_seconds) else true;
+    if (roots_due or client.now == null) {
+        var bundle: std.crypto.Certificate.Bundle = .empty;
+        defer bundle.deinit(client.allocator);
+        try bundle.rescan(client.allocator, io, now);
+        try client.ca_bundle_lock.lock(io);
+        defer client.ca_bundle_lock.unlock(io);
+        std.mem.swap(std.crypto.Certificate.Bundle, &client.ca_bundle, &bundle);
+        client.now = now;
+        roots_loaded_at = now;
+        return;
+    }
     try client.ca_bundle_lock.lock(io);
     defer client.ca_bundle_lock.unlock(io);
-    if (client.now != null) return;
-    const now = Io.Clock.real.now(io);
-    try client.ca_bundle.rescan(client.allocator, io, now);
     client.now = now;
+}
+
+test "the handshake clock is renewed once it is a minute old" {
+    const now = Io.Timestamp.fromNanoseconds(1_795_491_297 * std.time.ns_per_s);
+    const ago = struct {
+        fn f(t: Io.Timestamp, seconds: i64) Io.Timestamp {
+            return t.subDuration(Io.Duration.fromSeconds(seconds));
+        }
+    }.f;
+    try std.testing.expect(fresh(ago(now, 0), now, clock_refresh_seconds));
+    try std.testing.expect(fresh(ago(now, 59), now, clock_refresh_seconds));
+    try std.testing.expect(!fresh(ago(now, 60), now, clock_refresh_seconds));
+    // A daemon started a week ago, as when a renewed certificate was refused.
+    try std.testing.expect(!fresh(ago(now, 7 * 24 * 60 * 60), now, clock_refresh_seconds));
+    // A clock set back is not trusted either.
+    try std.testing.expect(!fresh(ago(now, -5), now, clock_refresh_seconds));
+    try std.testing.expect(fresh(ago(now, 23 * 60 * 60), now, roots_refresh_seconds));
+    try std.testing.expect(!fresh(ago(now, 24 * 60 * 60), now, roots_refresh_seconds));
+}
+
+test "a stale handshake clock moves to now without reading the roots again" {
+    const io = std.testing.io;
+    var client: http.Client = .{ .allocator = std.testing.allocator, .io = io };
+    defer client.deinit();
+    const start = Io.Clock.real.now(io);
+    const week_ago = start.subDuration(Io.Duration.fromSeconds(7 * 24 * 60 * 60));
+    client.now = week_ago;
+    const saved = roots_loaded_at;
+    defer roots_loaded_at = saved;
+    roots_loaded_at = start;
+
+    try refreshClock(&client);
+    try std.testing.expect(fresh(client.now.?, Io.Clock.real.now(io), clock_refresh_seconds));
+    try std.testing.expectEqual(@as(u32, 0), client.ca_bundle.map.count());
+
+    const renewed = client.now.?;
+    try refreshClock(&client);
+    try std.testing.expectEqual(renewed.nanoseconds, client.now.?.nanoseconds);
+}
+
+test "a clock a few minutes old waits for no connect under way" {
+    const io = std.testing.io;
+    var client: http.Client = .{ .allocator = std.testing.allocator, .io = io };
+    defer client.deinit();
+    const start = Io.Clock.real.now(io);
+    const saved = roots_loaded_at;
+    defer roots_loaded_at = saved;
+    roots_loaded_at = start;
+    const two_minutes_ago = start.subDuration(Io.Duration.fromSeconds(2 * 60));
+    client.now = two_minutes_ago;
+
+    // A connect holds the lock shared; the refresh leaves the clock for later.
+    try clock_lock.lockShared(io);
+    try refreshClock(&client);
+    clock_lock.unlockShared(io);
+    try std.testing.expectEqual(two_minutes_ago.nanoseconds, client.now.?.nanoseconds);
+
+    // With nothing under way, it renews.
+    try refreshClock(&client);
+    try std.testing.expect(fresh(client.now.?, Io.Clock.real.now(io), clock_refresh_seconds));
 }
 
 /// The address the connection was made to. Both connects above report it in the
