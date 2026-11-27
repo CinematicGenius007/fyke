@@ -108,7 +108,7 @@ CI installs, upgrades and uninstalls the installer silently (`tools/e2e_installe
 
 ## WebDriver smoke test
 
-CI's Windows smoke test (`tools/desktop_smoke.py`) fails when the session starts: msedgedriver waits 60 seconds and reports "DevToolsActivePort file doesn't exist". The Linux one passes. These steps find out why on a real machine. Build the app as in "Build the phase 4 app" first, and close every Fyke window.
+CI's Windows smoke test (`tools/desktop_smoke.py`) fails when the session starts: msedgedriver waits 60 seconds and reports "DevToolsActivePort file doesn't exist". The Linux one passes. CI marks the Windows step `continue-on-error`, so it does not fail the job or block a release. These steps find out why on a real machine. Build the app as in "Build the phase 4 app" first, and close every Fyke window.
 
 1. Install the driver and the matching Edge driver:
 
