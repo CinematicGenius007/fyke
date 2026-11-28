@@ -110,6 +110,7 @@ pub enum Failure {
     /// The address is not an http or https page Fyke opens.
     Blocked,
     /// A WebView2 environment variable would replace the page's profile or route.
+    #[cfg_attr(not(windows), allow(dead_code))]
     Isolation,
     /// The viewer itself could not start.
     Setup,
