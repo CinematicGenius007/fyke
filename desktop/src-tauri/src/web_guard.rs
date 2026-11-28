@@ -31,8 +31,15 @@ const HANDSHAKE: Duration = Duration::from_secs(12);
 const STAGGER: Duration = Duration::from_millis(250);
 /// Idle connections are probed, so a peer that vanished is noticed and its tunnel freed.
 const KEEPALIVE: Duration = Duration::from_secs(30);
-/// Hosts whose last failure is kept. Past this the record starts again.
+/// Destinations whose last failure is kept. Past this the record starts again.
 const MAX_FAILURES: usize = 64;
+/// How long a recorded failure still explains a page that failed.
+const FRESH: Duration = Duration::from_secs(60);
+/// Addresses tried for one tunnel. With the tunnel cap this bounds the proxy's
+/// outbound sockets, even when a name resolves to many addresses and none answers.
+const MAX_ATTEMPTS: usize = 4;
+/// The pause after a failed accept (for example, no file descriptors left) before the next.
+const ACCEPT_RETRY: Duration = Duration::from_millis(100);
 /// Requests answered with a refusal while every slot is busy. Beyond this the
 /// connection is closed unanswered, which the page also sees as a failure.
 const MAX_REFUSING: usize = 32;
@@ -166,27 +173,34 @@ pub async fn check_destination(url: &Url) -> Result<(), Failure> {
         .map_err(|error| Failure::from(&error))
 }
 
-/// The latest reason the proxy could not reach each host, keyed as `url::Host`
-/// prints it. A later tunnel that opens clears the host's entry.
+/// The latest reason the proxy could not reach each destination, keyed by host
+/// (as `url::Host` prints it) and port. A later tunnel to the same destination
+/// that opens clears its entry, and an entry older than `FRESH` is not used.
 #[derive(Clone, Default)]
-pub struct Failures(Arc<Mutex<HashMap<String, Failure>>>);
+pub struct Failures(Arc<Mutex<HashMap<Destination, (Failure, Instant)>>>);
+
+/// A host, as `url::Host` prints it, and a port.
+type Destination = (String, u16);
 
 impl Failures {
-    pub fn of(&self, host: &str) -> Option<Failure> {
-        self.0.lock().unwrap_or_else(|error| error.into_inner()).get(host).copied()
+    pub fn of(&self, host: &str, port: u16) -> Option<Failure> {
+        let destinations = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        let (failure, when) = destinations.get(&(host.to_owned(), port))?;
+        (when.elapsed() < FRESH).then_some(*failure)
     }
 
-    fn record(&self, host: &str, failure: Option<Failure>) {
-        let mut hosts = self.0.lock().unwrap_or_else(|error| error.into_inner());
+    fn record(&self, host: &str, port: u16, failure: Option<Failure>) {
+        let key = (host.to_owned(), port);
+        let mut destinations = self.0.lock().unwrap_or_else(|error| error.into_inner());
         match failure {
             Some(failure) => {
-                if hosts.len() >= MAX_FAILURES && !hosts.contains_key(host) {
-                    hosts.clear();
+                if destinations.len() >= MAX_FAILURES && !destinations.contains_key(&key) {
+                    destinations.clear();
                 }
-                hosts.insert(host.to_owned(), failure);
+                destinations.insert(key, (failure, Instant::now()));
             }
             None => {
-                hosts.remove(host);
+                destinations.remove(&key);
             }
         }
     }
@@ -235,7 +249,11 @@ impl Proxy {
             loop {
                 tokio::select! {
                     ready = listener.accept() => {
-                        let Ok((socket, _)) = ready else { break };
+                        let Ok((socket, _)) = ready else {
+                            // Out of descriptors or a dropped connection: a later accept may work.
+                            sleep(ACCEPT_RETRY).await;
+                            continue;
+                        };
                         if active.len() < limits.connections {
                             let record = record.clone();
                             active.spawn(async move { let _ = forward(socket, limits, record).await; });
@@ -297,15 +315,15 @@ async fn forward(mut from: TcpStream, limits: Limits, failures: Failures) -> io:
     let target = match timeout(HANDSHAKE, connect(host, port, limits)).await {
         Ok(Ok(target)) => target,
         Ok(Err(error)) => {
-            failures.record(&name, Some(Failure::from(&error)));
+            failures.record(&name, port, Some(Failure::from(&error)));
             return reply(&mut from, Refusal::from(&error) as u8).await;
         }
         Err(_) => {
-            failures.record(&name, Some(Failure::Timeout));
+            failures.record(&name, port, Some(Failure::Timeout));
             return reply(&mut from, Refusal::TimedOut as u8).await;
         }
     };
-    failures.record(&name, None);
+    failures.record(&name, port, None);
     reply(&mut from, 0).await?;
     relay(from, target, limits.idle).await
 }
@@ -434,7 +452,7 @@ fn interleave(addresses: &[SocketAddr]) -> Vec<SocketAddr> {
 /// previous one fails, and keeps the first that succeeds. A dead IPv6 route then
 /// costs a quarter second, not a full connect timeout.
 async fn connect_first(addresses: &[SocketAddr], stagger: Duration) -> io::Result<TcpStream> {
-    let mut waiting = interleave(addresses).into_iter();
+    let mut waiting = interleave(addresses).into_iter().take(MAX_ATTEMPTS);
     let mut attempts = JoinSet::new();
     let mut last_error = io::Error::new(ErrorKind::NotFound, "The name has no address.");
     if let Some(address) = waiting.next() {
@@ -446,7 +464,13 @@ async fn connect_first(addresses: &[SocketAddr], stagger: Duration) -> io::Resul
             Some(done) = attempts.join_next() => match done {
                 Ok(Ok(stream)) => return Ok(stream),
                 Ok(Err(error)) => {
-                    last_error = error;
+                    // A refusal or timeout from the site says more than a route this
+                    // machine lacks, such as IPv6 on an IPv4-only network.
+                    let local = matches!(error.kind(), ErrorKind::NetworkUnreachable | ErrorKind::HostUnreachable);
+                    let answered = matches!(last_error.kind(), ErrorKind::ConnectionRefused | ErrorKind::TimedOut);
+                    if !(local && answered) {
+                        last_error = error;
+                    }
                     if let Some(address) = waiting.next() {
                         attempts.spawn(TcpStream::connect(address));
                     }
@@ -616,22 +640,30 @@ mod tests {
     }
 
     #[test]
-    fn the_proxy_keeps_why_a_host_failed_until_it_opens() {
+    fn the_proxy_keeps_why_a_destination_failed_until_it_opens() {
         async_runtime::block_on(async {
             let closed = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
             let closed_port = closed.local_addr().unwrap().port();
             drop(closed);
-            let target = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+            let other = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+            let other_port = other.local_addr().unwrap().port();
             let proxy = Proxy::with(local(4, Duration::from_secs(5))).await.unwrap();
-            assert_eq!(proxy.failures.of("127.0.0.1"), None);
+            assert_eq!(proxy.failures.of("127.0.0.1", closed_port), None);
 
             let (_refused, code) = tunnel(&proxy, closed_port).await;
             assert_eq!(code, Refusal::ConnectionRefused as u8);
-            assert_eq!(proxy.failures.of("127.0.0.1"), Some(Failure::Refused));
+            assert_eq!(proxy.failures.of("127.0.0.1", closed_port), Some(Failure::Refused));
 
-            let (_open, code) = tunnel(&proxy, target.local_addr().unwrap().port()).await;
+            // Another port on the same host opening (a page's other requests) leaves the cause in place.
+            let (_other, code) = tunnel(&proxy, other_port).await;
             assert_eq!(code, 0);
-            assert_eq!(proxy.failures.of("127.0.0.1"), None);
+            assert_eq!(proxy.failures.of("127.0.0.1", closed_port), Some(Failure::Refused));
+
+            let reopened = TcpListener::bind((Ipv4Addr::LOCALHOST, closed_port)).await.unwrap();
+            let (_open, code) = tunnel(&proxy, closed_port).await;
+            assert_eq!(code, 0);
+            assert_eq!(proxy.failures.of("127.0.0.1", closed_port), None);
+            drop(reopened);
         });
     }
 
@@ -639,10 +671,10 @@ mod tests {
     fn the_failure_record_stays_bounded() {
         let failures = Failures::default();
         for host in 0..MAX_FAILURES + 1 {
-            failures.record(&format!("host{host}.example"), Some(Failure::Dns));
+            failures.record(&format!("host{host}.example"), 443, Some(Failure::Dns));
         }
-        assert_eq!(failures.of(&format!("host{MAX_FAILURES}.example")), Some(Failure::Dns));
-        assert_eq!(failures.of("host0.example"), None);
+        assert_eq!(failures.of(&format!("host{MAX_FAILURES}.example"), 443), Some(Failure::Dns));
+        assert_eq!(failures.of("host0.example", 443), None);
         assert!(failures.0.lock().unwrap().len() <= MAX_FAILURES);
     }
 }

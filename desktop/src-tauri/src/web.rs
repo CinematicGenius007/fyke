@@ -59,7 +59,7 @@ fn setup(error: impl Display) -> Failure {
 #[cfg_attr(not(any(windows, target_os = "linux")), allow(dead_code))]
 fn cause(failures: &Failures, url: &str) -> Option<Failure> {
     let url = Url::parse(url).ok()?;
-    failures.of(&url.host()?.to_string())
+    failures.of(&url.host()?.to_string(), url.port_or_known_default()?)
 }
 
 struct Session {
@@ -172,6 +172,7 @@ pub(crate) async fn open_viewer(
             false
         });
 
+    let parent = app.get_window(window.label()).ok_or_else(|| setup("the reader window closed"))?;
     #[cfg(windows)]
     let (builder, directory) = {
         // Environment overrides could replace WebView2's profile or proxy.
@@ -182,9 +183,15 @@ pub(crate) async fn open_viewer(
         }
         static SWEEP: std::sync::Once = std::sync::Once::new();
         SWEEP.call_once(|| {
-            std::thread::spawn(|| web_profile::sweep(&std::env::temp_dir(), std::time::SystemTime::now() - web_profile::STALE));
+            std::thread::spawn(|| {
+                if let Ok(home) = web_profile::home() {
+                    if let Some(before) = std::time::SystemTime::now().checked_sub(web_profile::STALE) {
+                        web_profile::sweep(&home, before);
+                    }
+                }
+            });
         });
-        let directory = web_profile::create(&std::env::temp_dir()).map_err(setup)?;
+        let directory = web_profile::home().and_then(|home| web_profile::create(&home)).map_err(setup)?;
         let args = format!(
             "--proxy-server={} --proxy-bypass-list=<-loopback> --disable-quic --force-webrtc-ip-handling-policy=disable_non_proxied_udp --disable-features=msWebOOUI,msPdfOOUI",
             proxy.url
@@ -194,7 +201,6 @@ pub(crate) async fn open_viewer(
     #[cfg(target_os = "linux")]
     let builder = builder.proxy_url(proxy.url.clone());
 
-    let parent = app.get_window(window.label()).ok_or_else(|| setup("the reader window closed"))?;
     let webview = match parent.add_child(builder, position, size) {
         Ok(webview) => webview,
         Err(error) => {
@@ -294,16 +300,18 @@ async fn configure(view: &Webview, app: AppHandle, token: u64, failures: Failure
         let started = std::rc::Rc::new(std::cell::Cell::new(false));
         let failed = started.clone();
         let refused = started.clone();
+        let crashed = started.clone();
         let for_failure = app.clone();
         let for_tls = app.clone();
         let for_crash = app.clone();
         page.connect_load_failed(move |page, _, uri, error| {
-            // A load replaced by another, or stopped by the navigation and download
-            // handlers (which report it themselves), is not a failure of the page.
+            // WebKit follows every failed load with `Finished`, which must not read as
+            // a success. A load replaced by another, or stopped by the navigation and
+            // download handlers (which report it themselves), sends no update here.
+            failed.set(true);
             if error.matches(NetworkError::Cancelled) || error.matches(PolicyError::FrameLoadInterruptedByPolicyChange) {
                 return false;
             }
-            failed.set(true);
             let failure = cause(&failures, uri).unwrap_or(Failure::Unknown);
             update(&for_failure, token, uri, false, Some(failure), (page.can_go_back(), page.can_go_forward()));
             true
@@ -315,6 +323,7 @@ async fn configure(view: &Webview, app: AppHandle, token: u64, failures: Failure
         });
         page.connect_web_process_terminated(move |page, reason| {
             if reason != WebProcessTerminationReason::TerminatedByApi {
+                crashed.set(true);
                 let uri = page.uri().unwrap_or_default();
                 update(&for_crash, token, uri.as_str(), false, Some(Failure::Crashed), (false, false));
             }
@@ -338,7 +347,10 @@ async fn configure(view: &Webview, app: AppHandle, token: u64, failures: Failure
 #[cfg(windows)]
 async fn configure(view: &Webview, app: AppHandle, token: u64, failures: Failures) -> Result<(), String> {
     use webview2_com::Microsoft::Web::WebView2::Win32::*;
-    use webview2_com::{take_pwstr, NavigationCompletedEventHandler, PermissionRequestedEventHandler, ProcessFailedEventHandler};
+    use webview2_com::{
+        take_pwstr, NavigationCompletedEventHandler, NavigationStartingEventHandler, PermissionRequestedEventHandler,
+        ProcessFailedEventHandler,
+    };
 
     /// Names a failed navigation. Certificate errors reach the webview as they are;
     /// a failed tunnel reaches it only as a proxy error, so the proxy's record of the
@@ -403,21 +415,56 @@ async fn configure(view: &Webview, app: AppHandle, token: u64, failures: Failure
                     })),
                     &mut event_token,
                 )?;
+                // The latest navigation and the address it asked for, following its
+                // redirects. `Source` names the current document, which is still the
+                // previous page when a navigation fails before it commits.
+                let latest = std::rc::Rc::new(std::cell::RefCell::new((0u64, String::new())));
+                let started = latest.clone();
+                page.add_NavigationStarting(
+                    &NavigationStartingEventHandler::create(Box::new(move |_, details| {
+                        let Some(details) = details else { return Ok(()) };
+                        let mut id = 0;
+                        details.NavigationId(&mut id)?;
+                        let mut uri = Default::default();
+                        details.Uri(&mut uri)?;
+                        *started.borrow_mut() = (id, take_pwstr(uri));
+                        Ok(())
+                    })),
+                    &mut event_token,
+                )?;
                 page.add_NavigationCompleted(
                     &NavigationCompletedEventHandler::create(Box::new(move |page, details| {
                         let (Some(page), Some(details)) = (page, details) else { return Ok(()) };
+                        let mut id = 0;
+                        details.NavigationId(&mut id)?;
+                        let (latest_id, requested) = latest.borrow().clone();
+                        // A navigation that a newer one replaced has nothing to report.
+                        if id != latest_id {
+                            return Ok(());
+                        }
                         let mut success = Default::default();
                         details.IsSuccess(&mut success)?;
                         let mut status = COREWEBVIEW2_WEB_ERROR_STATUS::default();
                         details.WebErrorStatus(&mut status)?;
-                        // A navigation replaced by another, or stopped by the navigation and
-                        // download handlers (which report it themselves), is not a failure.
+                        // A navigation stopped by the navigation and download handlers, which
+                        // report it themselves, is not a failure.
                         if !success.as_bool() && status == COREWEBVIEW2_WEB_ERROR_STATUS_OPERATION_CANCELED {
                             return Ok(());
                         }
-                        let mut source = Default::default();
-                        page.Source(&mut source)?;
-                        let url = take_pwstr(source);
+                        // WebView2 counts a 4xx or 5xx answer as unsuccessful, but the site's
+                        // own error page is a page to show.
+                        let mut code = 0;
+                        if let Ok(more) = windows_core::Interface::cast::<ICoreWebView2NavigationCompletedEventArgs2>(&details) {
+                            more.HttpStatusCode(&mut code)?;
+                        }
+                        let success = success.as_bool() || code > 0;
+                        let url = if success {
+                            let mut source = Default::default();
+                            page.Source(&mut source)?;
+                            take_pwstr(source)
+                        } else {
+                            requested
+                        };
                         if url == "about:blank" {
                             return Ok(());
                         }
@@ -430,7 +477,7 @@ async fn configure(view: &Webview, app: AppHandle, token: u64, failures: Failure
                             token,
                             &url,
                             false,
-                            (!success.as_bool()).then(|| failure(status, &failures, &url)),
+                            (!success).then(|| failure(status, &failures, &url)),
                             (back.as_bool(), forward.as_bool()),
                         );
                         Ok(())

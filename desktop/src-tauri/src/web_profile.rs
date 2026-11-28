@@ -1,7 +1,9 @@
-//! The WebView2 profile folder of each page session. WebView2 keeps files in it
-//! open for a moment after the webview closes, so removal runs on its own thread
-//! and tries again with growing waits. Folders carry `PREFIX`, so one left by a
-//! run that ended early is found and removed when a later run opens its first page.
+//! The WebView2 profile folder of each page session. Every one lives in a folder
+//! of Fyke's own in the temporary folder (`home`), so cleanup never reaches
+//! anything else there. WebView2 keeps files in a profile open for a moment after
+//! the webview closes, so removal runs on its own thread and tries again with
+//! growing waits. One left by a run that ended early is removed when a later run
+//! opens its first page.
 
 // Only Windows keeps a profile folder; other platforms build this module for its tests.
 #![cfg_attr(not(windows), allow(dead_code))]
@@ -14,6 +16,8 @@ use std::{fs, io, thread};
 /// Removals still running. Quitting waits for them (`finish`), because a thread
 /// ends with the process and would leave its folder behind.
 static PENDING: Mutex<Vec<thread::JoinHandle<bool>>> = Mutex::new(Vec::new());
+/// Folders made and not yet discarded, including one whose page is still opening.
+static OPEN: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
 
 pub const PREFIX: &str = "fyke-page-";
 /// The waits between tries, about six seconds in all.
@@ -29,8 +33,17 @@ const WAITS: [Duration; 7] = [
 /// A folder untouched for this long belongs to no open page.
 pub const STALE: Duration = Duration::from_secs(60 * 60);
 
+/// The folder that holds every page profile, made if missing.
+pub fn home() -> io::Result<PathBuf> {
+    let home = std::env::temp_dir().join("fyke-pages");
+    fs::create_dir_all(&home)?;
+    Ok(home)
+}
+
 pub fn create(parent: &Path) -> io::Result<PathBuf> {
-    tempfile::Builder::new().prefix(PREFIX).tempdir_in(parent).map(tempfile::TempDir::keep)
+    let folder = tempfile::Builder::new().prefix(PREFIX).tempdir_in(parent).map(tempfile::TempDir::keep)?;
+    OPEN.lock().unwrap_or_else(|error| error.into_inner()).push(folder.clone());
+    Ok(folder)
 }
 
 /// Removes `path`, trying again after each wait. A folder that is already gone counts as removed.
@@ -47,16 +60,22 @@ pub fn remove(path: &Path, waits: &[Duration]) -> bool {
 }
 
 pub fn discard(path: PathBuf) {
+    OPEN.lock().unwrap_or_else(|error| error.into_inner()).retain(|open| *open != path);
     let removal = thread::spawn(move || remove(&path, &WAITS));
     let mut pending = PENDING.lock().unwrap_or_else(|error| error.into_inner());
     pending.retain(|removal| !removal.is_finished());
     pending.push(removal);
 }
 
-/// Waits up to `limit` for the removals `discard` started. Returns false if one
-/// was still running at the limit; the next run's `sweep` removes what it leaves.
+/// Discards every folder still open, then waits up to `limit` for the removals
+/// `discard` started. Returns false if one was still running at the limit; the
+/// next run's `sweep` removes what it leaves.
 pub fn finish(limit: Duration) -> bool {
     let deadline = Instant::now() + limit;
+    let open = std::mem::take(&mut *OPEN.lock().unwrap_or_else(|error| error.into_inner()));
+    for folder in open {
+        discard(folder);
+    }
     let pending = std::mem::take(&mut *PENDING.lock().unwrap_or_else(|error| error.into_inner()));
     for removal in pending {
         while !removal.is_finished() {
@@ -86,8 +105,16 @@ pub fn sweep(parent: &Path, before: SystemTime) -> usize {
 mod tests {
     use super::*;
 
+    /// `finish` discards every open folder, so the tests that make folders take turns.
+    static SERIAL: Mutex<()> = Mutex::new(());
+
+    fn serial() -> std::sync::MutexGuard<'static, ()> {
+        SERIAL.lock().unwrap_or_else(|error| error.into_inner())
+    }
+
     #[test]
     fn a_profile_folder_is_named_for_the_app() {
+        let _turn = serial();
         let parent = tempfile::tempdir().unwrap();
         let folder = create(parent.path()).unwrap();
         assert!(folder.is_dir());
@@ -97,6 +124,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn removal_tries_again_until_the_folder_lets_go() {
+        let _turn = serial();
         use std::os::unix::fs::PermissionsExt;
         let parent = tempfile::tempdir().unwrap();
         let folder = create(parent.path()).unwrap();
@@ -116,6 +144,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn removal_gives_up_after_the_last_wait_and_a_missing_folder_counts_as_removed() {
+        let _turn = serial();
         use std::os::unix::fs::PermissionsExt;
         let parent = tempfile::tempdir().unwrap();
         let folder = create(parent.path()).unwrap();
@@ -130,6 +159,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn quitting_waits_for_a_removal_in_progress_up_to_a_limit() {
+        let _turn = serial();
         use std::os::unix::fs::PermissionsExt;
         let parent = tempfile::tempdir().unwrap();
         let folder = create(parent.path()).unwrap();
@@ -154,6 +184,7 @@ mod tests {
 
     #[test]
     fn the_sweep_removes_only_old_folders_of_this_app() {
+        let _turn = serial();
         let parent = tempfile::tempdir().unwrap();
         let ours = create(parent.path()).unwrap();
         let other = parent.path().join("other-app");
