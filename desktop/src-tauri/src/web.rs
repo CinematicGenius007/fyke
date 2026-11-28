@@ -231,6 +231,20 @@ pub(crate) async fn open_viewer(
     Ok(())
 }
 
+/// Closes the open page as the app quits. On Windows it then waits a few seconds
+/// for profile folders still being removed, since their threads end with the process.
+pub(crate) fn shutdown(app: &AppHandle) {
+    let session = {
+        let viewer = app.state::<Viewer>();
+        let mut slot = viewer.slot();
+        slot.token = None;
+        slot.session.take()
+    };
+    drop(session);
+    #[cfg(windows)]
+    web_profile::finish(std::time::Duration::from_secs(7));
+}
+
 #[tauri::command]
 pub(crate) fn close_viewer(viewer: State<'_, Viewer>, token: u64) {
     let session = {

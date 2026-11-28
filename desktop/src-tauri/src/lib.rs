@@ -208,6 +208,12 @@ pub fn run() {
             #[cfg(any(windows, target_os = "linux"))]
             web::navigate_viewer
         ])
-        .run(tauri::generate_context!())
-        .expect("the window could not open");
+        .build(tauri::generate_context!())
+        .expect("the window could not open")
+        .run(|_handle, _event| {
+            #[cfg(any(windows, target_os = "linux"))]
+            if let tauri::RunEvent::Exit = _event {
+                web::shutdown(_handle);
+            }
+        });
 }

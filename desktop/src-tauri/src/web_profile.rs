@@ -7,8 +7,13 @@
 #![cfg_attr(not(windows), allow(dead_code))]
 
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime};
+use std::sync::Mutex;
+use std::time::{Duration, Instant, SystemTime};
 use std::{fs, io, thread};
+
+/// Removals still running. Quitting waits for them (`finish`), because a thread
+/// ends with the process and would leave its folder behind.
+static PENDING: Mutex<Vec<thread::JoinHandle<bool>>> = Mutex::new(Vec::new());
 
 pub const PREFIX: &str = "fyke-page-";
 /// The waits between tries, about six seconds in all.
@@ -42,7 +47,27 @@ pub fn remove(path: &Path, waits: &[Duration]) -> bool {
 }
 
 pub fn discard(path: PathBuf) {
-    thread::spawn(move || remove(&path, &WAITS));
+    let removal = thread::spawn(move || remove(&path, &WAITS));
+    let mut pending = PENDING.lock().unwrap_or_else(|error| error.into_inner());
+    pending.retain(|removal| !removal.is_finished());
+    pending.push(removal);
+}
+
+/// Waits up to `limit` for the removals `discard` started. Returns false if one
+/// was still running at the limit; the next run's `sweep` removes what it leaves.
+pub fn finish(limit: Duration) -> bool {
+    let deadline = Instant::now() + limit;
+    let pending = std::mem::take(&mut *PENDING.lock().unwrap_or_else(|error| error.into_inner()));
+    for removal in pending {
+        while !removal.is_finished() {
+            if Instant::now() >= deadline {
+                return false;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        let _ = removal.join();
+    }
+    true
 }
 
 /// Removes this app's profile folders in `parent` last changed before `before`,
@@ -100,6 +125,31 @@ mod tests {
         fs::set_permissions(&folder, fs::Permissions::from_mode(0o700)).unwrap();
         assert!(remove(&folder, &[]));
         assert!(remove(&folder, &[]));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn quitting_waits_for_a_removal_in_progress_up_to_a_limit() {
+        use std::os::unix::fs::PermissionsExt;
+        let parent = tempfile::tempdir().unwrap();
+        let folder = create(parent.path()).unwrap();
+        fs::write(folder.join("Cookies"), b"").unwrap();
+        fs::set_permissions(&folder, fs::Permissions::from_mode(0o500)).unwrap();
+        discard(folder.clone());
+        assert!(!finish(Duration::from_millis(100)), "the held folder outlasts a short limit");
+
+        let second = create(parent.path()).unwrap();
+        fs::write(second.join("Cookies"), b"").unwrap();
+        fs::set_permissions(&second, fs::Permissions::from_mode(0o500)).unwrap();
+        discard(second.clone());
+        let held = second.clone();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(200));
+            fs::set_permissions(&held, fs::Permissions::from_mode(0o700)).unwrap();
+        });
+        assert!(finish(Duration::from_secs(5)));
+        assert!(!second.exists(), "finish returns only once the removal is done");
+        fs::set_permissions(&folder, fs::Permissions::from_mode(0o700)).unwrap();
     }
 
     #[test]
