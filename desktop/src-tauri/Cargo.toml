@@ -22,6 +22,8 @@ serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
 url = "=2.5.9"
 tempfile = "=3.27.0"
+# TCP keepalive on proxied connections; tokio already builds on this crate.
+socket2 = "=0.6.5"
 tokio = { version = "=1.54.1", features = ["io-util", "macros", "net", "rt", "sync", "time"] }
 
 [target.'cfg(windows)'.dependencies]
