@@ -36,7 +36,11 @@ After closing Fyke, stop the test daemon with `& $env:FYKE_BIN daemon stop`. Rep
 2. Open the command palette with the web pane showing. The palette is visible and clickable over the page. Close it and verify the page reappears. Click Back and verify the reader is visible again.
 3. Repeat the launch with `$env:FYKE_ADDRESS = "http://127.0.0.1:1420/"`. The reader shows a private-address refusal and never loads content from that address. Repeat with `http://[::1]/`.
 4. Repeat the launch with `$env:FYKE_ADDRESS = "https://www.theguardian.com/"` (a site with live updates and many trackers). Follow ten links in turn, waiting a few seconds on each. Every page loads; none stops at a blank or half-drawn page. Leave the last page open for three minutes, then follow one more link: it loads at once.
-5. Remove the two variables with `Remove-Item Env:FYKE_SCREEN,Env:FYKE_ADDRESS`. Open a web-linked article and use Open page. Confirm that Article returns to the same article. The web bar's button names your default browser, for example "Open in Google Chrome", "Open in Microsoft Edge" or "Open in Firefox", and it opens the address there. If it says "Open in browser" instead, note which browser is the default in Settings → Apps → Default apps. Ctrl-click an article link and confirm it opens in your browser while the article stays visible.
+5. Repeat the launch with `$env:FYKE_ADDRESS = "https://no-such-host.invalid/"`. The reader says "Fyke could not find this site. Check the address and your connection." with Try again and Open in browser, and no blank page shows. Repeat with `https://expired.badssl.com/`: it says the certificate is not valid. Repeat with `https://example.com:81/` and wait: it says the site took too long to answer or refused the connection.
+6. With a page open, open Task Manager, expand Fyke, and end the "WebView2 Renderer" process under it that belongs to the page (end the newest one if unsure). The reader says "The page stopped working." Click Try again and the page loads again.
+7. Quit Fyke. Open `%TEMP%\fyke-pages` in File Explorer and look for folders named `fyke-page-…`. Within ten seconds of quitting there are none from this run. If one is left, note its name, start Fyke more than an hour later, open a page, and verify the folder is gone.
+8. Set `$env:WEBVIEW2_USER_DATA_FOLDER = "$env:TEMP\elsewhere"` and start Fyke with the web screen. The reader says "Fyke could not isolate the page from this WebView2 configuration." and shows no page. Remove the variable with `Remove-Item Env:WEBVIEW2_USER_DATA_FOLDER`.
+9. Remove the two variables with `Remove-Item Env:FYKE_SCREEN,Env:FYKE_ADDRESS`. Open a web-linked article and use Open page. Confirm that Article returns to the same article. The web bar's button names your default browser, for example "Open in Google Chrome", "Open in Microsoft Edge" or "Open in Firefox", and it opens the address there. If it says "Open in browser" instead, note which browser is the default in Settings → Apps → Default apps. Ctrl-click an article link and confirm it opens in your browser while the article stays visible.
 
 ## Native Settings
 
@@ -69,7 +73,8 @@ On a GNOME (Wayland) and a KDE Plasma machine, with the AppImage or `.deb` once 
 2. Drag the window by the top strip and double-click it, as in step 2 above. On GNOME, drag it to the top and side edges and check it tiles.
 3. Resize from each edge and corner.
 4. Open a web-linked article and use Open page. The web bar's button names the default browser, as `xdg-settings get default-web-browser` reports it (for example "Open in Firefox").
-5. Press Ctrl+Q. Fyke quits.
+5. Start Fyke with `FYKE_SCREEN=web FYKE_ADDRESS=https://no-such-host.invalid/`. The reader says "Fyke could not find this site. Check the address and your connection." with Try again and Open in browser. Repeat with `https://expired.badssl.com/`: it says the certificate is not valid.
+6. Press Ctrl+Q. Fyke quits.
 
 ## Notifications and single instance
 

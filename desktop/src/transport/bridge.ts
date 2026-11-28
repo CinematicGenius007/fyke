@@ -95,7 +95,8 @@ export function bridgeTransport(page: URL): Transport {
       if (action === "status") return false;
       throw new Error("Open the desktop app to change background updating.");
     },
-    openViewer: async () => { throw new Error("Open the Windows or Linux app to read pages here."); },
+    // The checks name a failure kind in the page's address to see how the pane shows it.
+    openViewer: async () => { throw new Error(page.searchParams.get("FYKE_PAGE_FAILURE") || "Open the Windows or Linux app to read pages here."); },
     closeViewer: async () => undefined,
     positionViewer: async () => undefined,
     navigateViewer: async () => undefined,

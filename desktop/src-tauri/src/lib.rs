@@ -16,6 +16,8 @@ pub mod testmode;
 mod web;
 #[cfg(any(windows, target_os = "linux", test))]
 mod web_guard;
+#[cfg(any(windows, test))]
+mod web_profile;
 
 use rpc::{Client, RpcError};
 use serde_json::Value;
@@ -206,6 +208,12 @@ pub fn run() {
             #[cfg(any(windows, target_os = "linux"))]
             web::navigate_viewer
         ])
-        .run(tauri::generate_context!())
-        .expect("the window could not open");
+        .build(tauri::generate_context!())
+        .expect("the window could not open")
+        .run(|_handle, _event| {
+            #[cfg(any(windows, target_os = "linux"))]
+            if let tauri::RunEvent::Exit = _event {
+                web::shutdown(_handle);
+            }
+        });
 }

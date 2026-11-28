@@ -29,6 +29,7 @@ tokio = { version = "=1.54.1", features = ["io-util", "macros", "net", "rt", "sy
 [target.'cfg(windows)'.dependencies]
 uds_windows = "=1.2.1"
 webview2-com = "=0.39.1"
+windows-core = "=0.62.2"
 windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_System_Registry"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
